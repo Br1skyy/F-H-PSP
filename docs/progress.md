@@ -205,3 +205,12 @@ Findings against §9 open questions:
 > DATA: 15 NPCs baked from Map030 pg0 (positions/triggers/priorities/patterns as shipped); sheets `!Flame/!creature/!map_objects2` (288×192 non-$, 24px cells) + `$minerghost2` (120×220 single) via generalized `pad_chars_pow2` (meta-driven) + Makefile bin2o (`$$` escaping needed for `$` names).
 > INTERP: `111` type 8 (party-has-item, EV020's tinderbox check) added to C + Python sim + emitter (id now carried); 3 goldens' unknown counts regenerated 1→0 by `emit_interp_test.py`, traces byte-identical, **ALL PASS**. Emitter generalized to multi-event (`DEMO_EV` + `M30_EV213` + `M30_EV020` incl. 111/121/127/356/411/412). PC-verified all 5 talk paths end-to-end (incl. `Light on 27` dispatch). FHDEMO.zip repacked (~2.98MB EBOOT).
 > NEXT: torch-light backend + NPC roster beyond spawn slice, then battle.
+
+### 2026-09-20 — Torch backend + conversation state
+> EV020's tinderbox choice now has a visible consequence: lighting the torch
+> sets switch 501, latched every map frame into `torch_lit`, which swaps all
+> four characters to their `_torch` sheets (same layout, staged + verified)
+> and re-enables the Fire radius flicker (±7, Terrax default).
+> Conversations share one persistent world state (switches/inventory carried
+> across `msg_open`), so items and the torch stay lit between talks.
+> FHDEMO.zip repacked (~4.1MB EBOOT).
