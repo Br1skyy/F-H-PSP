@@ -277,3 +277,16 @@ Findings against §9 open questions:
 > No Map030 nameboxes exist (0 \n<> codes) — names wait for maps that
 > have them. Typewriter + namebox still open.
 > FHDEMO.zip repacked.
+
+### 2026-09-21 — Eczar, typewriter, namebox, page conditions
+> FONT: gamefont.css proved the game uses Eczar-Regular, not mplus —
+> rebaked 512x512 (16x32 cells) + per-glyph advances; proportional layout
+> + pixel word-wrap; C1 controls map to '?'.
+> TYPEWRITER: 2 glyphs/frame; O completes, then advances/picks/exits;
+> choices pop once the body is complete.
+> NAMEBOX: Yanfly \n<Name> captured in the render collector (decoder +
+> goldens untouched — zero such codes on current maps); mini skin box,
+> palette-6 name. PAGES: OG last-first switch scan (EV213-pg1, EV020
+> silent once lit/taken). FILL: byte-swap bug fixed to sampled skin
+> pattern. 101 bg/pos modes honored. TRIGGERS verified identical to
+> startMapEvent. FHDEMO.zip repacked.
