@@ -225,3 +225,16 @@ Findings against §9 open questions:
 > DEBUG SPAWN moved to (58,13) facing the saw-corpse cluster; SELECT
 > message-demo entry removed (talk via O is the path; DEMO_EV unbaked).
 > FHDEMO.zip repacked.
+
+### 2026-09-20 — Dialogue behaves like the OG (pages, map behind, O clicks)
+> Three fixes from device feedback: (1) message mode now renders the FROZEN
+> map + NPCs behind the window (was a modal black clear); (2) the
+> interpreter pauses per page (new FH_RUN_PAGE: 101-while-open and
+> end-with-text pause; O resumes; END exits on O) instead of fast-forward;
+> choices already used O. (3) OK button = O everywhere (talk/confirm),
+> Cross = cancel. Text wraps at ~52 cols like the OG proportions.
+> CORE SAFETY: PAGE adds no trace entries (skip flag so pause/resume logs
+> one execution); fh_interp_run treats PAGE as continue — all 37 goldens
+> green with byte-identical traces; talk paths re-verified with page-aware
+> driving (EV213 needs 2 O-presses, EV020 single page + choice).
+> FHDEMO.zip repacked.
