@@ -321,3 +321,11 @@ Findings against §9 open questions:
 > normal priority) plus O-talk both start troop 1 (301-chain stand-in
 > documented in NpcDef.battle_troop). Debug spawn moved to (58,19):
 > walk south, bump the guard. FHDEMO.zip repacked.
+
+### 2026-09-21 — Battle looks right: pow2 art, backdrop, actor, Body/Mind
+> SMEAR ROOT CAUSE: enemy sheets weren't power-of-2 (head 48x168 etc).
+> PC composite was pixel-perfect, so the GE was fed illegal dims —
+> padded all 7 via generalized pad_chars_pow2 (--dir), verified decode.
+> SCENE (per user refs): mines tunnel backdrop (floor1, centered
+> native), current character's idle cell bottom-left, Body/Mind labels
+> with bars, target "v" marker over the aimed limb. FHDEMO.zip repacked.
