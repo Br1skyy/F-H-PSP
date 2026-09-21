@@ -518,10 +518,10 @@ static void load_map030(void) {
         }
     }
     
-    /* Initialize player: debug spawn next to the saw-corpse cluster.
-     * (58,13) is open; (58,12)/(58,11) hold examinable corpses. */
-    player_init(&player, 58, 13);
-    player.dir = 3;  /* face the corpses */
+    /* Initialize player: debug spawn ON the saw-corpse tile (58,11).
+     * One O press opens its dialogue immediately. */
+    player_init(&player, 58, 11);
+    player.dir = 0;
     player_set_sprite(&player, characters[0].sprite_data,
                      (unsigned int*)characters[0].clut_data, 480, 440, 0);
 
@@ -615,6 +615,7 @@ int main(int argc, char *argv[]) {
     /* Debug text buffer (updated periodically, not every frame) */
     static char debug_text[128] = "";
     int last_debug_update = 0;
+    int talk_cool = 0;
 
     /* Torch state: EV020 lights switch 501; latched from conversation
      * results every map frame (persists via msg_open state carry). */
@@ -664,8 +665,11 @@ int main(int argc, char *argv[]) {
         /* Talk: OK button = CIRCLE on PSP (Eastern layout, per user).
          * OG triggerButtonAction (rpg_objects.js): action trigger here
          * ([0], below-priority tiles) then facing tile ([0,1,2], normal
-         * priority). Only standing starts events. */
-        if (input_pressed(&input, PSP_CTRL_CIRCLE) && !player.moving) {
+         * priority). Only standing starts events. talk_cool suppresses
+         * instant reopen from the close tap. */
+        if (talk_cool > 0) talk_cool--;
+        if (input_pressed(&input, PSP_CTRL_CIRCLE) && !player.moving &&
+            talk_cool == 0) {
             int ptx = player.x / TILE, pty = player.y / TILE;
             int dx = 0, dy = 0;
             switch (player.dir) {
@@ -763,6 +767,8 @@ int main(int argc, char *argv[]) {
                 }
             } else if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                 msg_mode = 0;
+                talk_cool = 45;  /* ignore talk-open while the close tap
+                                  * settles, or every O press reopens */
                 continue;
             }
 
