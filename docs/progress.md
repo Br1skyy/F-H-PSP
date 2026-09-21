@@ -313,3 +313,11 @@ Findings against §9 open questions:
 > DEFERRED: troop event pages, counters/reflection, state visuals,
 > drops UI, persistent party HP, battlebacks, skills/items menus.
 > FHDEMO.zip repacked.
+
+### 2026-09-21 — In-world guard battle (ballista touch starter)
+> No guard encounter existed in the demo area, so the ballista guard
+> (Map030 ev94, 58,23) is now rostered with the guard1 sheet: touch-front
+> trigger on bump (OG moveStraight fail path: faced tile, trig 1/2,
+> normal priority) plus O-talk both start troop 1 (301-chain stand-in
+> documented in NpcDef.battle_troop). Debug spawn moved to (58,19):
+> walk south, bump the guard. FHDEMO.zip repacked.
