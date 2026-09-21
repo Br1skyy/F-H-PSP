@@ -297,3 +297,19 @@ Findings against §9 open questions:
 > Started enemies: Guard1 troop (first battle, 7 limbs) sheets staged to
 > psp data after decode verification (already pow2-aligned, direct copy).
 > FHDEMO.zip repacked.
+
+### 2026-09-21 — Battle slice: Guard1 fightable (D3 core + D4 data)
+> ENGINE (runtime/battle.c, data-free, goldened): formula VM (double,
+> matches formulas.bin op table), full strike pipeline (hit/eva/crit,
+> element, pdr/mdr, crit x3, variance, guard, JS-round), rating-weighted
+> AI (turn/switch conditions), AGI-desc order + Galv extra turns, escape
+> (0.5*agi ratio +0.1), EXP curve, dead/guard states, LCG rng.
+> DATA (battle_demo.h, provenance-noted): Guard1 7 limbs, 4 actors
+> resolved (class+equip), skills 1/3/4/5 bytecode verbatim, troop layout.
+> SCENE: front-view limbs at scaled troop coords, Attack/Guard/Escape,
+> limb cursor, damage popups (font atlas), victory/defeat/escape banners.
+> TRIGGER: SQUARE in map mode (TEMP debug). PC-verified: seeded strike
+> 206, full-fight sim wins in 7 rounds (~208/hit vs 1300 HP).
+> DEFERRED: troop event pages, counters/reflection, state visuals,
+> drops UI, persistent party HP, battlebacks, skills/items menus.
+> FHDEMO.zip repacked.
