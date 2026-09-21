@@ -868,10 +868,6 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    int show_targets, const char *banner,
                    unsigned char *actor_t8, unsigned int *actor_cl,
                    int actor_mcol, int actor_mrow,
-                   const char *targets[], int ntargets, int tcursor,
-                   int show_targets, const char *banner,
-                   unsigned char *actor_t8, unsigned int *actor_cl,
-                   int actor_mcol, int actor_mrow,
                    float tgt_x, float tgt_y) {
     /* Backdrop: mines tunnel, centered native (scissor clips overflow).
      * Falls back to flat maroon when the art is missing. */
