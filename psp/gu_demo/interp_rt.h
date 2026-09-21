@@ -57,6 +57,8 @@ typedef struct {
     int trace_skip;                     /* skip one trace append (PAGE resume) */
     char msg_face[FH_NAME_CAP];             /* 101 face sheet name (may be "") */
     int msg_face_idx;                       /* 101 face index */
+    int msg_bg;                             /* 101 background: 0 skin, 1 dim, 2 none */
+    int msg_pos;                            /* 101 position: 0 top, 1 middle, 2 bottom */
     int party[FH_MAX_PARTY]; int party_n;       /* 129 roster */
     int tint[4]; int tint_frames;                /* 223 screen tone */
     char last_se[64]; int se_count;              /* 250 SE log (backend hooks later) */

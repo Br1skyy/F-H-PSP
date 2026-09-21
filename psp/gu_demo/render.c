@@ -10,6 +10,7 @@
 
 unsigned char *font_px = 0;
 unsigned int *font_cl = 0;
+unsigned char *font_adv = 0;
 unsigned char *window_px = 0;
 unsigned int *window_cl = 0;
 
@@ -429,62 +430,108 @@ void render_frame(int cam_x, int cam_y,
 }
 
 /* ---- Message window ---- */
-#define FONT_ADV 7
-#define FONT_ADV 7
-#define FONT_LINE 18
-#define MSG_COLS 52  /* ~50 chars/row like the OG at this scale */
+#define FONT_LINE 26
+#define MSG_COLS 96   /* chars per row cap (wrap is pixel-based, not column) */
 #define MSG_ROWS 7
+#define MSG_TEXT_W 440.0f  /* usable text width inside the box */
 
 static char msg_rows[MSG_ROWS][MSG_COLS + 1];
 static unsigned char msg_cols[MSG_ROWS][MSG_COLS];
+static float msg_row_w[MSG_ROWS];  /* rendered width per row (px) */
 static int msg_nrows, msg_cx, msg_ccol;
+static float msg_px;  /* pixel cursor in current row */
 
 static void msg_newrow(void) {
     if (msg_nrows < MSG_ROWS) {
         msg_cx = 0;
         msg_ccol = 0;
+        msg_px = 0.0f;
+        msg_row_w[msg_nrows] = 0.0f;
         msg_rows[msg_nrows][0] = 0;
         msg_nrows++;
     }
 }
 
-/* UTF-8 -> Latin-1 codepoint (atlas is Latin-1 1:1); others become '?'. */
+static float msg_adv(unsigned int cp) {
+    if (!font_adv || cp >= 256) return 4.0f;
+    return (float)font_adv[cp] / 2.0f;
+}
+
+/* UTF-8 -> Latin-1 codepoint (atlas is Latin-1 1:1); controls, DEL and
+ * C1 (128-159, tofu in the font) become '?'. */
 static void msg_put(unsigned int cp) {
-    if (cp >= 256) cp = '?';
-    if (cp < 32) cp = '?';
+    if (cp >= 256 || cp < 32 || (cp >= 127 && cp < 160)) cp = '?';
     if (msg_nrows == 0) msg_newrow();
-    if (msg_cx >= MSG_COLS) msg_newrow();
     if (msg_nrows > MSG_ROWS) return;
     int r = msg_nrows - 1;
+    /* Word wrap by pixel width: break before a word that overflows. */
     if (msg_cx < MSG_COLS) {
         msg_rows[r][msg_cx] = (char)cp;
         msg_cols[r][msg_cx] = (unsigned char)msg_ccol;
         msg_cx++;
         msg_rows[r][msg_cx] = 0;
+        msg_px += msg_adv(cp);
+        msg_row_w[r] = msg_px;
     }
+}
+
+/* Word-wrap driver: splits runs on spaces, breaking rows between words
+ * like Window_Base wordwrap (rpg_windows.js) instead of mid-word. */
+static void msg_emit_word(const unsigned int *w, int n) {
+    float ww = 0.0f;
+    for (int k = 0; k < n; k++) {
+        unsigned int cp = w[k];
+        if (cp >= 256 || cp < 32 || (cp >= 127 && cp < 160)) cp = '?';
+        ww += msg_adv(cp);
+    }
+    if (ww > MSG_TEXT_W) {
+        /* Longer than a row: break mid-word (OG does the same). */
+        msg_newrow();
+        for (int k = 0; k < n; k++) {
+            unsigned int cp = w[k];
+            if (cp >= 256 || cp < 32 || (cp >= 127 && cp < 160)) cp = '?';
+            if (msg_px > 0.0f && msg_px + msg_adv(cp) > MSG_TEXT_W)
+                msg_newrow();
+            msg_put(w[k]);
+        }
+        return;
+    }
+    if (msg_px > 0.0f && msg_px + ww > MSG_TEXT_W) msg_newrow();
+    for (int k = 0; k < n; k++) msg_put(w[k]);
 }
 
 static void msg_text_cb(const char *ptr, int len, void *ud) {
     (void)ud;
-    int i = 0;
-    while (i < len) {
+    /* Decode UTF-8 to codepoints, then wrap word by word. */
+    static unsigned int tmp[256];
+    int n = 0, i = 0;
+    while (i < len && n < 255) {
         unsigned char c = (unsigned char)ptr[i];
         if (c == '\n') {
             msg_newrow();
             i++;
         } else if ((c & 0x80) == 0) {
-            msg_put(c);
+            tmp[n++] = c;
             i++;
         } else if ((c & 0xe0) == 0xc0 && i + 1 < len) {
-            /* 2-byte UTF-8 -> Latin-1 when it fits (é in François). */
-            unsigned int cp = ((unsigned int)(c & 0x1f) << 6) |
-                              ((unsigned int)ptr[i + 1] & 0x3f);
-            msg_put(cp);
+            tmp[n++] = ((unsigned int)(c & 0x1f) << 6) |
+                       ((unsigned int)ptr[i + 1] & 0x3f);
             i += 2;
         } else {
-            msg_put('?');
+            tmp[n++] = '?';
             i++;
         }
+    }
+    /* Emit word by word (spaces are separators, kept as prefix gaps). */
+    int k = 0;
+    while (k < n) {
+        while (k < n && tmp[k] == ' ') {
+            if (msg_px > 0.0f) msg_put(' ');
+            k++;
+        }
+        int w0 = k;
+        while (k < n && tmp[k] != ' ') k++;
+        if (k > w0) msg_emit_word(tmp + w0, k - w0);
     }
 }
 
@@ -580,27 +627,43 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
         }
     }
 
-    /* 3. Window box: flat fill + the real 9-slice skin frame
-     * (rpg_core.js Window._refreshFrame: parts at skin offset 96,96
-     * with 24px margins, halved to 12px here). */
+    /* 3. Window box. Background/position come from the 101 params
+     * (rpg_windows.js Window_Message): bg 0 = skin, 1 = dim translucent,
+     * 2 = transparent; pos 0 = top, 1 = middle, 2 = bottom. */
     int rows = msg_nrows;
     if (rows < 1) rows = 1;
     if (rows > MSG_ROWS) rows = MSG_ROWS;
     int box_h = rows * FONT_LINE + 20;
-    int x0 = 8, x1 = SCR_W - 8, y1 = SCR_H - 8, y0 = y1 - box_h;
+    int bg = mit->msg_bg;
+    if (bg < 0 || bg > 2) bg = 0;
+    int pos = mit->msg_pos;
+    int x0 = 8, x1 = SCR_W - 8, y0, y1;
+    if (pos == 0) {
+        y0 = 8;
+        y1 = y0 + box_h;
+    } else if (pos == 1) {
+        y0 = (SCR_H - box_h) / 2;
+        y1 = y0 + box_h;
+    } else {
+        y1 = SCR_H - 8;
+        y0 = y1 - box_h;
+    }
     sceGuDisable(GU_TEXTURE_2D);
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    TVert *b = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-    b[0].u = 0; b[0].v = 0; b[0].color = 0xdc2a1c1a;  /* F&H skin fill */
-    b[0].x = (float)x0; b[0].y = (float)y0; b[0].z = 0.0f;
-    b[1].u = 0; b[1].v = 0; b[1].color = 0xdc2a1c1a;
-    b[1].x = (float)x1; b[1].y = (float)y1; b[1].z = 0.0f;
-    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
+    if (bg != 2) {
+        TVert *b = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        unsigned int fill = (bg == 1) ? 0xa0000000 : 0xdc2a1c1a;
+        b[0].u = 0; b[0].v = 0; b[0].color = fill;
+        b[0].x = (float)x0; b[0].y = (float)y0; b[0].z = 0.0f;
+        b[1].u = 0; b[1].v = 0; b[1].color = fill;
+        b[1].x = (float)x1; b[1].y = (float)y1; b[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
+    }
 
-    /* Skin frame (8 quads, one batched draw). Transparent corners are
-     * discarded by the alpha test like tile texels. */
-    if (window_px && window_cl) {
+    /* Skin frame (8 quads, one batched draw) for bg 0 only. Transparent
+     * corners are discarded by the alpha test like tile texels. */
+    if (bg == 0 && window_px && window_cl) {
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);
@@ -667,7 +730,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
     sceGuClutLoad(32, font_cl);
     sceGuTexMode(GU_PSM_T8, 0, 0, 1);
-    sceGuTexImage(0, 256, 256, 256, font_px);
+    sceGuTexImage(0, 512, 512, 512, font_px);
     sceGuTexFlush();
     sceGuTexSync();
     int total = 0;
@@ -677,17 +740,18 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     TVert *vp = v;
     for (int r = 0; r < rows; r++) {
         int gy = y0 + 10 + r * FONT_LINE;
+        float gx = (float)(x0 + 12);
         for (int k = 0; msg_rows[r][k]; k++) {
             unsigned int cp = (unsigned char)msg_rows[r][k];
-            float u0 = (float)((cp % 16) * 16);
-            float v0 = (float)((cp / 16) * 16);
+            float u0 = (float)((cp % 32) * 16);
+            float v0 = (float)((cp / 32) * 32);
             unsigned int col = MSG_PAL[msg_cols[r][k] & 31];
-            float gx = (float)(x0 + 12 + k * FONT_ADV);
             vp[0].u = u0; vp[0].v = v0; vp[0].color = col;
             vp[0].x = gx; vp[0].y = (float)gy; vp[0].z = 0.0f;
-            vp[1].u = u0 + 16; vp[1].v = v0 + 16; vp[1].color = col;
-            vp[1].x = gx + 16; vp[1].y = (float)(gy + 16); vp[1].z = 0.0f;
+            vp[1].u = u0 + 16; vp[1].v = v0 + 32; vp[1].color = col;
+            vp[1].x = gx + 16; vp[1].y = (float)(gy + 32); vp[1].z = 0.0f;
             vp += 2;
+            gx += msg_adv(cp);
         }
     }
     if (total > 0)
@@ -696,6 +760,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     sceGuDisable(GU_TEXTURE_2D);
 }
 
-void render_debug_text(const char *text) {    pspDebugScreenSetXY(0, 0);
+void render_debug_text(const char *text) {
+    pspDebugScreenSetXY(0, 0);
     pspDebugScreenPrintf("%s", text);
 }

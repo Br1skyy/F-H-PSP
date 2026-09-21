@@ -63,6 +63,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
 /* Game font atlas (baked by tools/bake_font.py, assigned at load). */
 extern unsigned char *font_px;
 extern unsigned int *font_cl;
+extern unsigned char *font_adv;  /* 256 per-glyph advances, half-px units */
 
 /* Window skin (baked by tools/bake_window.py from Window.png). */
 extern unsigned char *window_px;

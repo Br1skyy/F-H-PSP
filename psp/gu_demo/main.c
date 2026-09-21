@@ -137,7 +137,7 @@ extern unsigned char d_flame_start[], d_flamec_start[];
 extern unsigned char d_creat_start[], d_creatc_start[];
 extern unsigned char d_mobj_start[], d_mobjc_start[];
 extern unsigned char d_ghost_start[], d_ghostc_start[];
-extern unsigned char d_font_start[], d_fontc_start[];
+extern unsigned char d_font_start[], d_fontc_start[], d_fontadv_start[];
 extern unsigned char d_win_start[], d_winc_start[];
 extern unsigned char d_tmerc_start[], d_tmercc_start[];
 extern unsigned char d_toutl_start[], d_toutlc_start[];
@@ -278,6 +278,7 @@ static void load_map030(void) {
      * mplus-1m; assigned, not copied, like tile sheets) */
     font_px = d_font_start;
     font_cl = (unsigned int *)d_fontc_start;
+    font_adv = d_fontadv_start;
 
     /* Window skin (baked by tools/bake_window.py from Window.png) */
     window_px = d_win_start;

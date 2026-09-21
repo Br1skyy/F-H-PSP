@@ -7,7 +7,7 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o \
        d_priest.o d_priestc.o d_knight.o d_knightc.o \
        d_flame.o d_flamec.o d_creat.o d_creatc.o \
        d_mobj.o d_mobjc.o d_ghost.o d_ghostc.o \
-       d_font.o d_fontc.o \
+       d_font.o d_fontc.o d_fontadv.o \
        d_win.o d_winc.o \
        d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
        d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o
@@ -103,6 +103,8 @@ d_win.o: data/window.t8
 	bin2o -i data/window.t8 d_win.o d_win
 d_winc.o: data/window.clut
 	bin2o -i data/window.clut d_winc.o d_winc
+d_fontadv.o: data/font_adv.bin
+	bin2o -i data/font_adv.bin d_fontadv.o d_fontadv
 d_tmerc.o: data/mercenary_torch.t8
 	bin2o -i data/mercenary_torch.t8 d_tmerc.o d_tmerc
 d_tmercc.o: data/mercenary_torch.clut

@@ -558,6 +558,8 @@ int fh_interp_step(FhInterp *it) {
                     it->msg_face[0] = '\0';
                 }
                 it->msg_face_idx = c->p[0];
+                it->msg_bg = c->p[1];
+                it->msg_pos = c->p[2];
                 it->pc++;
                 break;
             case 401:

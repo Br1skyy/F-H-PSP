@@ -250,3 +250,16 @@ Findings against §9 open questions:
 > clears on pick/cancel (was one stale extra press), and the window shows
 > a temporary dim state row (pc/await/pagewait/ended/choice) so one device
 > screenshot pinpoints any residual stall. FHDEMO.zip repacked.
+
+### 2026-09-20 — Real font, real colors, word wrap, bg/pos modes
+> FONT (user: copy the OG one): the game does NOT use mplus — gamefont.css
+> selects Eczar-Regular. Rebaked the atlas from Eczar (512x512, 16x32
+> cells, proportional advances in font_adv.bin). Old mplus atlas retired.
+> COLOR: full 32-entry text palette sampled from the game's Window.png
+> grid (exact rpg_windows.js coords); \C[2] item orange verified.
+> WRAP: pixel-width word wrap (was mid-word char wrap). BG/POS: 101
+> background (skin/dim/transparent) and position (top/mid/bottom) now
+> honored from baked params. TRIGGER (user: are corpse chats right?):
+> verified identical to Game_Player.startMapEvent — prio-0 corpses fire
+> only standing on their tile, both here and in the OG; EV212 is an empty
+> list in the shipped data (silent in both). FHDEMO.zip repacked.
