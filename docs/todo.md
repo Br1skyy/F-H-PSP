@@ -9,6 +9,9 @@
 - [x] Player: 40×55 single-cell sprites, plain default sheets, OG timing
 - [x] Z-order: higher-mask split (lower → chars → upper)
 - [x] Real-hardware boot (user-link fix); 60 fps locked on PSP-2000
+- [x] Walk cycle persists across tiles (all 3 frames, OG rhythm)
+- [x] NPCs render (15 baked, Y-sorted) + talk trigger + EV213/EV020 dialogue
+- [x] 111-type-8 (has-item) in C + sim, goldens green
 
 ## Next
 

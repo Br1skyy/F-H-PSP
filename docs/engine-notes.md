@@ -38,6 +38,22 @@ Sources: `rpg_objects.js` (Game_CharacterBase), `rpg_sprites.js`
   No row-splitting: upper tiles always cover same-level characters.
 - Shadows/table edges go lower; overpass forces layers 2–3 upper.
 
+## NPCs, triggers, talk (`Game_Player`, `Game_Event`)
+
+- OK button (`triggerButtonAction`): Here `[0]` (below-priority tiles),
+  then There `[0,1,2]` (normal priority) + counter-tile extension.
+  Corpses (priority 0) trigger standing on them; NPCs (priority 1) faced.
+- Page image: `characterName/Index/pattern/direction` + `priorityType` +
+  `directionFix` (fixed NPCs don't turn toward the player on talk).
+- `$` sheets are single characters (3×4, `patternWidth = w/3`);
+  `!` only disables the bush offset. Non-`$` object sheets here use
+  24×24 cells (e.g. `!Flame`, `!creature`, `!map_objects2`).
+- Same-priority characters Y-sort by feet; upper (star) tiles cover all.
+- `111` type 8 = party possesses item (`p[0]` = item id; Map030 EV020
+  checks tinderbox item 7). Type 9/10 (weapon/armor) still unknown-counted.
+- `356` plugin strings land in the dispatch log (`Light on 27` verified
+  end-to-end on PC); backends (sconce glow, torch swap) attach later.
+
 ## Formulas
 
 Damage/params run on a small bytecode VM using **`double`**

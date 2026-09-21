@@ -396,7 +396,7 @@ static const int T2b_conditional_true_force[] = {0,0,0,0,0};
 /* T3_choices from Map001.json/ev9/pg9 (len 26) sel=0 branch=0 */
 static const FhCmd T3_choices_list[] = {
   {111,0,22,0,{1061,1,0,0,0,0,0,0,0,0},NULL},
-  {111,1,20,8,{0,0,0,0,0,0,0,0,0,0},NULL},
+  {111,1,20,8,{115,0,0,0,0,0,0,0,0,0},NULL},
   {101,2,26,0,{0,0,0,0,0,0,0,0,0,0},NULL},
   {401,2,26,0,{0,0,0,0,0,0,0,0,0,0},"You could use \\c[2]Soul stone\\c[0] here..."},
   {102,2,26,0,{2,0,0,0,0,0,0,0,0,0},"Yes\nNo"},
@@ -433,7 +433,7 @@ static const int T3_choices_var[][2] = {{0,0}};
 static const int T3_choices_varn = 0;
 static const char *T3_choices_text = "A pile of flesh remains here...\n";
 static const int T3_choices_waits = 0;
-static const int T3_choices_unknown = 1;
+static const int T3_choices_unknown = 0;
 static const int T3_choices_init_branch = 0;
 static const int T3_choices_init_sel = 0;
 static const int T3_choices_init_swn = 0;
@@ -543,7 +543,7 @@ static const int T3_choices_force[] = {0,0,0,0,0};
 /* T3b_choice_cancel from Map001.json/ev9/pg9 (len 26) sel=-1 branch=0 */
 static const FhCmd T3b_choice_cancel_list[] = {
   {111,0,22,0,{1061,1,0,0,0,0,0,0,0,0},NULL},
-  {111,1,20,8,{0,0,0,0,0,0,0,0,0,0},NULL},
+  {111,1,20,8,{115,0,0,0,0,0,0,0,0,0},NULL},
   {101,2,26,0,{0,0,0,0,0,0,0,0,0,0},NULL},
   {401,2,26,0,{0,0,0,0,0,0,0,0,0,0},"You could use \\c[2]Soul stone\\c[0] here..."},
   {102,2,26,0,{2,0,0,0,0,0,0,0,0,0},"Yes\nNo"},
@@ -580,7 +580,7 @@ static const int T3b_choice_cancel_var[][2] = {{0,0}};
 static const int T3b_choice_cancel_varn = 0;
 static const char *T3b_choice_cancel_text = "A pile of flesh remains here...\n";
 static const int T3b_choice_cancel_waits = 0;
-static const int T3b_choice_cancel_unknown = 1;
+static const int T3b_choice_cancel_unknown = 0;
 static const int T3b_choice_cancel_init_branch = 0;
 static const int T3b_choice_cancel_init_sel = -1;
 static const int T3b_choice_cancel_init_swn = 0;
@@ -5831,7 +5831,7 @@ static const int T25b_tileset_force[] = {0,0,0,0,0};
 /* T25c_appear from Troops/15/pg0 (len 64) sel=0 branch=0 */
 static const FhCmd T25c_appear_list[] = {
   {108,0,64,0,{0,0,0,0,0,0,0,0,0,0},NULL},
-  {111,0,33,8,{0,0,0,0,0,0,0,0,0,0},NULL},
+  {111,0,33,8,{33,0,0,0,0,0,0,0,0,0},NULL},
   {101,1,64,0,{0,0,0,0,0,0,0,0,0,0},NULL},
   {401,1,64,0,{0,0,0,0,0,0,0,0,0,0},"You try talking to cavegnome..."},
   {102,1,64,0,{4,0,0,0,0,0,0,0,0,0},"Offer \\c[2]Yellow vial\\c[0]\n\"KAAW KAAW!\"\n\"Kueh~!\"\n\"Just die.\""},
@@ -5906,7 +5906,7 @@ static const int T25c_appear_var[][2] = {{0,0}};
 static const int T25c_appear_varn = 0;
 static const char *T25c_appear_text = "\\c[7]Cavegnome\\c[0]\n\"Kaaaw kaaaw!\"\n";
 static const int T25c_appear_waits = 0;
-static const int T25c_appear_unknown = 1;
+static const int T25c_appear_unknown = 0;
 static const int T25c_appear_init_branch = 0;
 static const int T25c_appear_init_sel = 0;
 static const int T25c_appear_init_swn = 0;

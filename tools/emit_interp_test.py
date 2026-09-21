@@ -130,6 +130,7 @@ def to_cmd(c, jump):
         op = int(p[0])
         if op == 0: pp = [int(p[1]), int(p[2]), 0, 0, 0, 0]
         elif op == 1: pp = [int(p[1]), int(p[2]), int(p[3] if len(p) < 5 else p[3]), int(p[4]) if len(p) > 4 else 0, 0, 0]
+        elif op == 8: pp = [int(p[1]), 0, 0, 0, 0, 0]  # party-has-item id
     elif code == 121 and len(p) >= 3: pp = [int(p[0]), int(p[1]), int(p[2]), 0, 0, 0]
     elif code == 122 and len(p) >= 5:
         op = int(p[2]); pp = [int(p[0]), int(p[1]), int(p[3]), int(p[4]) if not isinstance(p[4], str) else 0, 0, 0]
@@ -311,6 +312,7 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
         elif code == 111:
             r = False
             if c['op'] == 0: r = sw.get(c['p'][0], 0) == (c['p'][1] == 0)
+            elif c['op'] == 8: r = inv.get((126, c['p'][0]), 0) > 0
             elif c['op'] == 1:
                 v1 = var.get(c['p'][0], 0); v2 = c['p'][2]
                 if c['p'][1] == 1: v2 = var.get(v2, 0)

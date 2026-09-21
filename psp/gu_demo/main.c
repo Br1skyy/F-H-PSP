@@ -28,6 +28,20 @@ PSP_HEAP_SIZE_KB(1024);  /* nothing mallocs at runtime (all static); keep the
 /* --- Message Demo (temporary) --- */
 static FhInterp mit;
 static int msg_mode = 0, msg_ended = 0, msg_cursor = 0;
+static const FhCmd *msg_list = NULL;
+static int msg_len = 0;
+static char msg_title[64] = "";
+
+static void msg_open(const FhCmd *list, int len, const char *title) {
+    msg_list = list;
+    msg_len = len;
+    strncpy(msg_title, title, sizeof(msg_title) - 1);
+    msg_title[sizeof(msg_title) - 1] = 0;
+    fh_interp_init(&mit, msg_list, msg_len);
+    msg_mode = 1;
+    msg_ended = 0;
+    msg_cursor = 0;
+}
 
 static void msg_print_text(const char *ptr, int len, void *ud) {
     (void)ud;
@@ -107,6 +121,27 @@ extern unsigned char d_merc_start[], d_mercc_start[];
 extern unsigned char d_outl_start[], d_outlc_start[];
 extern unsigned char d_priest_start[], d_priestc_start[];
 extern unsigned char d_knight_start[], d_knightc_start[];
+extern unsigned char d_flame_start[], d_flamec_start[];
+extern unsigned char d_creat_start[], d_creatc_start[];
+extern unsigned char d_mobj_start[], d_mobjc_start[];
+extern unsigned char d_ghost_start[], d_ghostc_start[];
+
+/* NPC sheets: t8/clut pointers, img_w/h active px, tex/stride upload dims.
+ * Dims from converted meta.json; see docs/engine-notes.md ($ = single). */
+static struct { unsigned char *t8, *clut; int iw, ih, tw, th, stride, big; } npc_sheets[4];
+
+/* NPCs baked from Map030.json pg0 (id, sheet, tile, index, pattern,
+ * dir_mv, trigger, priority, dirfix, talk list or NULL).
+ * trigger 0 = action button; prio 0 = underfoot (Here), 1 = faced (There)
+ * per Game_Player.triggerButtonAction (rpg_objects.js). */
+typedef struct {
+    int ev_id, sheet, tx, ty, index, pattern, dir_mv, trig, prio, dirfix;
+    const FhCmd *talk;
+    int talk_len;
+} NpcDef;
+
+static NpcDef npcs[15];
+static NpcSprite npc_draw[15];
 
 static void load_map030(void) {
     /* Load tileset textures */
@@ -139,6 +174,60 @@ static void load_map030(void) {
     characters[3].name = "Knight";
     characters[3].sprite_data = d_knight_start;
     characters[3].clut_data = d_knightc_start;
+
+    /* NPC sheets (!creature/!map_objects2/!Flame: 288×192 non-$, 24px cells;
+     * $minerghost2: 120×220 single, 40×55 cells) */
+    npc_sheets[0].t8 = d_creat_start; npc_sheets[0].clut = d_creatc_start;
+    npc_sheets[0].iw = 288; npc_sheets[0].ih = 192;
+    npc_sheets[0].tw = 512; npc_sheets[0].th = 256;
+    npc_sheets[0].stride = 512; npc_sheets[0].big = 0;
+    npc_sheets[1].t8 = d_ghost_start; npc_sheets[1].clut = d_ghostc_start;
+    npc_sheets[1].iw = 120; npc_sheets[1].ih = 220;
+    npc_sheets[1].tw = 128; npc_sheets[1].th = 256;
+    npc_sheets[1].stride = 128; npc_sheets[1].big = 1;
+    npc_sheets[2].t8 = d_mobj_start; npc_sheets[2].clut = d_mobjc_start;
+    npc_sheets[2].iw = 288; npc_sheets[2].ih = 192;
+    npc_sheets[2].tw = 512; npc_sheets[2].th = 256;
+    npc_sheets[2].stride = 512; npc_sheets[2].big = 0;
+    npc_sheets[3].t8 = d_flame_start; npc_sheets[3].clut = d_flamec_start;
+    npc_sheets[3].iw = 288; npc_sheets[3].ih = 192;
+    npc_sheets[3].tw = 512; npc_sheets[3].th = 256;
+    npc_sheets[3].stride = 512; npc_sheets[3].big = 0;
+
+    /* NPC roster (Map030 pg0_trigger/priority/image as shipped) */
+    static const NpcDef baked[] = {
+        /* ev, sheet, tx,ty, idx,pat,dir, trig,prio,fix, talk */
+        {208, 0, 56,11, 1,2,8, 0,1,1, NULL, 0},
+        {209, 0, 57,11, 2,0,8, 0,1,1, NULL, 0},
+        {213, 0, 58,11, 2,1,8, 0,0,1, M30_EV213, M30_EV213_LEN},
+        {210, 0, 56,12, 5,2,2, 0,0,1, NULL, 0},
+        {211, 0, 57,12, 6,0,2, 0,0,1, NULL, 0},
+        {212, 0, 58,12, 6,1,2, 0,0,1, NULL, 0},  /* empty list: examine = no-op */
+        {185, 1, 82,11, 0,2,8, 4,1,0, NULL, 0},  /* parallel: static pose */
+        {187, 1, 71,21, 0,2,8, 4,1,0, NULL, 0},
+        {266, 2,104, 9, 4,0,8, 0,1,1, NULL, 0},
+        {267, 2,105, 9, 4,1,8, 0,1,1, NULL, 0},
+        {268, 2,105, 8, 4,1,6, 0,1,1, NULL, 0},
+        {269, 2,104, 8, 4,0,6, 0,1,1, NULL, 0},
+        { 20, 3, 84,20, 5,1,2, 0,1,1, M30_EV020, M30_EV020_LEN},
+        { 21, 3, 84,19, 1,1,8, 0,1,1, NULL, 0},
+    };
+    for (int i = 0; i < 14; i++) {
+        npcs[i] = baked[i];
+        npc_draw[i].t8 = npc_sheets[baked[i].sheet].t8;
+        npc_draw[i].clut = (unsigned int *)npc_sheets[baked[i].sheet].clut;
+        npc_draw[i].img_w = npc_sheets[baked[i].sheet].iw;
+        npc_draw[i].img_h = npc_sheets[baked[i].sheet].ih;
+        npc_draw[i].tex_w = npc_sheets[baked[i].sheet].tw;
+        npc_draw[i].tex_h = npc_sheets[baked[i].sheet].th;
+        npc_draw[i].stride = npc_sheets[baked[i].sheet].stride;
+        npc_draw[i].is_big = npc_sheets[baked[i].sheet].big;
+        npc_draw[i].tile_x = baked[i].tx;
+        npc_draw[i].tile_y = baked[i].ty;
+        npc_draw[i].char_index = baked[i].index;
+        npc_draw[i].pattern = baked[i].pattern;
+        npc_draw[i].dir_mv = baked[i].dir_mv;
+    }
     
     /* Initialize player */
     player_init(&player, 70, 8);
@@ -241,10 +330,52 @@ int main(int argc, char *argv[]) {
         /* Message demo toggle */
         if (input_pressed(&input, PSP_CTRL_SELECT)) {
             msg_mode = !msg_mode;
-            if (msg_mode) {
-                fh_interp_init(&mit, DEMO_EV, DEMO_EV_LEN);
-                msg_ended = 0;
-                msg_cursor = 0;
+            if (msg_mode)
+                msg_open(DEMO_EV, DEMO_EV_LEN, "Map001 ev37 (rotten meat)");
+        }
+
+        /* Talk: OK button. OG triggerButtonAction (rpg_objects.js): action
+         * trigger here ([0], below-priority tiles) then facing tile
+         * ([0,1,2], normal priority). Only standing starts events. */
+        if (input_pressed(&input, PSP_CTRL_CROSS) && !player.moving) {
+            int ptx = player.x / TILE, pty = player.y / TILE;
+            int dx = 0, dy = 0;
+            switch (player.dir) {
+                case 0: dy = 1; break;
+                case 1: dx = -1; break;
+                case 2: dx = 1; break;
+                case 3: dy = -1; break;
+            }
+            int found = -1;
+            for (int pass = 0; pass < 2 && found < 0; pass++) {
+                int tx = pass == 0 ? ptx : ptx + dx;
+                int ty = pass == 0 ? pty : pty + dy;
+                for (int i = 0; i < 14; i++) {
+                    if (npcs[i].tx != tx || npcs[i].ty != ty) continue;
+                    if (pass == 0) {
+                        if (npcs[i].trig == 0 && npcs[i].prio == 0) found = i;
+                    } else {
+                        if (npcs[i].trig >= 0 && npcs[i].trig <= 2 &&
+                            npcs[i].prio == 1) found = i;
+                    }
+                    if (found >= 0) break;
+                }
+            }
+            if (found >= 0) {
+                /* Face the player unless direction-fixed (page flag). */
+                if (!npcs[found].dirfix) {
+                    int ax = ptx - npcs[found].tx, ay = pty - npcs[found].ty;
+                    int mv = (ay > 0) ? 2 : (ay < 0) ? 8 :
+                             (ax > 0) ? 6 : 4;
+                    npc_draw[found].dir_mv = mv;
+                }
+                if (npcs[found].talk && npcs[found].talk_len > 1) {
+                    char title[64];
+                    snprintf(title, sizeof(title), "Map030 ev%d (%s)",
+                             npcs[found].ev_id,
+                             npcs[found].ev_id == 20 ? "torch" : "saw corpse");
+                    msg_open(npcs[found].talk, npcs[found].talk_len, title);
+                }
             }
         }
         
@@ -276,7 +407,7 @@ int main(int argc, char *argv[]) {
             sceGuFinish();
             sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
             pspDebugScreenSetXY(0, 0);
-            pspDebugScreenPrintf("MSG DEMO: Map001 ev37 (rotten meat)");
+            pspDebugScreenPrintf("MSG: %s", msg_title);
             msg_show();
             sceDisplayWaitVblankStart();
             fbp0 = sceGuSwapBuffers();
@@ -323,7 +454,8 @@ int main(int argc, char *argv[]) {
         
         render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
                     &player, current_character, char_sprites, char_cluts,
-                    map_higher, sizeof(map_higher), total_frames);
+                    map_higher, sizeof(map_higher), total_frames,
+                    npc_draw, 14);
         
         /* Update debug text periodically (not every frame) */
         if (frames == 0 || frames - last_debug_update >= 30) {

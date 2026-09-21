@@ -16,20 +16,12 @@ import pathlib
 import sys
 
 CHAR_DIR = pathlib.Path('converted/characters')
-# (converted stem, half-scale w, half-scale h)
+# Converted stems to pad (dims + stride read from each .meta.json).
 SHEETS = [
-    ('mercenary_torch', 480, 440),
-    ('outlander_torch', 480, 440),
-    ('dark_priest_torch', 480, 440),
-    ('knight_torch', 480, 440),
-    ('mercenary', 480, 440),
-    ('outlander', 480, 440),
-    ('dark_priest', 480, 440),
-    ('knight', 480, 440),
+    'mercenary_torch', 'outlander_torch', 'dark_priest_torch', 'knight_torch',
+    'mercenary', 'outlander', 'dark_priest', 'knight',
+    '!Flame', '!creature', '!map_objects2', '$minerghost2',
 ]
-
-NEW_W, NEW_H = 512, 512
-
 
 def deswizzle8(inp: bytes, w: int, h: int) -> bytearray:
     out = bytearray(w * h)
@@ -56,34 +48,47 @@ def swizzle8(inp: bytes, w: int, h: int) -> bytearray:
     return out
 
 
-def pad_sheet(name: str, w: int, h: int) -> None:
+def next_pow2(n: int) -> int:
+    p = 16
+    while p < n:
+        p *= 2
+    return p
+
+
+def pad_sheet(name: str) -> None:
     t8 = CHAR_DIR / f'{name}.t8'
     meta_p = CHAR_DIR / f'{name}.meta.json'
+    meta0 = json.loads(meta_p.read_text())
+    w, h = meta0['tex_w'], meta0['tex_h']
+    new_w, new_h = next_pow2(w), next_pow2(h)
+    if (new_w, new_h) == (w, h):
+        print(f'{name}: already {w}x{h}, skipping')
+        return
     raw = t8.read_bytes()
     assert len(raw) == w * h, f'{name}: expected {w*h}, got {len(raw)}'
     linear_old = deswizzle8(raw, w, h)
-    linear_new = bytearray(NEW_W * NEW_H)  # zero = transparent index 0
+    linear_new = bytearray(new_w * new_h)  # zero = transparent index 0
     for y in range(h):
-        linear_new[y * NEW_W:y * NEW_W + w] = linear_old[y * w:(y + 1) * w]
-    swiz = swizzle8(bytes(linear_new), NEW_W, NEW_H)
+        linear_new[y * new_w:y * new_w + w] = linear_old[y * w:(y + 1) * w]
+    swiz = swizzle8(bytes(linear_new), new_w, new_h)
     t8.write_bytes(bytes(swiz))
     meta = json.loads(meta_p.read_text())
-    meta['tex_w'], meta['tex_h'], meta['t8_bytes'] = NEW_W, NEW_H, len(swiz)
+    meta['tex_w'], meta['tex_h'], meta['t8_bytes'] = new_w, new_h, len(swiz)
     meta_p.write_text(json.dumps(meta, indent=1))
-    print(f'{name}: {w}x{h} -> {NEW_W}x{NEW_H}')
+    print(f'{name}: {w}x{h} -> {new_w}x{new_h}')
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--only', default='')
     args = ap.parse_args()
-    for name, w, h in SHEETS:
+    for name in SHEETS:
         if args.only and name != args.only:
             continue
         if not (CHAR_DIR / f'{name}.t8').exists():
             print(f'{name}: missing, skipping')
             continue
-        pad_sheet(name, w, h)
+        pad_sheet(name)
 
 
 if __name__ == '__main__':

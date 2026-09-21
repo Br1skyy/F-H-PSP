@@ -178,44 +178,36 @@ void render_map_layers(int cam_x, int cam_y, const uint16_t *map_layers, int map
     sceGuDisable(GU_TEXTURE_2D);
 }
 
-void render_player_sprite(const Player *player, int cam_x, int cam_y,
-                         unsigned char *sprite_data, unsigned int *clut_data) {
+/* OG Sprite_Character addressing (rpg_sprites.js): $ sheets hold one
+ * character (3 cols × 4 rows); others hold 8 (12 cols × 8 rows, block from
+ * characterIndex). pattern = sheet column (NPC pages state it directly),
+ * dir_mv = RPG Maker direction (2,4,6,8) -> row 0-3. */
+static void char_cell(int img_w, int img_h, int is_big, int index, int pattern,
+                      int dir_mv, int *fx, int *fy, int *cw, int *ch) {
+    int row = (dir_mv - 2) / 2;
+    if (row < 0) row = 0;
+    if (row > 3) row = 3;
+    if (pattern < 0) pattern = 0;
+    if (pattern > 2) pattern = 2;
+    if (is_big) {
+        *cw = img_w / 3; *ch = img_h / 4;
+        *fx = pattern * (*cw); *fy = row * (*ch);
+    } else {
+        *cw = img_w / 12; *ch = img_h / 8;
+        *fx = ((index % 4) * 3 + pattern) * (*cw);
+        *fy = ((index / 4) * 4 + row) * (*ch);
+    }
+}
+
+/* Draw one character cell. Same texture state as the map path (proven):
+ * CLUT first, then TexMode/TexImage, alpha-test + blend. */
+static void render_character_cell(unsigned char *sprite_data,
+                                  unsigned int *clut_data,
+                                  int tex_w, int tex_h, int stride,
+                                  int frame_x, int frame_y,
+                                  int frame_w, int frame_h,
+                                  int screen_x, int screen_y) {
     if (!sprite_data || !clut_data) return;
-    
-    /* Character sprites are SWIZZLED 512×512 (padded from 480×440).
-     * The sheet holds ONE character's states on a 12-col × 8-row grid
-     * (RPG Maker non-$ layout, cells 80×110 full-res → 40×55 at our 0.5
-     * scale). The walking block is characterIndex 0: cols 0-2, rows 0-3.
-     * Rows: 0=down, 1=left, 2=right, 3=up (matches Player.dir).
-     * Cols: pattern 1=center(idle), 0=left foot, 2=right foot. */
-    int cell_w = 40;  /* 480/12 */
-    int cell_h = 55;  /* 440/8 */
-
-    /* sprite_pattern selects the state block (0 = walking). */
-    int pat_block = player->sprite_pattern;
-    if (pat_block < 0) pat_block = 0;
-    if (pat_block > 7) pat_block = 7;
-    int bx = (pat_block % 4) * 3;  /* block origin in cells */
-    int by = (pat_block / 4) * 4;
-
-    /* player->step_frame: 0=center(idle), 1=left, 2=right.
-     * Sheet pattern col: 1=center, 0=left, 2=right. */
-    int pat_col = (player->step_frame == 0) ? 1
-                : (player->step_frame == 1) ? 0 : 2;
-
-    int dir = player->dir;
-    if (dir < 0) dir = 0;
-    if (dir > 3) dir = 3;
-
-    /* Calculate which single cell to show based on player state */
-    int frame_x = (bx + pat_col) * cell_w;
-    int frame_y = (by + dir) * cell_h;
-    int frame_w = cell_w;
-    int frame_h = cell_h;
-
-    /* Same texture state as the map path (proven working): CLUT first,
-     * then TexMode/TexImage, explicit scale/offset, alpha-test + blend
-     * so palette index 0 (transparent) is discarded. */
     sceGuEnable(GU_TEXTURE_2D);
     sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
@@ -225,7 +217,7 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
     sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
     sceGuClutLoad(32, clut_data);
     sceGuTexMode(GU_PSM_T8, 0, 0, 1);  /* T8, swizzled=1 */
-    sceGuTexImage(0, 512, 512, 512, sprite_data);
+    sceGuTexImage(0, tex_w, tex_h, stride, sprite_data);
     sceGuTexFlush();
     sceGuTexSync();
     sceGuEnable(GU_ALPHA_TEST);
@@ -233,28 +225,49 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
 
-    /* Screen position (bottom-align the 40×55 cell on the 24px tile) */
-    int screen_x = player->x - cam_x - (frame_w - TILE) / 2;
-    int screen_y = player->y - cam_y - (frame_h - TILE);
-    
-    /* UV coords in PIXELS (no /2 needed for swizzled textures with float UVs) */
-    float u0 = (float)frame_x;
-    float v0 = (float)frame_y;
-    float u1 = (float)(frame_x + frame_w);
-    float v1 = (float)(frame_y + frame_h);
-    
     /* Draw single frame using GU_SPRITES */
     TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-    v[0].u = u0; v[0].v = v0; v[0].color = 0xffffffff;
+    v[0].u = (float)frame_x; v[0].v = (float)frame_y;
+    v[0].color = 0xffffffff;
     v[0].x = (float)screen_x; v[0].y = (float)screen_y; v[0].z = 0.0f;
-    v[1].u = u1; v[1].v = v1; v[1].color = 0xffffffff;
-    v[1].x = (float)(screen_x + frame_w); v[1].y = (float)(screen_y + frame_h); v[1].z = 0.0f;
-    
+    v[1].u = (float)(frame_x + frame_w); v[1].v = (float)(frame_y + frame_h);
+    v[1].color = 0xffffffff;
+    v[1].x = (float)(screen_x + frame_w);
+    v[1].y = (float)(screen_y + frame_h); v[1].z = 0.0f;
+
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
 
     sceGuDisable(GU_ALPHA_TEST);
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);
+}
+
+void render_player_sprite(const Player *player, int cam_x, int cam_y,
+                         unsigned char *sprite_data, unsigned int *clut_data) {
+    if (!sprite_data || !clut_data) return;
+    
+    /* Player sheets: non-$ 480×440, walking = characterIndex 0 block.
+     * player->step_frame 0=center(idle),1=left,2=right -> sheet col 1,0,2;
+     * player->dir 0-3 -> row 0-3. */
+    int pat_col = (player->step_frame == 0) ? 1
+                : (player->step_frame == 1) ? 0 : 2;
+    int dir = player->dir;
+    if (dir < 0) dir = 0;
+    if (dir > 3) dir = 3;
+    int block = player->sprite_pattern;
+    if (block < 0) block = 0;
+    if (block > 7) block = 7;
+
+    int fx, fy, fw, fh;
+    char_cell(480, 440, 0, block, pat_col, dir * 2 + 2,
+              &fx, &fy, &fw, &fh);
+
+    /* Bottom-align the cell on the 24px tile */
+    int screen_x = player->x - cam_x - (fw - TILE) / 2;
+    int screen_y = player->y - cam_y - (fh - TILE);
+
+    render_character_cell(sprite_data, clut_data, 512, 512, 512,
+                          fx, fy, fw, fh, screen_x, screen_y);
 }
 
 /* Lighting composite: ONE fullscreen sprite sampling the baked radial
@@ -296,12 +309,30 @@ static void render_light_pass(const Player *player, int cam_x, int cam_y,
     sceGuDisable(GU_TEXTURE_2D);
 }
 
+/* Draw one NPC's paged cell (pattern/dir taken straight from the page). */
+static void render_npc_sprite(const NpcSprite *npc, int cam_x, int cam_y) {
+    int fx, fy, fw, fh;
+    char_cell(npc->img_w, npc->img_h, npc->is_big, npc->char_index,
+              npc->pattern, npc->dir_mv, &fx, &fy, &fw, &fh);
+    int sx = npc->tile_x * TILE - cam_x - (fw - TILE) / 2;
+    int sy = npc->tile_y * TILE - cam_y - (fh - TILE);
+    render_character_cell(npc->t8, npc->clut, npc->tex_w, npc->tex_h,
+                          npc->stride, fx, fy, fw, fh, sx, sy);
+}
+
+/* Same-priority characters Y-sort by feet (screen bottom of sprite).
+ * Feet sit one tile below the entity origin in screen space. */
+static int char_feet_y(int ent_y_px, int cam_y) {
+    return ent_y_px - cam_y + TILE;
+}
+
 void render_frame(int cam_x, int cam_y,
                   const uint16_t *map_layers, int map_w, int map_h,
                   const Player *player, int current_char,
                   unsigned char *char_sprites[4],
                   unsigned int *char_cluts[4],
-                  const uint8_t *higher, int higher_len, int frames) {
+                  const uint8_t *higher, int higher_len, int frames,
+                  const NpcSprite *npcs, int n_npcs) {
     sceGuStart(GU_DIRECT, gu_list_ptr);
     sceGuClearColor(0xff000000);
     sceGuClear(GU_COLOR_BUFFER_BIT);
@@ -310,11 +341,46 @@ void render_frame(int cam_x, int cam_y,
      * tiles (rpg_core.js Tilemap z=0/4, screenZ = priorityType*2+1). */
     render_map_layers(cam_x, cam_y, map_layers, map_w, map_h,
                       higher, higher_len, 0);
-    
-    /* Render player */
-    render_player_sprite(player, cam_x, cam_y,
-                        char_sprites[current_char],
-                        char_cluts[current_char]);
+
+    /* Collect visible characters (player + on-screen NPCs), sort by feet
+     * Y so lower on screen draws later (in front). Upper tiles (z=4)
+     * still cover every same-priority character. */
+    static int order[1 + 32];
+    static int feet[1 + 32];
+    int n = 0;
+    order[n] = -1;  /* -1 = player */
+    feet[n] = char_feet_y(player->y, cam_y);
+    n++;
+    if (npcs) {
+        for (int i = 0; i < n_npcs && n < 33; i++) {
+            int sx = npcs[i].tile_x * TILE - cam_x;
+            int sy = npcs[i].tile_y * TILE - cam_y;
+            if (sx < -64 || sx > SCR_W + 64 || sy < -96 || sy > SCR_H + 64)
+                continue;  /* culled */
+            order[n] = i;
+            feet[n] = char_feet_y(npcs[i].tile_y * TILE, cam_y);
+            n++;
+        }
+    }
+    /* Insertion sort by feet Y (n is tiny). */
+    for (int i = 1; i < n; i++) {
+        int o = order[i], f = feet[i], j = i - 1;
+        while (j >= 0 && feet[j] > f) {
+            order[j + 1] = order[j];
+            feet[j + 1] = feet[j];
+            j--;
+        }
+        order[j + 1] = o;
+        feet[j + 1] = f;
+    }
+    for (int i = 0; i < n; i++) {
+        if (order[i] < 0)
+            render_player_sprite(player, cam_x, cam_y,
+                                char_sprites[current_char],
+                                char_cluts[current_char]);
+        else
+            render_npc_sprite(&npcs[order[i]], cam_x, cam_y);
+    }
 
     /* Higher tiles draw over the player (canopies, rafters, tall walls) */
     render_map_layers(cam_x, cam_y, map_layers, map_w, map_h,

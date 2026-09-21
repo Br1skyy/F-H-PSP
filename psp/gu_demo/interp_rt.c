@@ -27,7 +27,14 @@ static void emit_text(FhInterp *it, const char *s) {
 }
 
 static int eval_111(const FhInterp *it, const FhCmd *c) {
-    /* op: cond type. type 0 = switch, type 1 = variable. Others: unknown->false + count. */
+    /* op: cond type. type 0 = switch, type 1 = variable, type 8 = party
+     * possesses item (p[0] = item id, e.g. Map030 EV020 checks tinderbox).
+     * Others: unknown->false + count. */
+    if (c->op == 8) {
+        int id = c->p[0];
+        if (id < 0 || id >= FH_MAX_ITEMS) return 0;
+        return it->inv_item[id] > 0;
+    }
     if (c->op == 0) {
         int id = c->p[0], want = c->p[1];
         if (id < 0 || id >= FH_MAX_SWITCHES) return 0;
@@ -541,7 +548,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc = (it->choice_sel < 0) ? it->pc + 1 : c->jump;
                 break;
             case 111:
-                if (c->op > 1) it->unknown++; else {
+                if ((c->op > 1 && c->op != 8)) it->unknown++; else {
                     int r = eval_111(it, c);
                     if (c->indent < 16) it->branchv[c->indent] = r;
                     it->pc = r ? it->pc + 1 : c->jump;

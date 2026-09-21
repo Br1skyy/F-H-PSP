@@ -14,6 +14,17 @@
 /* Texture/sheet management */
 typedef struct { int tw, th, stride; } SheetDef;
 
+/* NPC/event sprite (page image from Map JSON, baked into main.c).
+ * Sheet dims are ACTIVE px (w/h from converted meta); tex/stride are the
+ * padded power-of-2 upload dims. dir_mv uses RPG Maker codes (2,4,6,8). */
+typedef struct {
+    unsigned char *t8;
+    unsigned int *clut;
+    int img_w, img_h, tex_w, tex_h, stride, is_big;
+    int tile_x, tile_y;
+    int char_index, pattern, dir_mv;
+} NpcSprite;
+
 extern const SheetDef SHEETS[9];
 extern unsigned char *sheet_px[9];
 extern unsigned int sheet_cl[9][256];
@@ -30,7 +41,8 @@ void render_frame(int cam_x, int cam_y,
                   const Player *player, int current_char,
                   unsigned char *char_sprites[4],
                   unsigned int *char_cluts[4],
-                  const uint8_t *higher, int higher_len, int frames);
+                  const uint8_t *higher, int higher_len, int frames,
+                  const NpcSprite *npcs, int n_npcs);
 
 /* Render functions for specific elements.
  * upper_pass=0 draws z=0 tiles (below characters), =1 draws z=4 higher
