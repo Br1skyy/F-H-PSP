@@ -653,27 +653,6 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
             msg_rows[r][k] = 0;
         }
     }
-    /* TEMP TRAP DIAGNOSTIC (remove once dialogue flow is confirmed):
-     * interpreter state as a dim last row. */
-    if (msg_nrows < MSG_ROWS) {
-        char st[MSG_COLS + 1];
-        int n = snprintf(st, sizeof(st), "st pc=%d aw=%d pw=%d end=%d ch=%d",
-                         mit->pc, mit->await_choice, page_wait, msg_ended,
-                         mit->choice_n);
-        (void)n;
-        msg_newrow();
-        if (msg_nrows <= MSG_ROWS) {
-            int r = msg_nrows - 1;
-            int k = 0;
-            while (st[k] && k < MSG_COLS) {
-                msg_rows[r][k] = st[k];
-                msg_cols[r][k] = 7;
-                k++;
-            }
-            msg_rows[r][k] = 0;
-        }
-    }
-
     /* 3. Window box. Background/position come from the 101 params
      * (rpg_windows.js Window_Message): bg 0 = skin, 1 = dim translucent,
      * 2 = transparent; pos 0 = top, 1 = middle, 2 = bottom.
