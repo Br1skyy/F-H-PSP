@@ -440,6 +440,9 @@ static unsigned char msg_cols[MSG_ROWS][MSG_COLS];
 static float msg_row_w[MSG_ROWS];  /* rendered width per row (px) */
 static int msg_nrows, msg_cx, msg_ccol;
 static float msg_px;  /* pixel cursor in current row */
+static int msg_reveal, msg_body_total;  /* typewriter: shown / total glyphs */
+static char msg_name[32];  /* Yanfly \n<Name> namebox (empty = none) */
+static int msg_expect_name = 0;  /* set by bare \N, consumed by next text */
 
 static void msg_newrow(void) {
     if (msg_nrows < MSG_ROWS) {
@@ -450,6 +453,24 @@ static void msg_newrow(void) {
         msg_rows[msg_nrows][0] = 0;
         msg_nrows++;
     }
+}
+
+/* A layout row is body text (typewriter-revealed) unless it was produced
+ * for choices/END (drawn whole). */
+static int msg_body_rows = 0;
+
+int msg_text_revealed(void) {
+    return msg_reveal >= msg_body_total;
+}
+
+void msg_reveal_all(void) {
+    msg_reveal = msg_body_total;
+}
+
+/* Call when the event advances: new content types from zero. */
+void msg_content_changed(void) {
+    msg_reveal = 0;
+    msg_body_total = 0;
 }
 
 static float msg_adv(unsigned int cp) {
@@ -505,6 +526,19 @@ static void msg_text_cb(const char *ptr, int len, void *ud) {
     /* Decode UTF-8 to codepoints, then wrap word by word. */
     static unsigned int tmp[256];
     int n = 0, i = 0;
+    /* Yanfly namebox: a run starting with '<' right after bare \N. */
+    if (msg_expect_name && len > 0 && ptr[0] == '<') {
+        int k = 1, o = 0;
+        while (k < len && ptr[k] != '>' && o < 31) {
+            msg_name[o++] = ptr[k++];
+        }
+        msg_name[o] = 0;
+        msg_expect_name = 0;
+        if (k < len && ptr[k] == '>') k++;  /* consume '>' */
+        i = k;
+        if (i >= len) return;
+    }
+    msg_expect_name = 0;
     while (i < len && n < 255) {
         unsigned char c = (unsigned char)ptr[i];
         if (c == '\n') {
@@ -537,8 +571,14 @@ static void msg_text_cb(const char *ptr, int len, void *ud) {
 
 static void msg_code_cb(const char *code, int param, void *ud) {
     (void)ud;
-    if (code[0] == 'C' && code[1] == 0 && param >= 0 && param < 32)
+    if (code[0] == 'C' && code[1] == 0 && param >= 0 && param < 32) {
         msg_ccol = param;
+        return;
+    }
+    /* Bare \N (no [digits]) arms Yanfly namebox capture: the next text
+     * run starting with '<' donates through '>' as the speaker name. */
+    if (code[0] == 'N' && code[1] == 0 && param < 0)
+        msg_expect_name = 1;
 }
 
 void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
@@ -547,6 +587,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     msg_nrows = 0;
     msg_cx = 0;
     msg_ccol = 0;
+    msg_name[0] = 0;
     msg_newrow();
     {
         FhEscCtx ctx = {NULL, 0, NULL, 0, NULL, 0, NULL};
@@ -556,6 +597,12 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
         cb.ud = NULL;
         fh_decode_escapes(mit->text, &ctx, &cb);
     }
+    /* Body rows (typewriter-revealed) end where choices/END begin. */
+    msg_body_rows = msg_nrows;
+    msg_body_total = 0;
+    for (int r = 0; r < msg_body_rows && r < MSG_ROWS; r++)
+        msg_body_total += (int)strlen(msg_rows[r]);
+    if (msg_reveal > msg_body_total) msg_reveal = msg_body_total;
     /* 2. Append the choice list. Each option is decoded like body text
      * (options can carry raw escapes, e.g. \c[2]Torch); the selected row
      * prints bright, others white, with an orange marker. */
@@ -629,7 +676,9 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
 
     /* 3. Window box. Background/position come from the 101 params
      * (rpg_windows.js Window_Message): bg 0 = skin, 1 = dim translucent,
-     * 2 = transparent; pos 0 = top, 1 = middle, 2 = bottom. */
+     * 2 = transparent; pos 0 = top, 1 = middle, 2 = bottom.
+     * Typewriter: 2 more glyphs per frame until the body is complete. */
+    if (!msg_text_revealed()) msg_reveal += 2;
     int rows = msg_nrows;
     if (rows < 1) rows = 1;
     if (rows > MSG_ROWS) rows = MSG_ROWS;
@@ -715,6 +764,50 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
             fp += 2;
         }
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 8 * 2, 0, f);
+        /* Namebox (Yanfly \n<Name>): mini skin box overlapping the top
+         * edge, name in palette 6 per the added-text convention. */
+        if (msg_name[0]) {
+            float nw = 20.0f;
+            for (int k = 0; msg_name[k]; k++)
+                nw += msg_adv((unsigned char)msg_name[k]);
+            int nx0 = x0, nx1 = x0 + (int)nw, ny1 = y0 + 6, ny0 = ny1 - 32;
+            sceGuDisable(GU_TEXTURE_2D);
+            TVert *nb = (TVert *)sceGuGetMemory((1 + 8) * 2 * sizeof(TVert));
+            TVert *nbp = nb;
+            nbp[0].u = 0; nbp[0].v = 0; nbp[0].color = 0xc8343c42;
+            nbp[0].x = (float)nx0; nbp[0].y = (float)ny0; nbp[0].z = 0.0f;
+            nbp[1].u = 0; nbp[1].v = 0; nbp[1].color = 0xc8343c42;
+            nbp[1].x = (float)nx1; nbp[1].y = (float)ny1; nbp[1].z = 0.0f;
+            nbp += 2;
+            sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, nb);
+            sceGuEnable(GU_TEXTURE_2D);
+            int ndx[8], ndy[8], ndw[8], ndh[8];
+            ndx[0] = nx0; ndy[0] = ny0; ndw[0] = m; ndh[0] = m;
+            ndx[1] = nx1 - m; ndy[1] = ny0; ndw[1] = m; ndh[1] = m;
+            ndx[2] = nx0; ndy[2] = ny1 - m; ndw[2] = m; ndh[2] = m;
+            ndx[3] = nx1 - m; ndy[3] = ny1 - m; ndw[3] = m; ndh[3] = m;
+            ndx[4] = nx0 + m; ndy[4] = ny0;
+            ndw[4] = (nx1 - nx0) - 2 * m; ndh[4] = m;
+            ndx[5] = nx0 + m; ndy[5] = ny1 - m;
+            ndw[5] = (nx1 - nx0) - 2 * m; ndh[5] = m;
+            ndx[6] = nx0; ndy[6] = ny0 + m;
+            ndw[6] = m; ndh[6] = (ny1 - ny0) - 2 * m;
+            ndx[7] = nx1 - m; ndy[7] = ny0 + m;
+            ndw[7] = m; ndh[7] = (ny1 - ny0) - 2 * m;
+            for (int q = 0; q < 8; q++) {
+                nbp[0].u = (float)parts[q][0]; nbp[0].v = (float)parts[q][1];
+                nbp[0].color = 0xffffffff;
+                nbp[0].x = (float)ndx[q]; nbp[0].y = (float)ndy[q];
+                nbp[0].z = 0.0f;
+                nbp[1].u = (float)(parts[q][0] + parts[q][2]);
+                nbp[1].v = (float)(parts[q][1] + parts[q][3]);
+                nbp[1].color = 0xffffffff;
+                nbp[1].x = (float)(ndx[q] + ndw[q]);
+                nbp[1].y = (float)(ndy[q] + ndh[q]); nbp[1].z = 0.0f;
+                nbp += 2;
+            }
+            sceGuDrawArray(GU_SPRITES, TVERT_FMT, 8 * 2, 0, nb + 2);
+        }
         sceGuDisable(GU_TEXTURE_2D);
     }
 
@@ -738,12 +831,18 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     int total = 0;
     for (int r = 0; r < rows; r++)
         total += (int)strlen(msg_rows[r]);
-    TVert *v = (TVert *)sceGuGetMemory(total * 2 * sizeof(TVert));
+    /* + room for the namebox text. Over-allocation is harmless. */
+    TVert *v = (TVert *)sceGuGetMemory((total + 40) * 2 * sizeof(TVert));
     TVert *vp = v;
+    /* Body rows reveal progressively (typewriter); choice/END rows draw
+     * whole once the body is complete (choices need full context). */
+    int shown = 0;
     for (int r = 0; r < rows; r++) {
         int gy = y0 + 10 + r * FONT_LINE;
         float gx = (float)(x0 + 12);
+        int is_body = (r < msg_body_rows);
         for (int k = 0; msg_rows[r][k]; k++) {
+            if (is_body && shown >= msg_reveal) break;
             unsigned int cp = (unsigned char)msg_rows[r][k];
             float u0 = (float)((cp % 32) * 16);
             float v0 = (float)((cp / 32) * 32);
@@ -754,10 +853,27 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
             vp[1].x = gx + 16; vp[1].y = (float)(gy + 32); vp[1].z = 0.0f;
             vp += 2;
             gx += msg_adv(cp);
+            if (is_body) shown++;
         }
     }
-    if (total > 0)
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, total * 2, 0, v);
+    /* Namebox text (palette 6 per YEP added-text), if a \n<Name> fired. */
+    if (msg_name[0] && msg_text_revealed()) {
+        float nx = (float)(x0 + 10);
+        int ny = y0 + 6 - 32 + 8;
+        for (int k = 0; msg_name[k]; k++) {
+            unsigned int cp = (unsigned char)msg_name[k];
+            float u0 = (float)((cp % 32) * 16);
+            float v0 = (float)((cp / 32) * 32);
+            vp[0].u = u0; vp[0].v = v0; vp[0].color = MSG_PAL[6];
+            vp[0].x = nx; vp[0].y = (float)ny; vp[0].z = 0.0f;
+            vp[1].u = u0 + 16; vp[1].v = v0 + 32; vp[1].color = MSG_PAL[6];
+            vp[1].x = nx + 16; vp[1].y = (float)(ny + 32); vp[1].z = 0.0f;
+            vp += 2;
+            nx += msg_adv(cp);
+        }
+    }
+    if (vp > v)
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);
 }

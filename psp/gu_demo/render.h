@@ -60,6 +60,11 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
 void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
                            int page_wait);
 
+/* Typewriter state (2 glyphs/frame like the OG pace). */
+int msg_text_revealed(void);
+void msg_reveal_all(void);
+void msg_content_changed(void);
+
 /* Game font atlas (baked by tools/bake_font.py, assigned at load). */
 extern unsigned char *font_px;
 extern unsigned int *font_cl;

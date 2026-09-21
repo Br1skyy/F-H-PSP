@@ -66,6 +66,7 @@ static void msg_open(const FhCmd *list, int len, const char *title) {
  * a choice to pick, or the event end. WAIT pacing resumes next frame. */
 static void msg_advance(void) {
     int guard = 10000;
+    msg_content_changed();  /* new content types from zero */
     while (guard-- > 0) {
         int r = fh_interp_step(&mit);
         if (r == FH_RUN_PAGE) {
@@ -493,10 +494,12 @@ int main(int argc, char *argv[]) {
         };
 
         /* Message mode: world frozen behind the window (OG keeps the map
-         * visible). O advances pages / picks, Cross cancels, O at END exits. */
+         * visible). O types out, then advances / picks / exits. */
         if (msg_mode) {
             if (!msg_ended) {
                 if (mit.await_choice) {
+                    /* Choices need full context: complete the text first. */
+                    if (!msg_text_revealed()) msg_reveal_all();
                     if (input_pressed(&input, PSP_CTRL_UP) && msg_cursor > 0) msg_cursor--;
                     if (input_pressed(&input, PSP_CTRL_DOWN) && msg_cursor < mit.choice_n - 1) msg_cursor++;
                     if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
@@ -509,6 +512,9 @@ int main(int argc, char *argv[]) {
                         mit.await_choice = 0;
                         page_wait = 0;
                     }
+                } else if (!msg_text_revealed()) {
+                    if (input_pressed(&input, PSP_CTRL_CIRCLE))
+                        msg_reveal_all();
                 } else if (page_wait) {
                     if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                         page_wait = 0;
