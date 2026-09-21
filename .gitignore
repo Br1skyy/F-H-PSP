@@ -1,0 +1,46 @@
+# ============================================================
+# F&H PSP PSP port — this repo holds CODE ONLY.
+# No game content is committed: you must own a copy of
+# Fear & Hunger and run the converters (see README.md).
+# ============================================================
+
+# --- Copyrighted: original game install (never commit) ---
+/Fear & Hunger_WIN/
+
+# --- Copyrighted: converted game assets (regenerate via tools/) ---
+/converted/
+*.t8
+*.clut
+*.pak
+*.rpgmvp
+
+# --- Derived build data (game pixels; regenerate via tools/) ---
+psp/gu_demo/data/
+render_out/
+audit_out/
+
+# --- Build outputs ---
+*.o
+*.elf
+*.PBP
+PARAM.SFO
+*.SFO
+*.zip
+link.map
+
+# --- Test runner binaries (built from tests/*.c) ---
+tests/draw_ppm
+tests/dump_quads
+tests/test_interp
+tests/test_map
+
+# --- Python ---
+__pycache__/
+*.pyc
+
+# --- Backups, scaffolding, editor droppings ---
+*.bak
+*.unswizzled
+*.480wide
+*~
+.DS_Store
