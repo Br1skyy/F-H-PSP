@@ -5,6 +5,7 @@
 #include <pspdisplay.h>
 #include <pspdebug.h>
 #include <string.h>
+#include <math.h>
 
 #define NX (SCR_W / TILE + 2)
 #define NY (SCR_H / TILE + 2)
@@ -22,51 +23,28 @@ const SheetDef SHEETS[9] = {
 unsigned char *sheet_px[9] = {0};
 unsigned int sheet_cl[9][256] __attribute__((aligned(16)));
 
-/* Lighting (Terrax replacement): NO render target, NO multiply blend —
- * only ops already proven on this path (T8 swizzled + CLUT + alpha blend).
- * 1. Fullscreen black quad at 92% alpha knocks the scene to ~8%.
- * 2. Warm radial glow sprite(s) add light back (ADD, src×alpha).
- * Looks like torchlight, costs 2 quads. */
+/* Lighting (Terrax replacement): the OG mask math, no render target.
+ * Terrax fills the light mask black, then punches a radial gradient
+ * (white core r<20, LINEAR ramp white→black out to r=300, full-res px)
+ * applied as multiply: center shows the scene at full brightness, edges
+ * fall to pure black. Additive blending cannot do that (it can only lift),
+ * so instead the mask is drawn directly as a subdivided black mesh whose
+ * per-vertex alpha = 1 - mask, under normal alpha blending:
+ * out = dst × (1 - alpha). Half-scale: core r<10, ramp to R=150.
+ * 20×12 grid of 24px cells; every op identical to the tile path. */
 #define LIGHT_R 150     /* player radius, screen px (Terrax 300 @ full scale) */
-#define LIGHT_DARK_A 235  /* darken quad alpha: scene kept = 1 - 235/255 ≈ 8% */
-#define LIGHT_SIZE 128
+#define LIGHT_CORE 10   /* white core radius (Terrax 20 @ full scale) */
+#define LIGHT_NX 20
+#define LIGHT_NY 12
+#define LIGHT_CELL 24
 
-static unsigned char light_px[LIGHT_SIZE * LIGHT_SIZE];
-static unsigned int light_cl[256] __attribute__((aligned(16)));
-
-static void light_swizzle(void) {
-    static unsigned char lin[LIGHT_SIZE * LIGHT_SIZE];
-    for (int y = 0; y < LIGHT_SIZE; y++) {
-        for (int x = 0; x < LIGHT_SIZE; x++) {
-            /* Steep cubic falloff: tight pool, no bleached middle.
-             * (Additive blending can't reproduce multiply's "never brighter
-             * than the scene", so the pool stays dim and narrow.) */
-            float dx = ((float)x - 63.5f) / 64.0f;
-            float dy = ((float)y - 63.5f) / 64.0f;
-            float d = dx * dx + dy * dy;
-            float a = 1.0f - d;
-            if (a < 0.0f) a = 0.0f;
-            a = a * a * a;
-            lin[y * LIGHT_SIZE + x] = (unsigned char)(a * 255.0f);
-        }
-    }
-    /* Neutral white peak like the original (playercolor defaults to
-     * #FFFFFF); dim enough that additive light never blows out. */
-    for (int i = 0; i < 256; i++)
-        light_cl[i] = 0x00000000 | (120u << 16) | (120u << 8) | 120u | ((unsigned int)i << 24);
-    /* 16×8 swizzle (same layout as convert_assets.py). */
-    static unsigned char sw[LIGHT_SIZE * LIGHT_SIZE];
-    int dst = 0;
-    for (int by = 0; by < LIGHT_SIZE; by += 8) {
-        for (int bx = 0; bx < LIGHT_SIZE; bx += 16) {
-            for (int r = 0; r < 8; r++) {
-                int src = (by + r) * LIGHT_SIZE + bx;
-                for (int k = 0; k < 16; k++) sw[dst + k] = lin[src + k];
-                dst += 16;
-            }
-        }
-    }
-    for (int i = 0; i < LIGHT_SIZE * LIGHT_SIZE; i++) light_px[i] = sw[i];
+/* Mask value at a screen point: 1 = full scene, 0 = black. */
+static float light_mask(int x, int y, int px, int py, int r) {
+    float dx = (float)(x - px), dy = (float)(y - py);
+    float d = sqrtf(dx * dx + dy * dy);
+    if (d <= (float)LIGHT_CORE) return 1.0f;
+    float m = 1.0f - (d - (float)LIGHT_CORE) / (float)(r - LIGHT_CORE);
+    return m < 0.0f ? 0.0f : m;
 }
 
 /* Vertex type for textured quads */
@@ -77,7 +55,6 @@ static unsigned int *gu_list_ptr;
 
 void render_init(void *fbp0, void *fbp1, void *zbp, unsigned int *gu_list) {
     gu_list_ptr = gu_list;
-    light_swizzle();
     sceGuInit();
     sceGuStart(GU_DIRECT, gu_list);
     sceGuDrawBuffer(GU_PSM_8888, fbp0, BUF_W);
@@ -254,49 +231,55 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
     sceGuDisable(GU_TEXTURE_2D);
 }
 
-/* Lighting composite: darken everything, then add the player glow.
- * Uses only the proven sprite path (T8 swizzled + CLUT + alpha blend).
- * frames drives the torch flicker. */
+/* Lighting composite: the OG mask as a subdivided black mesh.
+ * Per-vertex alpha = 1 - mask (white core → alpha 0, black edge → 255),
+ * normal alpha blending, no texture. frames wobbles the radius ±7
+ * (Terrax fire flicker). */
 static void render_light_pass(const Player *player, int cam_x, int cam_y,
                               int frames) {
-    /* 1. Knock the scene down to ~8% with a fullscreen black quad.
-     * out = dst × (1 - alpha), standard sprite blend. */
-    sceGuEnable(GU_BLEND);
-    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    TVert *d = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-    d[0].u = 0; d[0].v = 0; d[0].color = ((unsigned int)LIGHT_DARK_A << 24);
-    d[0].x = 0; d[0].y = 0; d[0].z = 0.0f;
-    d[1].u = 0; d[1].v = 0; d[1].color = ((unsigned int)LIGHT_DARK_A << 24);
-    d[1].x = SCR_W; d[1].y = SCR_H; d[1].z = 0.0f;
-    sceGuDisable(GU_TEXTURE_2D);
-    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, d);
-
-    /* 2. Add the warm glow back around the player (ADD, src×alpha). */
     int px = player->x - cam_x + TILE / 2;
     int py = player->y - cam_y - 8;
-    int r = LIGHT_R + ((frames % 9) - 4);
-    sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
-    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
-    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
-    sceGuClutLoad(32, light_cl);
-    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
-    sceGuTexImage(0, LIGHT_SIZE, LIGHT_SIZE, LIGHT_SIZE, light_px);
-    sceGuTexFlush();
-    sceGuTexSync();
-    sceGuEnable(GU_BLEND);
-    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xffffff);
-    TVert *g = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-    g[0].u = 0; g[0].v = 0; g[0].color = 0xffffffff;
-    g[0].x = (float)(px - r); g[0].y = (float)(py - r); g[0].z = 0.0f;
-    g[1].u = LIGHT_SIZE; g[1].v = LIGHT_SIZE; g[1].color = 0xffffffff;
-    g[1].x = (float)(px + r); g[1].y = (float)(py + r); g[1].z = 0.0f;
-    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, g);
-    sceGuTexFlush();
-    sceGuTexSync();
-    sceGuDisable(GU_BLEND);
+    int r = LIGHT_R + (((frames * 13) % 15) - 7);
+
     sceGuDisable(GU_TEXTURE_2D);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+
+    TVert *v = (TVert *)sceGuGetMemory(LIGHT_NX * LIGHT_NY * 6 * sizeof(TVert));
+    TVert *vp = v;
+    for (int cy = 0; cy < LIGHT_NY; cy++) {
+        for (int cx = 0; cx < LIGHT_NX; cx++) {
+            int x0 = cx * LIGHT_CELL, y0 = cy * LIGHT_CELL;
+            int x1 = x0 + LIGHT_CELL, y1 = y0 + LIGHT_CELL;
+            /* Black quad, per-corner alpha = 1 - mask: white core stays
+             * fully visible, black edge covers fully, smooth between. */
+            float m00 = light_mask(x0, y0, px, py, r);
+            float m10 = light_mask(x1, y0, px, py, r);
+            float m01 = light_mask(x0, y1, px, py, r);
+            float m11 = light_mask(x1, y1, px, py, r);
+            unsigned int c00 = ((unsigned int)((1.0f - m00) * 255.0f)) << 24;
+            unsigned int c10 = ((unsigned int)((1.0f - m10) * 255.0f)) << 24;
+            unsigned int c01 = ((unsigned int)((1.0f - m01) * 255.0f)) << 24;
+            unsigned int c11 = ((unsigned int)((1.0f - m11) * 255.0f)) << 24;
+            /* Two triangles; color interpolates across each. */
+            vp[0].u = 0; vp[0].v = 0; vp[0].color = c00;
+            vp[0].x = (float)x0; vp[0].y = (float)y0; vp[0].z = 0.0f;
+            vp[1].u = 0; vp[1].v = 0; vp[1].color = c10;
+            vp[1].x = (float)x1; vp[1].y = (float)y0; vp[1].z = 0.0f;
+            vp[2].u = 0; vp[2].v = 0; vp[2].color = c11;
+            vp[2].x = (float)x1; vp[2].y = (float)y1; vp[2].z = 0.0f;
+            vp[3].u = 0; vp[3].v = 0; vp[3].color = c00;
+            vp[3].x = (float)x0; vp[3].y = (float)y0; vp[3].z = 0.0f;
+            vp[4].u = 0; vp[4].v = 0; vp[4].color = c11;
+            vp[4].x = (float)x1; vp[4].y = (float)y1; vp[4].z = 0.0f;
+            vp[5].u = 0; vp[5].v = 0; vp[5].color = c01;
+            vp[5].x = (float)x0; vp[5].y = (float)y1; vp[5].z = 0.0f;
+            vp += 6;
+        }
+    }
+    sceGuDrawArray(GU_TRIANGLES, TVERT_FMT, LIGHT_NX * LIGHT_NY * 6, 0, v);
+    sceGuDisable(GU_BLEND);
 }
 
 void render_frame(int cam_x, int cam_y,
