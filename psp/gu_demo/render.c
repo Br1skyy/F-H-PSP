@@ -928,13 +928,13 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         sceGuTexSync();
         TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
         v[0].u = 0; v[0].v = 0; v[0].color = 0xffffffff;
-        v[0].x = (float)(foes[i].x - foes[i].w / 2);
-        v[0].y = (float)(foes[i].y - foes[i].h);
+        v[0].x = foes[i].x - (float)foes[i].w / 2.0f;
+        v[0].y = foes[i].y - (float)foes[i].h;
         v[0].z = 0.0f;
         v[1].u = (float)foes[i].w; v[1].v = (float)foes[i].h;
         v[1].color = 0xffffffff;
-        v[1].x = (float)(foes[i].x + foes[i].w / 2);
-        v[1].y = (float)foes[i].y;
+        v[1].x = foes[i].x + (float)foes[i].w / 2.0f;
+        v[1].y = foes[i].y;
         v[1].z = 0.0f;
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
     }
