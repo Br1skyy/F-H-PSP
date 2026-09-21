@@ -18,7 +18,9 @@
 #include "interp_rt.h"
 #include "text_rt.h"
 #include "../../runtime/player.h"
+#include "../../runtime/battle.h"
 #include "event_demo.h"
+#include "battle_demo.h"
 
 PSP_MODULE_INFO("F&H port", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -80,6 +82,222 @@ static void msg_advance(void) {
         }
         if (r == FH_RUN_WAIT) break;
     }
+}
+
+/* --- Battle (Guard1 slice; TEMP debug trigger on SQUARE) --- */
+static int battle_mode = 0;
+static Bt btl;
+static int btl_phase;  /* 0 cmd, 1 target, 2 exec, 3 result */
+static int btl_cmd, btl_tgt;
+static int btl_order[12], btl_norder, btl_oi, btl_wait;
+static int btl_act_kind, btl_act_target;  /* actor's queued action */
+static BtPopup btl_pops[8];
+static char btl_banner[64];
+static int btl_banner_t;
+static int btl_actor_row;
+
+static const BtSkill *btl_skill(int id) {
+    for (int i = 0; i < 5; i++)
+        if (DEMO_SKILLS[i].id == id) return &DEMO_SKILLS[i];
+    return &DEMO_SKILLS[0];
+}
+
+static void btl_foe_xy(int i, int *x, int *y) {
+    *x = DEMO_TROOP[i].x * SCR_W / 816;
+    *y = DEMO_TROOP[i].y * SCR_H / 624;
+}
+
+static void btl_popup(int foe_idx, int value, int kind) {
+    int x, y;
+    btl_foe_xy(foe_idx, &x, &y);
+    for (int i = 0; i < 8; i++) {
+        if (btl_pops[i].ttl <= 0) {
+            btl_pops[i].x = x;
+            btl_pops[i].y = y - 60;
+            btl_pops[i].value = value;
+            btl_pops[i].kind = kind;
+            btl_pops[i].ttl = btl_pops[i].max = 45;
+            return;
+        }
+    }
+}
+
+static void btl_start(u64 tick, int char_idx) {
+    /* Actor = selected character (fresh copy; map HP untouched). */
+    int want = DEMO_CHAR_ACTOR[char_idx];
+    int row = 0;
+    for (int i = 0; i < 4; i++)
+        if (DEMO_ACTORS[i].id == want) row = i;
+    btl_actor_row = row;
+    memset(&btl, 0, sizeof(btl));
+    BtF *a = &btl.f[0];
+    a->is_foe = 0;
+    a->ref = DEMO_ACTORS[row].id;
+    a->maxhp = a->hp = DEMO_ACTORS[row].mhp;
+    a->maxmp = a->mp = DEMO_ACTORS[row].mmp;
+    a->atk = DEMO_ACTORS[row].atk;
+    a->def = DEMO_ACTORS[row].def;
+    a->mat = DEMO_ACTORS[row].mat;
+    a->mdf = DEMO_ACTORS[row].mdf;
+    a->agi = DEMO_ACTORS[row].agi;
+    a->luk = DEMO_ACTORS[row].luk;
+    a->hit = 0.97;
+    a->eva = 0.05;
+    a->cri = 0.04;
+    a->cev = 0.0;
+    a->pdr = a->mdr = a->grd = 1.0;
+    for (int i = 0; i < BT_ERATE_N; i++) a->erate[i] = 1.0;
+    a->erate[1] = DEMO_ACTORS[row].er1;
+    a->erate[2] = DEMO_ACTORS[row].er2;
+    a->erate[3] = DEMO_ACTORS[row].er3;
+    a->atk_elem = DEMO_ACTORS[row].elem;
+    a->level = DEMO_ACTORS[row].level;
+    a->alive = 1;
+    btl.n_party = 1;
+    /* Guard1 limbs. */
+    btl.n_foes = 7;
+    int tagi = 0;
+    for (int i = 0; i < 7; i++) {
+        BtF *f = &btl.f[1 + i];
+        f->is_foe = 1;
+        f->ref = i;
+        f->maxhp = f->hp = DEMO_FOES[i].mhp;
+        f->atk = DEMO_FOES[i].atk;
+        f->def = DEMO_FOES[i].def;
+        f->mat = DEMO_FOES[i].mat;
+        f->mdf = DEMO_FOES[i].mdf;
+        f->agi = DEMO_FOES[i].agi;
+        f->luk = DEMO_FOES[i].luk;
+        f->hit = DEMO_FOES[i].hit;
+        f->eva = DEMO_FOES[i].eva;
+        f->cri = 0.0;
+        f->cev = 0.0;
+        f->pdr = f->mdr = f->grd = 1.0;
+        for (int k = 0; k < BT_ERATE_N; k++) f->erate[k] = 1.0;
+        f->atk_elem = DEMO_FOES[i].elem;
+        f->alive = 1;
+        tagi += f->agi;
+    }
+    btl.turn = 1;
+    bt_srand(&btl, (unsigned)(tick & 0xffffffffu));
+    btl.escape_ratio = 0.5 * (double)a->agi / (double)(tagi / 7);
+    btl_phase = 0;
+    btl_cmd = 0;
+    btl_tgt = 0;
+    btl_banner[0] = 0;
+    btl_banner_t = 0;
+    for (int i = 0; i < 8; i++) btl_pops[i].ttl = 0;
+    battle_mode = 1;
+}
+
+/* Queue the actor's action, let foes pick AI, build the turn order. */
+static void btl_begin_exec(void) {
+    if (btl_act_kind == 1) btl.f[0].guard = 1;  /* Guard applies now */
+    for (int i = 0; i < 7; i++) {
+        /* AI tables per limb (Enemies.json actions). */
+        const BtAiAct *tab = NULL;
+        int ntab = 0;
+        if (i == 0) {
+            tab = DEMO_AI_TORSO;
+            ntab = 1;
+        } else if (i == 3) {
+            tab = DEMO_AI_ARM_L;
+            ntab = 1;
+        } else if (i == 6) {
+            tab = DEMO_AI_STING;
+            ntab = 3;
+        }
+        (void)tab;
+        (void)ntab;
+    }
+    btl_norder = bt_order(&btl, btl_order, 12);
+    btl_oi = 0;
+    btl_wait = 20;
+    btl_phase = 2;
+}
+
+/* Execute the next battler in the order. Returns 1 when the round ends. */
+static int btl_exec_step(void) {
+    if (btl_oi >= btl_norder) return 1;
+    int fi = btl_order[btl_oi++];
+    BtF *sub = &btl.f[fi];
+    if (!sub->alive) return 0;
+    if (!sub->is_foe) {
+        if (btl_act_kind == 2) {  /* Escape attempts on the actor's turn */
+            if (bt_escape(&btl, sub->agi, 10)) {
+                strncpy(btl_banner, "Got away!", sizeof(btl_banner) - 1);
+                btl_phase = 3;
+            } else {
+                strncpy(btl_banner, "Can't escape!", sizeof(btl_banner) - 1);
+                btl_banner_t = 50;
+            }
+            return 0;
+        }
+        if (btl_act_kind == 1) return 0;  /* Guard holds */
+        /* Attack the chosen limb. */
+        const BtSkill *sk = btl_skill(1);
+        BtF *tgt = &btl.f[1 + btl_act_target];
+        if (!tgt->alive) return 0;
+        int crit, missed, evaded;
+        int dmg = bt_strike(&btl, sk, sub, tgt, NULL, NULL, &crit, &missed,
+                            &evaded);
+        if (missed || evaded) btl_popup(btl_act_target, 0, 1);
+        else btl_popup(btl_act_target, dmg, crit ? 2 : 0);
+    } else {
+        int li = sub->ref;
+        const BtAiAct *tab = NULL;
+        int ntab = 0, skill = -1;
+        if (li == 0) {
+            tab = DEMO_AI_TORSO;
+            ntab = 1;
+        } else if (li == 3) {
+            tab = DEMO_AI_ARM_L;
+            ntab = 1;
+        } else if (li == 6) {
+            tab = DEMO_AI_STING;
+            ntab = 3;
+        }
+        if (tab) {
+            int pick = bt_ai_pick(&btl, tab, ntab, 2, btl.turn, mit.sw);
+            if (pick >= 0) skill = tab[pick].skill;
+        }
+        if (skill < 0) return 0;  /* idle (no valid action) */
+        const BtSkill *sk = btl_skill(skill);
+        BtF *tgt = &btl.f[0];
+        int crit, missed, evaded;
+        int dmg = bt_strike(&btl, sk, sub, tgt, NULL, NULL, &crit, &missed,
+                            &evaded);
+        int x = 240, y = 200;
+        for (int i = 0; i < 8; i++) {
+            if (btl_pops[i].ttl <= 0) {
+                btl_pops[i].x = x;
+                btl_pops[i].y = y;
+                btl_pops[i].value = dmg;
+                btl_pops[i].kind = (missed || evaded) ? 1 : (crit ? 2 : 0);
+                btl_pops[i].ttl = btl_pops[i].max = 45;
+                break;
+            }
+        }
+    }
+    /* Battle end after every action. */
+    {
+        int foes_alive = 0, party_alive = 0;
+        for (int i = 0; i < 7; i++)
+            if (btl.f[1 + i].alive) foes_alive++;
+        if (btl.f[0].alive) party_alive++;
+        if (!foes_alive) {
+            btl.over = 1;
+            btl.exp_all = 0;
+            btl.gold_all = 0;
+            strncpy(btl_banner, "Victory!  EXP 0", sizeof(btl_banner) - 1);
+            btl_phase = 3;
+        } else if (!party_alive) {
+            btl.over = 2;
+            strncpy(btl_banner, "You died...", sizeof(btl_banner) - 1);
+            btl_phase = 3;
+        }
+    }
+    return 0;
 }
 
 /* --- Exit Callback --- */
@@ -144,6 +362,17 @@ extern unsigned char d_tmerc_start[], d_tmercc_start[];
 extern unsigned char d_toutl_start[], d_toutlc_start[];
 extern unsigned char d_tpriest_start[], d_tpriestc_start[];
 extern unsigned char d_tknight_start[], d_tknightc_start[];
+extern unsigned char d_e0_start[], d_e0c_start[];
+extern unsigned char d_e1_start[], d_e1c_start[];
+extern unsigned char d_e2_start[], d_e2c_start[];
+extern unsigned char d_e3_start[], d_e3c_start[];
+extern unsigned char d_e4_start[], d_e4c_start[];
+extern unsigned char d_e5_start[], d_e5c_start[];
+extern unsigned char d_e6_start[], d_e6c_start[];
+
+/* Guard1 art (order matches DEMO_TROOP/DEMO_FOE_*). */
+static unsigned char *foe_t8[7];
+static unsigned int *foe_cl[7];
 
 /* NPC sheets: t8/clut pointers, img_w/h active px, tex/stride upload dims.
  * Dims from converted meta.json; see docs/engine-notes.md ($ = single). */
@@ -210,8 +439,17 @@ static void load_map030(void) {
     characters[3].torch_data = d_tknight_start;
     characters[3].torch_clut = d_tknightc_start;
 
-    /* NPC sheets (!creature/!map_objects2/!Flame: 288×192 non-$, 24px cells;
-     * $minerghost2: 120×220 single, 40×55 cells) */
+    /* Guard1 enemy art. */
+    foe_t8[0] = d_e0_start; foe_cl[0] = (unsigned int *)d_e0c_start;
+    foe_t8[1] = d_e1_start; foe_cl[1] = (unsigned int *)d_e1c_start;
+    foe_t8[2] = d_e2_start; foe_cl[2] = (unsigned int *)d_e2c_start;
+    foe_t8[3] = d_e3_start; foe_cl[3] = (unsigned int *)d_e3c_start;
+    foe_t8[4] = d_e4_start; foe_cl[4] = (unsigned int *)d_e4c_start;
+    foe_t8[5] = d_e5_start; foe_cl[5] = (unsigned int *)d_e5c_start;
+    foe_t8[6] = d_e6_start; foe_cl[6] = (unsigned int *)d_e6c_start;
+
+    /* NPC sheets (!creature/!map_objects2/!Flame: 288x192 non-$, 24px
+     * cells; $minerghost2: 120x220 single, 40x55 cells) */
     npc_sheets[0].t8 = d_creat_start; npc_sheets[0].clut = d_creatc_start;
     npc_sheets[0].iw = 288; npc_sheets[0].ih = 192;
     npc_sheets[0].tw = 512; npc_sheets[0].th = 256;
@@ -543,6 +781,136 @@ int main(int argc, char *argv[]) {
             frames++;
             
             /* Update FPS counter */
+            u64 now;
+            sceRtcGetCurrentTick(&now);
+            if (now - tick_last >= tick_freq) {
+                float span = (float)(now - tick_last) / (float)tick_freq;
+                fps = (int)(frames / span);
+                frames = 0;
+                tick_last = now;
+            }
+            continue;
+        }
+        
+        /* Battle debug trigger (TEMP): SQUARE starts the Guard1 slice. */
+        if (input_pressed(&input, PSP_CTRL_SQUARE) && !player.moving) {
+            u64 btick;
+            sceRtcGetCurrentTick(&btick);
+            btl_start(btick, current_character);
+        }
+
+        /* Battle mode */
+        if (battle_mode) {
+            static const char *cmds[] = {"Attack", "Guard", "Escape"};
+            /* Tick popups. */
+            for (int i = 0; i < 8; i++)
+                if (btl_pops[i].ttl > 0) btl_pops[i].ttl--;
+            if (btl_banner_t > 0) btl_banner_t--;
+
+            if (btl_phase == 0) {
+                if (input_pressed(&input, PSP_CTRL_UP) && btl_cmd > 0)
+                    btl_cmd--;
+                if (input_pressed(&input, PSP_CTRL_DOWN) && btl_cmd < 2)
+                    btl_cmd++;
+                if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                    if (btl_cmd == 0) {
+                        btl_phase = 1;
+                        /* First alive limb. */
+                        btl_tgt = 0;
+                        while (btl_tgt < 7 && !btl.f[1 + btl_tgt].alive)
+                            btl_tgt++;
+                    } else {
+                        btl_act_kind = btl_cmd;  /* 1 guard, 2 escape */
+                        btl_begin_exec();
+                    }
+                }
+            } else if (btl_phase == 1) {
+                if (input_pressed(&input, PSP_CTRL_UP)) {
+                    int t = btl_tgt;
+                    for (int k = 0; k < 7; k++) {
+                        t = (t + 6) % 7;
+                        if (btl.f[1 + t].alive) {
+                            btl_tgt = t;
+                            break;
+                        }
+                    }
+                }
+                if (input_pressed(&input, PSP_CTRL_DOWN)) {
+                    int t = btl_tgt;
+                    for (int k = 0; k < 7; k++) {
+                        t = (t + 1) % 7;
+                        if (btl.f[1 + t].alive) {
+                            btl_tgt = t;
+                            break;
+                        }
+                    }
+                }
+                if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                    btl_act_kind = 0;
+                    btl_act_target = btl_tgt;
+                    btl_begin_exec();
+                }
+                if (input_pressed(&input, PSP_CTRL_CROSS))
+                    btl_phase = 0;
+            } else if (btl_phase == 2) {
+                if (btl_wait > 0) {
+                    btl_wait--;
+                } else if (btl_exec_step()) {
+                    /* Round done: clear guard, next turn. */
+                    bt_round_end(&btl);
+                    btl.turn++;
+                    btl_phase = 0;
+                } else {
+                    btl_wait = 25;
+                }
+            } else {
+                if (input_pressed(&input, PSP_CTRL_CIRCLE))
+                    battle_mode = 0;
+            }
+
+            /* Render the battle. */
+            BtFoeDraw draws[7];
+            for (int i = 0; i < 7; i++) {
+                int x, y;
+                btl_foe_xy(i, &x, &y);
+                draws[i].t8 = foe_t8[i];
+                draws[i].clut = foe_cl[i];
+                draws[i].tw = DEMO_FOE_DIMS[i].tw;
+                draws[i].th = DEMO_FOE_DIMS[i].th;
+                draws[i].stride = DEMO_FOE_DIMS[i].stride;
+                draws[i].w = DEMO_FOE_DIMS[i].w;
+                draws[i].h = DEMO_FOE_DIMS[i].h;
+                draws[i].x = x;
+                draws[i].y = y;
+                draws[i].alive = btl.f[1 + i].alive;
+            }
+            const char *targets[7];
+            int ntgt = 0;
+            for (int i = 0; i < 7; i++)
+                if (btl.f[1 + i].alive) targets[ntgt++] = DEMO_FOE_NAMES[i];
+            char st_name[32];
+            snprintf(st_name, sizeof(st_name), "%s",
+                     characters[current_character].name);
+            /* Target cursor indexes alive list; map back to foe idx. */
+            int tcursor = 0, seen = 0;
+            for (int i = 0; i < 7; i++) {
+                if (!btl.f[1 + i].alive) continue;
+                if (i == btl_tgt) tcursor = seen;
+                seen++;
+            }
+            sceGuStart(GU_DIRECT, gu_list);
+            sceGuClearColor(0xff000000);
+            sceGuClear(GU_COLOR_BUFFER_BIT);
+            render_battle(draws, 7, btl_pops, 8, st_name,
+                         btl.f[0].hp, btl.f[0].maxhp, cmds, 3, btl_cmd,
+                         btl_phase == 0, targets, ntgt, tcursor,
+                         btl_phase == 1,
+                         (btl_phase == 3 || btl_banner_t > 0) ? btl_banner : NULL);
+            sceGuFinish();
+            sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
+            sceDisplayWaitVblankStart();
+            fbp0 = sceGuSwapBuffers();
+            frames++;
             u64 now;
             sceRtcGetCurrentTick(&now);
             if (now - tick_last >= tick_freq) {

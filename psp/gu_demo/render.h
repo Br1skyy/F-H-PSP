@@ -74,6 +74,27 @@ extern unsigned char *font_adv;  /* 256 per-glyph advances, half-px units */
 extern unsigned char *window_px;
 extern unsigned int *window_cl;
 
+/* Battle scene (front-view limbs + command UI). All text via the game
+ * font atlas; popups rise and fade. */
+typedef struct {
+    unsigned char *t8;
+    unsigned int *clut;
+    int tw, th, stride, w, h;
+    int x, y;   /* screen anchor: bottom-center (MV battler home) */
+    int alive;
+} BtFoeDraw;
+
+typedef struct {
+    int x, y, value, kind, ttl, max;
+} BtPopup;  /* kind: 0 damage, 1 MISS, 2 critical */
+
+void render_battle(const BtFoeDraw *foes, int nfoes,
+                   const BtPopup *pops, int npops,
+                   const char *actor_name, int hp, int mhp,
+                   const char *cmds[], int ncmds, int cursor, int show_cmds,
+                   const char *targets[], int ntargets, int tcursor,
+                   int show_targets, const char *banner);
+
 /* Debug overlay */
 void render_debug_text(const char *text);
 

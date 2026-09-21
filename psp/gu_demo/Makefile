@@ -1,5 +1,5 @@
 TARGET = fh_demo
-OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o \
+OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o \
        d_a1.o d_b.o d_e.o d_ib.o d_d.o \
        d_a1c.o d_bc.o d_ec.o d_ibc.o d_dc.o \
        d_layers.o d_pass.o d_high.o \
@@ -10,7 +10,9 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o \
        d_font.o d_fontc.o d_fontadv.o \
        d_win.o d_winc.o \
        d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
-       d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o
+       d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o \
+       d_e0.o d_e0c.o d_e1.o d_e1c.o d_e2.o d_e2c.o d_e3.o d_e3c.o \
+       d_e4.o d_e4c.o d_e5.o d_e5c.o d_e6.o d_e6c.o
 
 INCDIR =
 CFLAGS = -Wall -O2 -G0
@@ -121,7 +123,37 @@ d_tknight.o: data/knight_torch.t8
 	bin2o -i data/knight_torch.t8 d_tknight.o d_tknight
 d_tknightc.o: data/knight_torch.clut
 	bin2o -i data/knight_torch.clut d_tknightc.o d_tknightc
+d_e0.o: data/guard1_torso.t8
+	bin2o -i data/guard1_torso.t8 d_e0.o d_e0
+d_e0c.o: data/guard1_torso.clut
+	bin2o -i data/guard1_torso.clut d_e0c.o d_e0c
+d_e1.o: data/guard1_head.t8
+	bin2o -i data/guard1_head.t8 d_e1.o d_e1
+d_e1c.o: data/guard1_head.clut
+	bin2o -i data/guard1_head.clut d_e1c.o d_e1c
+d_e2.o: data/guard1_R_hand.t8
+	bin2o -i data/guard1_R_hand.t8 d_e2.o d_e2
+d_e2c.o: data/guard1_R_hand.clut
+	bin2o -i data/guard1_R_hand.clut d_e2c.o d_e2c
+d_e3.o: data/guard1_L_hand.t8
+	bin2o -i data/guard1_L_hand.t8 d_e3.o d_e3
+d_e3c.o: data/guard1_L_hand.clut
+	bin2o -i data/guard1_L_hand.clut d_e3c.o d_e3c
+d_e4.o: data/guard1_R_leg.t8
+	bin2o -i data/guard1_R_leg.t8 d_e4.o d_e4
+d_e4c.o: data/guard1_R_leg.clut
+	bin2o -i data/guard1_R_leg.clut d_e4c.o d_e4c
+d_e5.o: data/guard1_L_leg.t8
+	bin2o -i data/guard1_L_leg.t8 d_e5.o d_e5
+d_e5c.o: data/guard1_L_leg.clut
+	bin2o -i data/guard1_L_leg.clut d_e5c.o d_e5c
+d_e6.o: data/guard1_stinger.t8
+	bin2o -i data/guard1_stinger.t8 d_e6.o d_e6
+d_e6c.o: data/guard1_stinger.clut
+	bin2o -i data/guard1_stinger.clut d_e6c.o d_e6c
 
 # Runtime modules with proper include paths
 player_rt.o: ../../runtime/player.c
+	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
+battle_rt.o: ../../runtime/battle.c
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@

@@ -861,3 +861,145 @@ void render_debug_text(const char *text) {
     pspDebugScreenSetXY(0, 0);
     pspDebugScreenPrintf("%s", text);
 }
+
+/* ---- Battle scene ---- */
+
+/* One font-textured text line (proportional advances, vertex colors). */
+static void battle_text(const char *s, float x, float y, unsigned int col,
+                        TVert **vpp) {
+    TVert *vp = *vpp;
+    float gx = x;
+    for (; *s; s++) {
+        unsigned int cp = (unsigned char)*s;
+        if (cp < 32 || cp >= 256) cp = '?';
+        float u0 = (float)((cp % 32) * 16);
+        float v0 = (float)((cp / 32) * 32);
+        vp[0].u = u0; vp[0].v = v0; vp[0].color = col;
+        vp[0].x = gx; vp[0].y = y; vp[0].z = 0.0f;
+        vp[1].u = u0 + 16; vp[1].v = v0 + 32; vp[1].color = col;
+        vp[1].x = gx + 16; vp[1].y = y + 32; vp[1].z = 0.0f;
+        vp += 2;
+        gx += msg_adv(cp);
+    }
+    *vpp = vp;
+}
+
+void render_battle(const BtFoeDraw *foes, int nfoes,
+                   const BtPopup *pops, int npops,
+                   const char *actor_name, int hp, int mhp,
+                   const char *cmds[], int ncmds, int cursor, int show_cmds,
+                   const char *targets[], int ntargets, int tcursor,
+                   int show_targets, const char *banner) {
+    /* Backdrop: flat dark maroon (battlebacks land in the art pass). */
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    TVert *bd = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+    bd[0].u = 0; bd[0].v = 0; bd[0].color = 0xff180a0c;
+    bd[0].x = 0; bd[0].y = 0; bd[0].z = 0.0f;
+    bd[1].u = 0; bd[1].v = 0; bd[1].color = 0xff180a0c;
+    bd[1].x = (float)SCR_W; bd[1].y = (float)SCR_H; bd[1].z = 0.0f;
+    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bd);
+
+    /* Enemy limbs (skip the fallen; collapse anims are a later pass). */
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+    for (int i = 0; i < nfoes; i++) {
+        if (!foes[i].alive || !foes[i].t8 || !foes[i].clut) continue;
+        sceGuClutLoad(32, foes[i].clut);
+        sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+        sceGuTexImage(0, foes[i].tw, foes[i].th, foes[i].stride, foes[i].t8);
+        sceGuTexFlush();
+        sceGuTexSync();
+        TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        v[0].u = 0; v[0].v = 0; v[0].color = 0xffffffff;
+        v[0].x = (float)(foes[i].x - foes[i].w / 2);
+        v[0].y = (float)(foes[i].y - foes[i].h);
+        v[0].z = 0.0f;
+        v[1].u = (float)foes[i].w; v[1].v = (float)foes[i].h;
+        v[1].color = 0xffffffff;
+        v[1].x = (float)(foes[i].x + foes[i].w / 2);
+        v[1].y = (float)foes[i].y;
+        v[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
+    }
+    sceGuDisable(GU_TEXTURE_2D);
+
+    /* Actor status line. */
+    char st[64];
+    snprintf(st, sizeof(st), "%s  HP %d/%d", actor_name, hp, mhp);
+    int cmdtotal = (int)strlen(st);
+    for (int i = 0; i < ncmds; i++) cmdtotal += (int)strlen(cmds[i]) + 2;
+    int targtotal = 0;
+    for (int i = 0; i < ntargets; i++) targtotal += (int)strlen(targets[i]) + 2;
+    int poptotal = npops * 8;
+    int bannerlen = banner ? (int)strlen(banner) : 0;
+    TVert *v = (TVert *)sceGuGetMemory(
+        (cmdtotal + targtotal + poptotal + bannerlen + 1) * 2 * sizeof(TVert));
+    TVert *vp = v;
+    /* Text pass needs the font texture bound. */
+    if (font_px && font_cl) {
+        sceGuEnable(GU_TEXTURE_2D);
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+        sceGuTexScale(1.0f, 1.0f);
+        sceGuTexOffset(0.0f, 0.0f);
+        sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+        sceGuClutLoad(32, font_cl);
+        sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+        sceGuTexImage(0, 512, 512, 512, font_px);
+        sceGuTexFlush();
+        sceGuTexSync();
+        battle_text(st, 12.0f, (float)(SCR_H - 26), 0xffffffff, &vp);
+        if (show_cmds) {
+            for (int i = 0; i < ncmds; i++) {
+                float cy = 40.0f + (float)i * 24.0f;
+                if (i == cursor)
+                    battle_text(">", 12.0f, cy, 0xff4c78ff, &vp);
+                battle_text(cmds[i], 30.0f, cy, 0xffffffff, &vp);
+            }
+        }
+        if (show_targets) {
+            for (int i = 0; i < ntargets; i++) {
+                float cy = 40.0f + (float)i * 20.0f;
+                if (i == tcursor)
+                    battle_text(">", 330.0f, cy, 0xff4c78ff, &vp);
+                battle_text(targets[i], 348.0f, cy, 0xffffffff, &vp);
+            }
+        }
+        for (int i = 0; i < npops; i++) {
+            /* Rise and fade over ttl. */
+            float k = pops[i].max > 0 ? (float)pops[i].ttl / (float)pops[i].max : 0.0f;
+            if (k < 0.0f) k = 0.0f;
+            char buf[16];
+            unsigned int col;
+            if (pops[i].kind == 1) {
+                snprintf(buf, sizeof(buf), "MISS");
+                col = 0xffffffff;
+            } else {
+                snprintf(buf, sizeof(buf), "%d", pops[i].value);
+                col = pops[i].kind == 2 ? 0xff39f6fd : 0xffffffff;
+            }
+            col = (col & 0x00ffffff) |
+                  (((unsigned int)(255.0f * k)) << 24);
+            float py = (float)pops[i].y - (1.0f - k) * 24.0f;
+            battle_text(buf, (float)pops[i].x, py, col, &vp);
+        }
+        if (banner)
+            battle_text(banner, 150.0f, 120.0f, 0xffffa0f0, &vp);
+    }
+    if (vp > v)
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
+    sceGuDisable(GU_BLEND);
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuDisable(GU_ALPHA_TEST);
+}
