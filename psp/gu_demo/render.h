@@ -25,6 +25,7 @@ typedef struct {
     int img_w, img_h, tex_w, tex_h, stride, is_big;
     int tile_x, tile_y;
     int char_index, pattern, dir_mv;
+    int prio;  /* 0 = below characters (corpses), 1 = same level */
 } NpcSprite;
 
 extern const SheetDef SHEETS[9];

@@ -18,7 +18,6 @@ import sys
 import pathlib
 
 DEFAULT_EVS = [
-    ('Map001', 37, 0, 'DEMO_EV'),
     ('Map030', 213, 0, 'M30_EV213'),
     ('Map030', 20, 0, 'M30_EV020'),
 ]

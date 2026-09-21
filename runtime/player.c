@@ -50,7 +50,8 @@ int player_input_dir(unsigned int buttons) {
 }
 
 int player_can_pass(const Player *p, int tile_x, int tile_y,
-                    const uint16_t *passability, int map_w, int map_h) {
+                    const uint16_t *passability, int map_w, int map_h,
+                    const uint8_t *solid) {
     if (tile_x < 0 || tile_y < 0 || tile_x >= map_w || tile_y >= map_h)
         return 0;  /* out of bounds */
     
@@ -61,14 +62,19 @@ int player_can_pass(const Player *p, int tile_x, int tile_y,
      * For now, treat as uint8 and just check if non-zero */
     const uint8_t *pass8 = (const uint8_t*)passability;
     uint8_t flags = pass8[tile_y * map_w + tile_x];
+
+    /* Full 4-dir passage bits + counter tiles are not ported yet; a tile
+     * is either open or shut. Same-priority events block via solid. */
+    if (flags == 0)
+        return 0;
+    if (solid && solid[tile_y * map_w + tile_x])
+        return 0;
     
-    /* Simple passability: 0 = blocked, non-zero = passable
-     * Full 4-dir passability would check bits 0-3 for each direction */
-    return flags != 0;
+    return 1;
 }
 
 int player_update(Player *p, unsigned int buttons, const uint16_t *passability,
-                  int map_w, int map_h) {
+                  int map_w, int map_h, const uint8_t *solid) {
     /* If already moving, continue the current step.
      * OG timing at moveSpeed 4: distancePerFrame = 2^4/256 tile/frame =
      * 1/16 tile/frame = 1.5px/frame at our 24px tiles -> 16 frames/tile.
@@ -132,7 +138,8 @@ int player_update(Player *p, unsigned int buttons, const uint16_t *passability,
     }
     
     /* Check collision */
-    if (!player_can_pass(p, target_x, target_y, passability, map_w, map_h)) {
+    if (!player_can_pass(p, target_x, target_y, passability, map_w, map_h,
+                         solid)) {
         /* Bumped: stopped, so straighten to idle like the OG. */
         p->anim_pattern = 1;
         p->anim_count = 0.0f;

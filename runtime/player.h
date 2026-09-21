@@ -39,9 +39,12 @@ void player_set_sprite(Player *p, const unsigned char *t8_data,
  * - Reads PSP controller input
  * - Updates position with collision
  * - Advances animation frames
+ * - solid (nullable, map_w*map_h): extra blocked tiles, 1 = blocked.
+ *   Used for same-priority events (OG isCollidedWithCharacters; below-
+ *   priority events never block). No followers/vehicles yet.
  * - Returns 1 if moved, 0 if stopped */
 int player_update(Player *p, unsigned int buttons, const uint16_t *passability,
-                  int map_w, int map_h);
+                  int map_w, int map_h, const uint8_t *solid);
 
 /* Render player sprite at current position
  * Uses PSP GU to draw the current animation frame
@@ -51,7 +54,8 @@ void player_render(Player *p, int cam_x, int cam_y);
 /* Check if player can move to target tile
  * Returns 1 if passable, 0 if blocked */
 int player_can_pass(const Player *p, int tile_x, int tile_y,
-                    const uint16_t *passability, int map_w, int map_h);
+                    const uint16_t *passability, int map_w, int map_h,
+                    const uint8_t *solid);
 
 /* Convert input buttons to direction (0-3, or -1 if no direction pressed) */
 int player_input_dir(unsigned int buttons);

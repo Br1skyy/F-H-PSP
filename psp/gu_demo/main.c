@@ -2,7 +2,7 @@
  * 
  * Clean, modular implementation with rendering and input separated.
  * Controls: D-pad=move, L/R=change character, CIRCLE=talk/confirm,
- * CROSS=cancel, START=exit, SELECT=message demo
+ * CROSS=cancel, START=exit
  */
 #include <pspkernel.h>
 #include <pspdisplay.h>
@@ -90,6 +90,7 @@ static unsigned int gu_list[262144] __attribute__((aligned(16)));
 static uint16_t map_layers[4][MAP_H][MAP_W];
 static uint8_t map_passability[MAP_H][MAP_W];
 static uint8_t map_higher[1664];  /* higher-tile mask (flags[tid] & 0x10) */
+static uint8_t npc_solid[MAP_W * MAP_H];  /* same-priority events block */
 static Player player;
 static int current_character = 0;
 
@@ -232,12 +233,24 @@ static void load_map030(void) {
         npc_draw[i].char_index = baked[i].index;
         npc_draw[i].pattern = baked[i].pattern;
         npc_draw[i].dir_mv = baked[i].dir_mv;
+        npc_draw[i].prio = baked[i].prio;
     }
     
-    /* Initialize player */
-    player_init(&player, 70, 8);
+    /* Initialize player: debug spawn next to the saw-corpse cluster.
+     * (58,13) is open; (58,12)/(58,11) hold examinable corpses. */
+    player_init(&player, 58, 13);
+    player.dir = 3;  /* face the corpses */
     player_set_sprite(&player, characters[0].sprite_data,
                      (unsigned int*)characters[0].clut_data, 480, 440, 0);
+
+    /* Same-priority (prio 1) events block movement (OG
+     * isCollidedWithCharacters; prio 0 never blocks). Static roster, so
+     * bake once. */
+    memset(npc_solid, 0, sizeof(npc_solid));
+    for (int i = 0; i < 14; i++) {
+        if (npcs[i].prio == 1)
+            npc_solid[npcs[i].ty * MAP_W + npcs[i].tx] = 1;
+    }
 
     /* Game font atlas (baked by tools/bake_font.py from the game's own
      * mplus-1m; assigned, not copied, like tile sheets) */
@@ -360,13 +373,6 @@ int main(int argc, char *argv[]) {
         
         /* Exit */
         if (input_held(&input, PSP_CTRL_START)) break;
-        
-        /* Message demo toggle */
-        if (input_pressed(&input, PSP_CTRL_SELECT)) {
-            msg_mode = !msg_mode;
-            if (msg_mode)
-                msg_open(DEMO_EV, DEMO_EV_LEN, "Map001 ev37 (rotten meat)");
-        }
 
         /* Talk: OK button = CIRCLE on PSP (Eastern layout, per user).
          * OG triggerButtonAction (rpg_objects.js): action trigger here
@@ -459,7 +465,8 @@ int main(int argc, char *argv[]) {
         }
         
         /* Update player */
-        player_update(&player, input.buttons, (uint16_t*)map_passability, MAP_W, MAP_H);
+        player_update(&player, input.buttons, (uint16_t*)map_passability,
+                      MAP_W, MAP_H, npc_solid);
         
         /* Center camera on player with smooth following */
         int target_x = player.x - SCR_W / 2;

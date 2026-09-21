@@ -355,10 +355,23 @@ void render_frame(int cam_x, int cam_y,
     sceGuClearColor(0xff000000);
     sceGuClear(GU_COLOR_BUFFER_BIT);
     
-    /* OG order: z=0 tiles, same-priority characters (z=3), z=4 higher ★
-     * tiles (rpg_core.js Tilemap z=0/4, screenZ = priorityType*2+1). */
+    /* OG order: z=0 tiles, below-chars (z=1, priority 0 like corpses),
+     * same-priority characters Y-sorted (z=3), z=4 higher ★ tiles
+     * (rpg_core.js Tilemap z=0/4, screenZ = priorityType*2+1). */
     render_map_layers(cam_x, cam_y, map_layers, map_w, map_h,
                       higher, higher_len, 0);
+
+    /* Below-level NPCs first (all under every same-level character). */
+    if (npcs) {
+        for (int i = 0; i < n_npcs; i++) {
+            if (npcs[i].prio != 0) continue;
+            int sx = npcs[i].tile_x * TILE - cam_x;
+            int sy = npcs[i].tile_y * TILE - cam_y;
+            if (sx < -64 || sx > SCR_W + 64 || sy < -96 || sy > SCR_H + 64)
+                continue;
+            render_npc_sprite(&npcs[i], cam_x, cam_y);
+        }
+    }
 
     /* Collect visible characters (player + on-screen NPCs), sort by feet
      * Y so lower on screen draws later (in front). Upper tiles (z=4)
@@ -371,6 +384,7 @@ void render_frame(int cam_x, int cam_y,
     n++;
     if (npcs) {
         for (int i = 0; i < n_npcs && n < 33; i++) {
+            if (npcs[i].prio != 1) continue;  /* prio 0 drawn earlier */
             int sx = npcs[i].tile_x * TILE - cam_x;
             int sy = npcs[i].tile_y * TILE - cam_y;
             if (sx < -64 || sx > SCR_W + 64 || sy < -96 || sy > SCR_H + 64)
