@@ -290,3 +290,10 @@ Findings against §9 open questions:
 > silent once lit/taken). FILL: byte-swap bug fixed to sampled skin
 > pattern. 101 bg/pos modes honored. TRIGGERS verified identical to
 > startMapEvent. FHDEMO.zip repacked.
+
+### 2026-09-21 — Box trims to content; Guard1 art staged
+> Removed the temporary trap-diagnostic row: with no namebox active the
+> window now sizes exactly to its content (no reserved name space).
+> Started enemies: Guard1 troop (first battle, 7 limbs) sheets staged to
+> psp data after decode verification (already pow2-aligned, direct copy).
+> FHDEMO.zip repacked.
