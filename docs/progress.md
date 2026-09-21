@@ -214,3 +214,14 @@ Findings against §9 open questions:
 > Conversations share one persistent world state (switches/inventory carried
 > across `msg_open`), so items and the torch stay lit between talks.
 > FHDEMO.zip repacked (~4.1MB EBOOT).
+
+### 2026-09-20 — Corpses below, NPC blocking, debug spawn, SELECT retired
+> Z-CORRECTION: priority-0 events (corpses) now draw right after the lower
+> tiles, always under the player (z=1 < chars z=3); only prio-1 NPCs join
+> the feet-Y sort. Matches screenZ = priorityType*2+1.
+> COLLISION (partial, honest): same-priority events block via a baked solid
+> grid (OG isCollidedWithCharacters; prio-0 never blocks); tile open/shut
+> as before. Still missing: 4-dir passage bits, counters, followers.
+> DEBUG SPAWN moved to (58,13) facing the saw-corpse cluster; SELECT
+> message-demo entry removed (talk via O is the path; DEMO_EV unbaked).
+> FHDEMO.zip repacked.
