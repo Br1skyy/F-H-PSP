@@ -138,6 +138,7 @@ extern unsigned char d_creat_start[], d_creatc_start[];
 extern unsigned char d_mobj_start[], d_mobjc_start[];
 extern unsigned char d_ghost_start[], d_ghostc_start[];
 extern unsigned char d_font_start[], d_fontc_start[];
+extern unsigned char d_win_start[], d_winc_start[];
 extern unsigned char d_tmerc_start[], d_tmercc_start[];
 extern unsigned char d_toutl_start[], d_toutlc_start[];
 extern unsigned char d_tpriest_start[], d_tpriestc_start[];
@@ -277,6 +278,10 @@ static void load_map030(void) {
      * mplus-1m; assigned, not copied, like tile sheets) */
     font_px = d_font_start;
     font_cl = (unsigned int *)d_fontc_start;
+
+    /* Window skin (baked by tools/bake_window.py from Window.png) */
+    window_px = d_win_start;
+    window_cl = (unsigned int *)d_winc_start;
 
     sceKernelDcacheWritebackAll();
 }
@@ -461,10 +466,12 @@ int main(int argc, char *argv[]) {
                     if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                         mit.choice_sel = msg_cursor;
                         mit.await_choice = 0;
+                        page_wait = 0;
                     }
                     if (input_pressed(&input, PSP_CTRL_CROSS)) {
                         mit.choice_sel = -1;
                         mit.await_choice = 0;
+                        page_wait = 0;
                     }
                 } else if (page_wait) {
                     if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
@@ -486,7 +493,7 @@ int main(int argc, char *argv[]) {
                         map_higher, sizeof(map_higher), total_frames,
                         npc_draw, 14, torch_lit);
             sceGuStart(GU_DIRECT, gu_list);
-            render_message_window(&mit, msg_ended, msg_cursor);
+            render_message_window(&mit, msg_ended, msg_cursor, page_wait);
             sceGuFinish();
             sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
             sceDisplayWaitVblankStart();

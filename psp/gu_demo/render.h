@@ -57,11 +57,16 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
 
 /* Message window (Window_Message replacement): dim box + game-font text
  * with \C colors, choice list with cursor. Replaces debug-screen text. */
-void render_message_window(const FhInterp *mit, int msg_ended, int cursor);
+void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
+                           int page_wait);
 
 /* Game font atlas (baked by tools/bake_font.py, assigned at load). */
 extern unsigned char *font_px;
 extern unsigned int *font_cl;
+
+/* Window skin (baked by tools/bake_window.py from Window.png). */
+extern unsigned char *window_px;
+extern unsigned int *window_cl;
 
 /* Debug overlay */
 void render_debug_text(const char *text);

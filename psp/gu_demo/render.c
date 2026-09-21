@@ -5,9 +5,13 @@
 #include <pspdisplay.h>
 #include <pspdebug.h>
 #include <string.h>
+#include <stdio.h>
+#include <math.h>
 
 unsigned char *font_px = 0;
 unsigned int *font_cl = 0;
+unsigned char *window_px = 0;
+unsigned int *window_cl = 0;
 
 /* Text colors sampled from the game's own Window.png palette grid
  * (rpg_windows.js Window_Base.textColor: px = 96+(n%8)*12+6, and py row).
@@ -22,7 +26,6 @@ static const unsigned int MSG_PAL[32] = {
     0xff80ff80, 0xff8080c0, 0xffff8080, 0xfff0c041,
     0xff40100a, 0xff60e060, 0xffe060a0, 0xffff80c0,
 };
-#include <math.h>
 
 #define NX (SCR_W / TILE + 2)
 #define NY (SCR_H / TILE + 2)
@@ -491,7 +494,8 @@ static void msg_code_cb(const char *code, int param, void *ud) {
         msg_ccol = param;
 }
 
-void render_message_window(const FhInterp *mit, int msg_ended, int cursor) {
+void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
+                           int page_wait) {
     /* 1. Layout the decoded text into colored rows. */
     msg_nrows = 0;
     msg_cx = 0;
@@ -555,8 +559,30 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor) {
             msg_rows[r][k] = 0;
         }
     }
+    /* TEMP TRAP DIAGNOSTIC (remove once dialogue flow is confirmed):
+     * interpreter state as a dim last row. */
+    if (msg_nrows < MSG_ROWS) {
+        char st[MSG_COLS + 1];
+        int n = snprintf(st, sizeof(st), "st pc=%d aw=%d pw=%d end=%d ch=%d",
+                         mit->pc, mit->await_choice, page_wait, msg_ended,
+                         mit->choice_n);
+        (void)n;
+        msg_newrow();
+        if (msg_nrows <= MSG_ROWS) {
+            int r = msg_nrows - 1;
+            int k = 0;
+            while (st[k] && k < MSG_COLS) {
+                msg_rows[r][k] = st[k];
+                msg_cols[r][k] = 7;
+                k++;
+            }
+            msg_rows[r][k] = 0;
+        }
+    }
 
-    /* 3. Window box (fill + 2px border), sized to content. */
+    /* 3. Window box: flat fill + the real 9-slice skin frame
+     * (rpg_core.js Window._refreshFrame: parts at skin offset 96,96
+     * with 24px margins, halved to 12px here). */
     int rows = msg_nrows;
     if (rows < 1) rows = 1;
     if (rows > MSG_ROWS) rows = MSG_ROWS;
@@ -565,18 +591,67 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor) {
     sceGuDisable(GU_TEXTURE_2D);
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    TVert *b = (TVert *)sceGuGetMemory(4 * sizeof(TVert));
-    b[0].u = 0; b[0].v = 0; b[0].color = 0xff8c7d76;  /* warm gray border */
+    TVert *b = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+    b[0].u = 0; b[0].v = 0; b[0].color = 0xdc2a1c1a;  /* F&H skin fill */
     b[0].x = (float)x0; b[0].y = (float)y0; b[0].z = 0.0f;
-    b[1].u = 0; b[1].v = 0; b[1].color = 0xff8c7d76;
+    b[1].u = 0; b[1].v = 0; b[1].color = 0xdc2a1c1a;
     b[1].x = (float)x1; b[1].y = (float)y1; b[1].z = 0.0f;
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
-    b = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-    b[0].u = 0; b[0].v = 0; b[0].color = 0xdc2a1c1a;  /* F&H skin fill */
-    b[0].x = (float)(x0 + 2); b[0].y = (float)(y0 + 2); b[0].z = 0.0f;
-    b[1].u = 0; b[1].v = 0; b[1].color = 0xdc2a1c1a;
-    b[1].x = (float)(x1 - 2); b[1].y = (float)(y1 - 2); b[1].z = 0.0f;
-    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
+
+    /* Skin frame (8 quads, one batched draw). Transparent corners are
+     * discarded by the alpha test like tile texels. */
+    if (window_px && window_cl) {
+        sceGuEnable(GU_TEXTURE_2D);
+        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+        sceGuTexScale(1.0f, 1.0f);
+        sceGuTexOffset(0.0f, 0.0f);
+        sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+        sceGuClutLoad(32, window_cl);
+        sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+        sceGuTexImage(0, 256, 256, 256, window_px);
+        sceGuTexFlush();
+        sceGuTexSync();
+        sceGuEnable(GU_ALPHA_TEST);
+        sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+        TVert *f = (TVert *)sceGuGetMemory(8 * 2 * sizeof(TVert));
+        TVert *fp = f;
+        int m = 12;  /* dst margin (24px skin margin halved) */
+        /* {su, sv, sw, sh, dx, dy, dw, dh} */
+        static const int parts[8][8] = {
+            {96, 0, 24, 24, 0, 0, 0, 0},   /* TL (dx,dy filled below) */
+            {168, 0, 24, 24, 0, 0, 0, 0},  /* TR */
+            {96, 72, 24, 24, 0, 0, 0, 0},  /* BL */
+            {168, 72, 24, 24, 0, 0, 0, 0}, /* BR */
+            {120, 0, 48, 24, 0, 0, 0, 0},  /* top edge */
+            {120, 72, 48, 24, 0, 0, 0, 0}, /* bottom edge */
+            {96, 24, 24, 48, 0, 0, 0, 0},  /* left edge */
+            {168, 24, 24, 48, 0, 0, 0, 0}, /* right edge */
+        };
+        int dx[8], dy[8], dw[8], dh[8];
+        dx[0] = x0; dy[0] = y0; dw[0] = m; dh[0] = m;
+        dx[1] = x1 - m; dy[1] = y0; dw[1] = m; dh[1] = m;
+        dx[2] = x0; dy[2] = y1 - m; dw[2] = m; dh[2] = m;
+        dx[3] = x1 - m; dy[3] = y1 - m; dw[3] = m; dh[3] = m;
+        dx[4] = x0 + m; dy[4] = y0; dw[4] = (x1 - x0) - 2 * m; dh[4] = m;
+        dx[5] = x0 + m; dy[5] = y1 - m; dw[5] = (x1 - x0) - 2 * m; dh[5] = m;
+        dx[6] = x0; dy[6] = y0 + m; dw[6] = m; dh[6] = (y1 - y0) - 2 * m;
+        dx[7] = x1 - m; dy[7] = y0 + m; dw[7] = m; dh[7] = (y1 - y0) - 2 * m;
+        for (int q = 0; q < 8; q++) {
+            fp[0].u = (float)parts[q][0]; fp[0].v = (float)parts[q][1];
+            fp[0].color = 0xffffffff;
+            fp[0].x = (float)dx[q]; fp[0].y = (float)dy[q]; fp[0].z = 0.0f;
+            fp[1].u = (float)(parts[q][0] + parts[q][2]);
+            fp[1].v = (float)(parts[q][1] + parts[q][3]);
+            fp[1].color = 0xffffffff;
+            fp[1].x = (float)(dx[q] + dw[q]);
+            fp[1].y = (float)(dy[q] + dh[q]); fp[1].z = 0.0f;
+            fp += 2;
+        }
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 8 * 2, 0, f);
+        sceGuDisable(GU_TEXTURE_2D);
+    }
 
     /* 4. Glyphs, one batched draw, vertex colors carry \C spans. */
     if (!font_px || !font_cl) {
