@@ -263,3 +263,17 @@ Findings against §9 open questions:
 > verified identical to Game_Player.startMapEvent — prio-0 corpses fire
 > only standing on their tile, both here and in the OG; EV212 is an empty
 > list in the shipped data (silent in both). FHDEMO.zip repacked.
+
+### 2026-09-21 — Eczar font, page conditions, true fill, bg/pos
+> FONT: gamefont.css selects Eczar-Regular, not mplus — rebaked 512x512
+> (16x32 cells) + per-glyph advances (font_adv.bin, half-px units);
+> proportional layout + pixel word-wrap; C1 controls map to '?'.
+> PAGES: talk resolves OG last-first page scan by switch (EV213-pg1 on
+> 2640; EV020-pg1/pg2 silent once lit/taken) — no more re-light loop.
+> FILL: was byte-swapped blue (0xdc2a1c1a); now the sampled skin pattern
+> (66,60,52). 101 background (skin/dim/none) + position (top/mid/bottom)
+> honored from baked params. TRIGGERS verified identical to
+> startMapEvent (corpses fire underfoot; EV212 empty in shipped data).
+> No Map030 nameboxes exist (0 \n<> codes) — names wait for maps that
+> have them. Typewriter + namebox still open.
+> FHDEMO.zip repacked.
