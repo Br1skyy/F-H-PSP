@@ -38,16 +38,22 @@ static void light_swizzle(void) {
     static unsigned char lin[LIGHT_SIZE * LIGHT_SIZE];
     for (int y = 0; y < LIGHT_SIZE; y++) {
         for (int x = 0; x < LIGHT_SIZE; x++) {
+            /* Steep cubic falloff: tight pool, no bleached middle.
+             * (Additive blending can't reproduce multiply's "never brighter
+             * than the scene", so the pool stays dim and narrow.) */
             float dx = ((float)x - 63.5f) / 64.0f;
             float dy = ((float)y - 63.5f) / 64.0f;
             float d = dx * dx + dy * dy;
             float a = 1.0f - d;
             if (a < 0.0f) a = 0.0f;
+            a = a * a * a;
             lin[y * LIGHT_SIZE + x] = (unsigned char)(a * 255.0f);
         }
     }
+    /* Dim warm peak: bright tiles stay under scene brightness instead of
+     * blowing out (OG radius/flicker kept, brightness tamed for additive). */
     for (int i = 0; i < 256; i++)
-        light_cl[i] = 0x00000000 | (170u << 16) | (214u << 8) | 255u | ((unsigned int)i << 24);
+        light_cl[i] = 0x00000000 | (80u << 16) | (100u << 8) | 120u | ((unsigned int)i << 24);
     /* 16×8 swizzle (same layout as convert_assets.py). */
     static unsigned char sw[LIGHT_SIZE * LIGHT_SIZE];
     int dst = 0;
