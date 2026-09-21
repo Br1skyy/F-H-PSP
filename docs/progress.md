@@ -238,3 +238,15 @@ Findings against §9 open questions:
 > green with byte-identical traces; talk paths re-verified with page-aware
 > driving (EV213 needs 2 O-presses, EV020 single page + choice).
 > FHDEMO.zip repacked.
+
+### 2026-09-20 — OG skin dialog box + trap hunt instrumentation
+> BOX (user: port the OG one): the window now draws the real Window.png
+> skin 9-sliced exactly per rpg_core.js Window._refreshFrame (parts at
+> skin offset 96,96, 24px margins halved to 12; baked via new
+> tools/bake_window.py, palettised+swizzled like tiles).
+> TRAP (user: stuck on first dialogue): state machine + input edges both
+> verify clean on PC (UI-loop harness over all 5 talk paths: every path
+> reaches END, unknowns 0). Suspects addressed anyway: page_wait now
+> clears on pick/cancel (was one stale extra press), and the window shows
+> a temporary dim state row (pc/await/pagewait/ended/choice) so one device
+> screenshot pinpoints any residual stall. FHDEMO.zip repacked.
