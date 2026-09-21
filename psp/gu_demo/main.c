@@ -135,6 +135,7 @@ static void btl_start(u64 tick, int char_idx) {
     a->ref = DEMO_ACTORS[row].id;
     a->maxhp = a->hp = DEMO_ACTORS[row].mhp;
     a->maxmp = a->mp = DEMO_ACTORS[row].mmp;
+    a->maxmp = a->mp = DEMO_ACTORS[row].mmp;
     a->atk = DEMO_ACTORS[row].atk;
     a->def = DEMO_ACTORS[row].def;
     a->mat = DEMO_ACTORS[row].mat;
@@ -359,6 +360,7 @@ extern unsigned char d_ghost_start[], d_ghostc_start[];
 extern unsigned char d_guard1_start[], d_guard1c_start[];
 extern unsigned char d_font_start[], d_fontc_start[], d_fontadv_start[];
 extern unsigned char d_win_start[], d_winc_start[];
+extern unsigned char d_floor_start[], d_floorc_start[];
 extern unsigned char d_tmerc_start[], d_tmercc_start[];
 extern unsigned char d_toutl_start[], d_toutlc_start[];
 extern unsigned char d_tpriest_start[], d_tpriestc_start[];
@@ -554,6 +556,10 @@ static void load_map030(void) {
     /* Window skin (baked by tools/bake_window.py from Window.png) */
     window_px = d_win_start;
     window_cl = (unsigned int *)d_winc_start;
+
+    /* Battle backdrop (mines tunnel floor). */
+    floor_px = d_floor_start;
+    floor_cl = (unsigned int *)d_floorc_start;
 
     sceKernelDcacheWritebackAll();
 }
@@ -925,11 +931,31 @@ int main(int argc, char *argv[]) {
             sceGuStart(GU_DIRECT, gu_list);
             sceGuClearColor(0xff000000);
             sceGuClear(GU_COLOR_BUFFER_BIT);
+            /* Target marker position (aimed limb, target phase only). */
+            int mtx = -1, mty = -1;
+            if (btl_phase == 1) {
+                int seen = 0;
+                for (int i = 0; i < 7; i++) {
+                    if (!btl.f[1 + i].alive) continue;
+                    if (seen == tcursor) {
+                        int fx, fy;
+                        btl_foe_xy(i, &fx, &fy);
+                        mtx = fx;
+                        mty = fy - DEMO_FOE_DIMS[i].h;
+                        break;
+                    }
+                    seen++;
+                }
+            }
             render_battle(draws, 7, btl_pops, 8, st_name,
-                         btl.f[0].hp, btl.f[0].maxhp, cmds, 3, btl_cmd,
+                         btl.f[0].hp, btl.f[0].maxhp, btl.f[0].mp,
+                         btl.f[0].maxmp, cmds, 3, btl_cmd,
                          btl_phase == 0, targets, ntgt, tcursor,
                          btl_phase == 1,
-                         (btl_phase == 3 || btl_banner_t > 0) ? btl_banner : NULL);
+                         (btl_phase == 3 || btl_banner_t > 0) ? btl_banner : NULL,
+                         characters[current_character].sprite_data,
+                         (unsigned int *)characters[current_character].clut_data,
+                         mtx, mty);
             sceGuFinish();
             sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
             sceDisplayWaitVblankStart();

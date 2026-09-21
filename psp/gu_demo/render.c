@@ -13,6 +13,8 @@ unsigned int *font_cl = 0;
 unsigned char *font_adv = 0;
 unsigned char *window_px = 0;
 unsigned int *window_cl = 0;
+unsigned char *floor_px = 0;
+unsigned int *floor_cl = 0;
 
 /* Text colors sampled from the game's own Window.png palette grid
  * (rpg_windows.js Window_Base.textColor: px = 96+(n%8)*12+6, and py row).
@@ -886,11 +888,14 @@ static void battle_text(const char *s, float x, float y, unsigned int col,
 
 void render_battle(const BtFoeDraw *foes, int nfoes,
                    const BtPopup *pops, int npops,
-                   const char *actor_name, int hp, int mhp,
+                   const char *actor_name, int hp, int mhp, int mp, int mmp,
                    const char *cmds[], int ncmds, int cursor, int show_cmds,
                    const char *targets[], int ntargets, int tcursor,
-                   int show_targets, const char *banner) {
-    /* Backdrop: flat dark maroon (battlebacks land in the art pass). */
+                   int show_targets, const char *banner,
+                   unsigned char *actor_t8, unsigned int *actor_cl,
+                   int tgt_x, int tgt_y) {
+    /* Backdrop: mines tunnel, centered native (scissor clips overflow).
+     * Falls back to flat maroon when the art is missing. */
     sceGuDisable(GU_TEXTURE_2D);
     sceGuDisable(GU_ALPHA_TEST);
     sceGuEnable(GU_BLEND);
@@ -901,6 +906,33 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     bd[1].u = 0; bd[1].v = 0; bd[1].color = 0xff180a0c;
     bd[1].x = (float)SCR_W; bd[1].y = (float)SCR_H; bd[1].z = 0.0f;
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bd);
+    if (floor_px && floor_cl) {
+        sceGuEnable(GU_TEXTURE_2D);
+        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+        sceGuTexScale(1.0f, 1.0f);
+        sceGuTexOffset(0.0f, 0.0f);
+        sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+        sceGuClutLoad(32, floor_cl);
+        sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+        sceGuTexImage(0, 512, 512, 512, floor_px);
+        sceGuTexFlush();
+        sceGuTexSync();
+        sceGuEnable(GU_ALPHA_TEST);
+        sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+        TVert *bb = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        bb[0].u = 0; bb[0].v = 0; bb[0].color = 0xffffffff;
+        bb[0].x = (float)((SCR_W - 500) / 2);
+        bb[0].y = (float)((SCR_H - 370) / 2);
+        bb[0].z = 0.0f;
+        bb[1].u = 500; bb[1].v = 370; bb[1].color = 0xffffffff;
+        bb[1].x = (float)((SCR_W + 500) / 2);
+        bb[1].y = (float)((SCR_H + 370) / 2);
+        bb[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bb);
+        sceGuDisable(GU_TEXTURE_2D);
+    }
 
     /* Enemy limbs (skip the fallen; collapse anims are a later pass). */
     sceGuEnable(GU_TEXTURE_2D);
@@ -933,10 +965,16 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     }
     sceGuDisable(GU_TEXTURE_2D);
 
-    /* Actor status line. */
-    char st[64];
-    snprintf(st, sizeof(st), "%s  HP %d/%d", actor_name, hp, mhp);
-    int cmdtotal = (int)strlen(st);
+    /* Actor battler: walking-down idle cell of the current sheet. */
+    if (actor_t8 && actor_cl) {
+        int fx, fy, fw, fh;
+        char_cell(480, 440, 0, 0, 1, 2, &fx, &fy, &fw, &fh);
+        render_character_cell(actor_t8, actor_cl, 512, 512, 512, fx, fy, fw,
+                              fh, 110 - fw / 2, (SCR_H - 100) - fh);
+    }
+
+    /* Actor status: Body/Mind labels like the OG status rows, with bars. */
+    int cmdtotal = (int)strlen(actor_name) + 24;
     for (int i = 0; i < ncmds; i++) cmdtotal += (int)strlen(cmds[i]) + 2;
     int targtotal = 0;
     for (int i = 0; i < ntargets; i++) targtotal += (int)strlen(targets[i]) + 2;
@@ -959,7 +997,17 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         sceGuTexImage(0, 512, 512, 512, font_px);
         sceGuTexFlush();
         sceGuTexSync();
-        battle_text(st, 12.0f, (float)(SCR_H - 26), 0xffffffff, &vp);
+        /* Actor status: Body/Mind values like the OG rows, bars beneath. */
+        {
+            char hpbuf[32], mpbuf[32];
+            snprintf(hpbuf, sizeof(hpbuf), "Body %d", hp);
+            snprintf(mpbuf, sizeof(mpbuf), "Mind %d", mp);
+            battle_text(actor_name, 12.0f, (float)(SCR_H - 92), 0xffffffff,
+                        &vp);
+            battle_text(hpbuf, 12.0f, (float)(SCR_H - 66), 0xffffffff, &vp);
+            battle_text(mpbuf, 250.0f, (float)(SCR_H - 66), 0xffffffff,
+                        &vp);
+        }
         if (show_cmds) {
             for (int i = 0; i < ncmds; i++) {
                 float cy = 40.0f + (float)i * 24.0f;
@@ -996,6 +1044,44 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         }
         if (banner)
             battle_text(banner, 150.0f, 120.0f, 0xffffa0f0, &vp);
+        /* Target marker above the aimed limb (OG cursor feel). */
+        if (show_targets && tgt_x >= 0 && tgt_y >= 0)
+            battle_text("v", (float)(tgt_x - 4), (float)(tgt_y - 30),
+                        0xff4c78ff, &vp);
+    }
+    /* HP/MP bars beneath the status rows. */
+    {
+        float hpf = mhp > 0 ? (float)hp / (float)mhp : 0.0f;
+        float mpf = mmp > 0 ? (float)mp / (float)mmp : 0.0f;
+        if (hpf < 0.0f) hpf = 0.0f;
+        if (mpf < 0.0f) mpf = 0.0f;
+        if (hpf > 1.0f) hpf = 1.0f;
+        if (mpf > 1.0f) mpf = 1.0f;
+        sceGuDisable(GU_TEXTURE_2D);
+        TVert *br = (TVert *)sceGuGetMemory(4 * 2 * sizeof(TVert));
+        TVert *bp = br;
+        float by = (float)(SCR_H - 40);
+        bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff202020;
+        bp[0].x = 12; bp[0].y = by; bp[0].z = 0.0f;
+        bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff202020;
+        bp[1].x = 212; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bp += 2;
+        bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff3030c0;
+        bp[0].x = 12; bp[0].y = by; bp[0].z = 0.0f;
+        bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff3030c0;
+        bp[1].x = 12 + 200.0f * hpf; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bp += 2;
+        bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff202020;
+        bp[0].x = 250; bp[0].y = by; bp[0].z = 0.0f;
+        bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff202020;
+        bp[1].x = 450; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bp += 2;
+        bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xffc08030;
+        bp[0].x = 250; bp[0].y = by; bp[0].z = 0.0f;
+        bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xffc08030;
+        bp[1].x = 250 + 200.0f * mpf; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bp += 2;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 4 * 2, 0, br);
     }
     if (vp > v)
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);

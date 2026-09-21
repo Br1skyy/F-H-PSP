@@ -16,7 +16,8 @@ import pathlib
 import sys
 
 CHAR_DIR = pathlib.Path('converted/characters')
-# Converted stems to pad (dims + stride read from each .meta.json).
+# Demo-roster stems (dims/stride read from each .meta.json; --dir switches
+# the category for enemy sheets, which have arbitrary sizes).
 SHEETS = [
     'mercenary_torch', 'outlander_torch', 'dark_priest_torch', 'knight_torch',
     'mercenary', 'outlander', 'dark_priest', 'knight',
@@ -81,10 +82,12 @@ def pad_sheet(name: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--only', default='')
+    ap.add_argument('--dir', default='converted/characters')
     args = ap.parse_args()
-    for name in SHEETS:
-        if args.only and name != args.only:
-            continue
+    global CHAR_DIR
+    CHAR_DIR = pathlib.Path(args.dir)
+    names = [args.only] if args.only else SHEETS
+    for name in names:
         if not (CHAR_DIR / f'{name}.t8').exists():
             print(f'{name}: missing, skipping')
             continue

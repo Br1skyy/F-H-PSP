@@ -74,6 +74,10 @@ extern unsigned char *font_adv;  /* 256 per-glyph advances, half-px units */
 extern unsigned char *window_px;
 extern unsigned int *window_cl;
 
+/* Battle backdrop (floor1, staged like tile sheets). */
+extern unsigned char *floor_px;
+extern unsigned int *floor_cl;
+
 /* Battle scene (front-view limbs + command UI). All text via the game
  * font atlas; popups rise and fade. */
 typedef struct {
@@ -90,10 +94,12 @@ typedef struct {
 
 void render_battle(const BtFoeDraw *foes, int nfoes,
                    const BtPopup *pops, int npops,
-                   const char *actor_name, int hp, int mhp,
+                   const char *actor_name, int hp, int mhp, int mp, int mmp,
                    const char *cmds[], int ncmds, int cursor, int show_cmds,
                    const char *targets[], int ntargets, int tcursor,
-                   int show_targets, const char *banner);
+                   int show_targets, const char *banner,
+                   unsigned char *actor_t8, unsigned int *actor_cl,
+                   int tgt_x, int tgt_y);
 
 /* Debug overlay */
 void render_debug_text(const char *text);
