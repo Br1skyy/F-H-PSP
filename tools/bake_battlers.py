@@ -23,7 +23,7 @@ import struct
 import sys
 from PIL import Image
 
-CELL = 56
+CELL = 64
 COLS, ROWS = 9, 6
 
 
@@ -48,6 +48,13 @@ def swizzle8(inp: bytes, w: int, h: int) -> bytearray:
     return out
 
 
+def next_pow2(n: int) -> int:
+    p = 16
+    while p < n:
+        p *= 2
+    return p
+
+
 def bake_one(src: pathlib.Path, dst: pathlib.Path, key: str) -> None:
     raw = src.read_bytes()
     if src.suffix == '.rpgmvp':
@@ -65,14 +72,14 @@ def bake_one(src: pathlib.Path, dst: pathlib.Path, key: str) -> None:
     for i in range(255):
         r, g, b = pal[i * 3:(i + 1) * 3]
         clut += struct.pack('<I', 0xFF000000 | (b << 16) | (g << 8) | r)
-    tex_w, tex_h = 512, 512
+    tex_w, tex_h = next_pow2(target[0]), next_pow2(target[1])
     padded = bytearray(tex_w * tex_h)
     for y in range(target[1]):
         padded[y * tex_w:y * tex_w + target[0]] = idx[y * target[0]:(y + 1) * target[0]]
     swiz = swizzle8(bytes(padded), tex_w, tex_h)
     (dst.parent / (dst.name + '.t8')).write_bytes(bytes(swiz))
     (dst.parent / (dst.name + '.clut')).write_bytes(clut)
-    print(f'{src.stem}: {im.size} -> 512x512')
+    print(f'{src.stem}: {im.size} -> {tex_w}x{tex_h}')
 
 
 BATTLERS = ['Actor1_1', 'knight1_1', 'darkpriest1_1', 'outlander1_1']

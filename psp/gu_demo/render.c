@@ -431,6 +431,71 @@ void render_frame(int cam_x, int cam_y,
     sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
 }
 
+/* Skin box helper (fill + 9-slice frame). Caller enables blend;
+ * texture/alpha-test state is managed here. Used by message + battle. */
+static void skin_box(int x0, int y0, int x1, int y1, unsigned int fill,
+                     int frame) {
+    sceGuDisable(GU_TEXTURE_2D);
+    if (fill >> 24) {
+        TVert *b = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        b[0].u = 0; b[0].v = 0; b[0].color = fill;
+        b[0].x = (float)x0; b[0].y = (float)y0; b[0].z = 0.0f;
+        b[1].u = 0; b[1].v = 0; b[1].color = fill;
+        b[1].x = (float)x1; b[1].y = (float)y1; b[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
+    }
+    if (!frame || !window_px) return;
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuClutLoad(32, window_cl);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+    sceGuTexImage(0, 256, 256, 256, window_px);
+    sceGuTexFlush();
+    sceGuTexSync();
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+    TVert *f = (TVert *)sceGuGetMemory(8 * 2 * sizeof(TVert));
+    TVert *fp = f;
+    int m = 12;
+    static const int parts[8][8] = {
+        {96, 0, 24, 24, 0, 0, 0, 0},
+        {168, 0, 24, 24, 0, 0, 0, 0},
+        {96, 72, 24, 24, 0, 0, 0, 0},
+        {168, 72, 24, 24, 0, 0, 0, 0},
+        {120, 0, 48, 24, 0, 0, 0, 0},
+        {120, 72, 48, 24, 0, 0, 0, 0},
+        {96, 24, 24, 48, 0, 0, 0, 0},
+        {168, 24, 24, 48, 0, 0, 0, 0},
+    };
+    int dx[8], dy[8], dw[8], dh[8];
+    dx[0] = x0; dy[0] = y0; dw[0] = m; dh[0] = m;
+    dx[1] = x1 - m; dy[1] = y0; dw[1] = m; dh[1] = m;
+    dx[2] = x0; dy[2] = y1 - m; dw[2] = m; dh[2] = m;
+    dx[3] = x1 - m; dy[3] = y1 - m; dw[3] = m; dh[3] = m;
+    dx[4] = x0 + m; dy[4] = y0; dw[4] = (x1 - x0) - 2 * m; dh[4] = m;
+    dx[5] = x0 + m; dy[5] = y1 - m; dw[5] = (x1 - x0) - 2 * m; dh[5] = m;
+    dx[6] = x0; dy[6] = y0 + m; dw[6] = m; dh[6] = (y1 - y0) - 2 * m;
+    dx[7] = x1 - m; dy[7] = y0 + m; dw[7] = m; dh[7] = (y1 - y0) - 2 * m;
+    for (int q = 0; q < 8; q++) {
+        fp[0].u = (float)parts[q][0]; fp[0].v = (float)parts[q][1];
+        fp[0].color = 0xffffffff;
+        fp[0].x = (float)dx[q]; fp[0].y = (float)dy[q]; fp[0].z = 0.0f;
+        fp[1].u = (float)(parts[q][0] + parts[q][2]);
+        fp[1].v = (float)(parts[q][1] + parts[q][3]);
+        fp[1].color = 0xffffffff;
+        fp[1].x = (float)(dx[q] + dw[q]);
+        fp[1].y = (float)(dy[q] + dh[q]); fp[1].z = 0.0f;
+        fp += 2;
+    }
+    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 8 * 2, 0, f);
+    sceGuDisable(GU_TEXTURE_2D);
+}
+
 /* ---- Message window ---- */
 #define FONT_LINE 26
 #define MSG_COLS 96   /* chars per row cap (wrap is pixel-based, not column) */
@@ -681,115 +746,17 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     sceGuDisable(GU_TEXTURE_2D);
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    if (bg != 2) {
-        TVert *b = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-        /* Skin fill pattern sampled from Window.png top-left quadrant
-         * (was byte-swapped blue before — this is the true warm fill). */
-        unsigned int fill = (bg == 1) ? 0xa0000000 : 0xc8343c42;
-        b[0].u = 0; b[0].v = 0; b[0].color = fill;
-        b[0].x = (float)x0; b[0].y = (float)y0; b[0].z = 0.0f;
-        b[1].u = 0; b[1].v = 0; b[1].color = fill;
-        b[1].x = (float)x1; b[1].y = (float)y1; b[1].z = 0.0f;
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
-    }
-
-    /* Skin frame (8 quads, one batched draw) for bg 0 only. Transparent
-     * corners are discarded by the alpha test like tile texels. */
-    if (bg == 0 && window_px) {
-        sceGuEnable(GU_TEXTURE_2D);
-        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
-        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
-        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
-        sceGuTexScale(1.0f, 1.0f);
-        sceGuTexOffset(0.0f, 0.0f);
-        sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
-        sceGuClutLoad(32, window_cl);
-        sceGuTexMode(GU_PSM_T8, 0, 0, 1);
-        sceGuTexImage(0, 256, 256, 256, window_px);
-        sceGuTexFlush();
-        sceGuTexSync();
-        sceGuEnable(GU_ALPHA_TEST);
-        sceGuAlphaFunc(GU_GREATER, 0, 0xff);
-        TVert *f = (TVert *)sceGuGetMemory(8 * 2 * sizeof(TVert));
-        TVert *fp = f;
-        int m = 12;  /* dst margin (24px skin margin halved) */
-        /* {su, sv, sw, sh, dx, dy, dw, dh} */
-        static const int parts[8][8] = {
-            {96, 0, 24, 24, 0, 0, 0, 0},   /* TL (dx,dy filled below) */
-            {168, 0, 24, 24, 0, 0, 0, 0},  /* TR */
-            {96, 72, 24, 24, 0, 0, 0, 0},  /* BL */
-            {168, 72, 24, 24, 0, 0, 0, 0}, /* BR */
-            {120, 0, 48, 24, 0, 0, 0, 0},  /* top edge */
-            {120, 72, 48, 24, 0, 0, 0, 0}, /* bottom edge */
-            {96, 24, 24, 48, 0, 0, 0, 0},  /* left edge */
-            {168, 24, 24, 48, 0, 0, 0, 0}, /* right edge */
-        };
-        int dx[8], dy[8], dw[8], dh[8];
-        dx[0] = x0; dy[0] = y0; dw[0] = m; dh[0] = m;
-        dx[1] = x1 - m; dy[1] = y0; dw[1] = m; dh[1] = m;
-        dx[2] = x0; dy[2] = y1 - m; dw[2] = m; dh[2] = m;
-        dx[3] = x1 - m; dy[3] = y1 - m; dw[3] = m; dh[3] = m;
-        dx[4] = x0 + m; dy[4] = y0; dw[4] = (x1 - x0) - 2 * m; dh[4] = m;
-        dx[5] = x0 + m; dy[5] = y1 - m; dw[5] = (x1 - x0) - 2 * m; dh[5] = m;
-        dx[6] = x0; dy[6] = y0 + m; dw[6] = m; dh[6] = (y1 - y0) - 2 * m;
-        dx[7] = x1 - m; dy[7] = y0 + m; dw[7] = m; dh[7] = (y1 - y0) - 2 * m;
-        for (int q = 0; q < 8; q++) {
-            fp[0].u = (float)parts[q][0]; fp[0].v = (float)parts[q][1];
-            fp[0].color = 0xffffffff;
-            fp[0].x = (float)dx[q]; fp[0].y = (float)dy[q]; fp[0].z = 0.0f;
-            fp[1].u = (float)(parts[q][0] + parts[q][2]);
-            fp[1].v = (float)(parts[q][1] + parts[q][3]);
-            fp[1].color = 0xffffffff;
-            fp[1].x = (float)(dx[q] + dw[q]);
-            fp[1].y = (float)(dy[q] + dh[q]); fp[1].z = 0.0f;
-            fp += 2;
-        }
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 8 * 2, 0, f);
-        /* Namebox (Yanfly \n<Name>): mini skin box overlapping the top
-         * edge, name in palette 6 per the added-text convention. */
-        if (msg_name[0]) {
-            float nw = 20.0f;
-            for (int k = 0; msg_name[k]; k++)
-                nw += msg_adv((unsigned char)msg_name[k]);
-            int nx0 = x0, nx1 = x0 + (int)nw, ny1 = y0 + 6, ny0 = ny1 - 32;
-            sceGuDisable(GU_TEXTURE_2D);
-            TVert *nb = (TVert *)sceGuGetMemory((1 + 8) * 2 * sizeof(TVert));
-            TVert *nbp = nb;
-            nbp[0].u = 0; nbp[0].v = 0; nbp[0].color = 0xc8343c42;
-            nbp[0].x = (float)nx0; nbp[0].y = (float)ny0; nbp[0].z = 0.0f;
-            nbp[1].u = 0; nbp[1].v = 0; nbp[1].color = 0xc8343c42;
-            nbp[1].x = (float)nx1; nbp[1].y = (float)ny1; nbp[1].z = 0.0f;
-            nbp += 2;
-            sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, nb);
-            sceGuEnable(GU_TEXTURE_2D);
-            int ndx[8], ndy[8], ndw[8], ndh[8];
-            ndx[0] = nx0; ndy[0] = ny0; ndw[0] = m; ndh[0] = m;
-            ndx[1] = nx1 - m; ndy[1] = ny0; ndw[1] = m; ndh[1] = m;
-            ndx[2] = nx0; ndy[2] = ny1 - m; ndw[2] = m; ndh[2] = m;
-            ndx[3] = nx1 - m; ndy[3] = ny1 - m; ndw[3] = m; ndh[3] = m;
-            ndx[4] = nx0 + m; ndy[4] = ny0;
-            ndw[4] = (nx1 - nx0) - 2 * m; ndh[4] = m;
-            ndx[5] = nx0 + m; ndy[5] = ny1 - m;
-            ndw[5] = (nx1 - nx0) - 2 * m; ndh[5] = m;
-            ndx[6] = nx0; ndy[6] = ny0 + m;
-            ndw[6] = m; ndh[6] = (ny1 - ny0) - 2 * m;
-            ndx[7] = nx1 - m; ndy[7] = ny0 + m;
-            ndw[7] = m; ndh[7] = (ny1 - ny0) - 2 * m;
-            for (int q = 0; q < 8; q++) {
-                nbp[0].u = (float)parts[q][0]; nbp[0].v = (float)parts[q][1];
-                nbp[0].color = 0xffffffff;
-                nbp[0].x = (float)ndx[q]; nbp[0].y = (float)ndy[q];
-                nbp[0].z = 0.0f;
-                nbp[1].u = (float)(parts[q][0] + parts[q][2]);
-                nbp[1].v = (float)(parts[q][1] + parts[q][3]);
-                nbp[1].color = 0xffffffff;
-                nbp[1].x = (float)(ndx[q] + ndw[q]);
-                nbp[1].y = (float)(ndy[q] + ndh[q]); nbp[1].z = 0.0f;
-                nbp += 2;
-            }
-            sceGuDrawArray(GU_SPRITES, TVERT_FMT, 8 * 2, 0, nb + 2);
-        }
-        sceGuDisable(GU_TEXTURE_2D);
+    if (bg != 2)
+        skin_box(x0, y0, x1, y1, (bg == 1) ? 0xa0000000 : 0xc8343c42,
+                 bg == 0);
+    /* Namebox (Yanfly \n<Name>): mini skin box overlapping the top
+     * edge, name in palette 6 per the added-text convention. */
+    if (bg == 0 && msg_name[0]) {
+        float nw = 20.0f;
+        for (int k = 0; msg_name[k]; k++)
+            nw += msg_adv((unsigned char)msg_name[k]);
+        int nx0 = x0, nx1 = x0 + (int)nw, ny1 = y0 + 6, ny0 = ny1 - 32;
+        skin_box(nx0, ny0, nx1, ny1, 0xc8343c42, 1);
     }
 
     /* 4. Glyphs, one batched draw, vertex colors carry \C spans. */
@@ -966,13 +933,13 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     }
     sceGuDisable(GU_TEXTURE_2D);
 
-    /* Actor battler: side-view motion cell (56px grid, middle pattern).
+    /* Actor battler: side-view motion cell (64px grid, middle pattern).
      * Motions (rpg_sprites.js): col = motionIndex/6*3+1, row = index%6;
      * wait=1 idle, guard=3, thrust=6, swing=7, missile=8. */
     if (actor_t8 && actor_cl) {
-        render_character_cell(actor_t8, actor_cl, 512, 512, 512,
-                              actor_mcol * 56, actor_mrow * 56, 56, 56,
-                              110 - 28, (SCR_H - 100) - 56);
+        render_character_cell(actor_t8, actor_cl, 1024, 512, 1024,
+                              actor_mcol * 64, actor_mrow * 64, 64, 64,
+                              110 - 32, (SCR_H - 100) - 64);
     }
 
     /* Actor status: Body/Mind labels like the OG status rows, with bars. */
@@ -985,8 +952,14 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     TVert *v = (TVert *)sceGuGetMemory(
         (cmdtotal + targtotal + poptotal + bannerlen + 1) * 2 * sizeof(TVert));
     TVert *vp = v;
-    /* Text pass needs the font texture bound. */
+    /* Text pass needs the font texture bound (blend + alpha test were
+     * left disabled by the actor draw above — without them every glyph
+     * cell renders as a solid box). */
     if (font_px) {
+        sceGuEnable(GU_BLEND);
+        sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+        sceGuEnable(GU_ALPHA_TEST);
+        sceGuAlphaFunc(GU_GREATER, 0, 0xff);
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);
@@ -1004,26 +977,16 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             char hpbuf[32], mpbuf[32];
             snprintf(hpbuf, sizeof(hpbuf), "Body %d", hp);
             snprintf(mpbuf, sizeof(mpbuf), "Mind %d", mp);
-            battle_text(actor_name, 12.0f, (float)(SCR_H - 92), 0xffffffff,
-                        &vp);
-            battle_text(hpbuf, 12.0f, (float)(SCR_H - 66), 0xffffffff, &vp);
-            battle_text(mpbuf, 250.0f, (float)(SCR_H - 66), 0xffffffff,
-                        &vp);
+            battle_text(actor_name, 150.0f, 182.0f, 0xffffffff, &vp);
+            battle_text(hpbuf, 150.0f, 206.0f, 0xffffffff, &vp);
+            battle_text(mpbuf, 320.0f, 206.0f, 0xffffffff, &vp);
         }
         if (show_cmds) {
             for (int i = 0; i < ncmds; i++) {
-                float cy = 40.0f + (float)i * 24.0f;
+                float cy = 182.0f + (float)i * 24.0f;
                 if (i == cursor)
                     battle_text(">", 12.0f, cy, 0xff4c78ff, &vp);
                 battle_text(cmds[i], 30.0f, cy, 0xffffffff, &vp);
-            }
-        }
-        if (show_targets) {
-            for (int i = 0; i < ntargets; i++) {
-                float cy = 40.0f + (float)i * 20.0f;
-                if (i == tcursor)
-                    battle_text(">", 330.0f, cy, 0xff4c78ff, &vp);
-                battle_text(targets[i], 348.0f, cy, 0xffffffff, &vp);
             }
         }
         for (int i = 0; i < npops; i++) {
@@ -1045,7 +1008,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             battle_text(buf, (float)pops[i].x, py, col, &vp);
         }
         if (banner)
-            battle_text(banner, 150.0f, 120.0f, 0xffffa0f0, &vp);
+            battle_text(banner, 12.0f, 10.0f, 0xffffa0f0, &vp);
         /* Target marker above the aimed limb (OG cursor feel). */
         if (show_targets && tgt_x >= 0 && tgt_y >= 0)
             battle_text("v", (float)(tgt_x - 4), (float)(tgt_y - 30),
@@ -1062,26 +1025,26 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         sceGuDisable(GU_TEXTURE_2D);
         TVert *br = (TVert *)sceGuGetMemory(4 * 2 * sizeof(TVert));
         TVert *bp = br;
-        float by = (float)(SCR_H - 40);
+        float by = 230.0f;
         bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff202020;
-        bp[0].x = 12; bp[0].y = by; bp[0].z = 0.0f;
+        bp[0].x = 150; bp[0].y = by; bp[0].z = 0.0f;
         bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff202020;
-        bp[1].x = 212; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bp[1].x = 300; bp[1].y = by + 7; bp[1].z = 0.0f;
         bp += 2;
         bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff3030c0;
-        bp[0].x = 12; bp[0].y = by; bp[0].z = 0.0f;
+        bp[0].x = 150; bp[0].y = by; bp[0].z = 0.0f;
         bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff3030c0;
-        bp[1].x = 12 + 200.0f * hpf; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bp[1].x = 150 + 150.0f * hpf; bp[1].y = by + 7; bp[1].z = 0.0f;
         bp += 2;
         bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff202020;
-        bp[0].x = 250; bp[0].y = by; bp[0].z = 0.0f;
+        bp[0].x = 320; bp[0].y = by; bp[0].z = 0.0f;
         bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff202020;
-        bp[1].x = 450; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bp[1].x = 460; bp[1].y = by + 7; bp[1].z = 0.0f;
         bp += 2;
         bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xffc08030;
-        bp[0].x = 250; bp[0].y = by; bp[0].z = 0.0f;
+        bp[0].x = 320; bp[0].y = by; bp[0].z = 0.0f;
         bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xffc08030;
-        bp[1].x = 250 + 200.0f * mpf; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bp[1].x = 320 + 140.0f * mpf; bp[1].y = by + 7; bp[1].z = 0.0f;
         bp += 2;
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 4 * 2, 0, br);
     }

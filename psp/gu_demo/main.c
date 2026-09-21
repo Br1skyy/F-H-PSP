@@ -246,7 +246,7 @@ static void btl_start(u64 tick, int char_idx) {
 static void btl_begin_exec(void) {
     if (btl_act_kind == 1) {
         btl.f[0].guard = 1;  /* Guard applies now */
-        btl_pose_col = 4;
+        btl_pose_col = 1;
         btl_pose_row = 3;  /* guard motion */
     }
     btl_resolve_skills();
