@@ -329,3 +329,12 @@ Findings against §9 open questions:
 > SCENE (per user refs): mines tunnel backdrop (floor1, centered
 > native), current character's idle cell bottom-left, Body/Mind labels
 > with bars, target "v" marker over the aimed limb. FHDEMO.zip repacked.
+
+### 2026-09-21 — Battle data fully baked (no hand tables)
+> Per-limb values confirmed in source (xparam SUMS: head eva 0.55,
+> slash erate 1.15 on all limbs, per-limb hit) and now baked, not copied:
+> bake_battle_db.py emits enemies (stats/traits/AI), skills, troops,
+> actors (class+equip resolved), class tables, rewards. Skill bytecode
+> loads from the real formulas.bin (10B-safe decoder; struct-cast would
+> misread). Victory banner drops the dead EXP line (zero troops award).
+> Engine goldens updated to true data. FHDEMO.zip repacked.
