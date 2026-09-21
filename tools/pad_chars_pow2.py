@@ -20,7 +20,7 @@ CHAR_DIR = pathlib.Path('converted/characters')
 SHEETS = [
     'mercenary_torch', 'outlander_torch', 'dark_priest_torch', 'knight_torch',
     'mercenary', 'outlander', 'dark_priest', 'knight',
-    '!Flame', '!creature', '!map_objects2', '$minerghost2',
+    '!Flame', '!creature', '!map_objects2', '$minerghost2', 'guard1',
 ]
 
 def deswizzle8(inp: bytes, w: int, h: int) -> bytearray:

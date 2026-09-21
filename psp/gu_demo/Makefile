@@ -6,7 +6,7 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o b
        d_merc.o d_mercc.o d_outl.o d_outlc.o \
        d_priest.o d_priestc.o d_knight.o d_knightc.o \
        d_flame.o d_flamec.o d_creat.o d_creatc.o \
-       d_mobj.o d_mobjc.o d_ghost.o d_ghostc.o \
+       d_mobj.o d_mobjc.o d_ghost.o d_ghostc.o d_guard1.o d_guard1c.o \
        d_font.o d_fontc.o d_fontadv.o \
        d_win.o d_winc.o \
        d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
@@ -97,6 +97,10 @@ d_ghost.o: data/$$minerghost2.t8
 	bin2o -i 'data/$$minerghost2.t8' d_ghost.o d_ghost
 d_ghostc.o: data/$$minerghost2.clut
 	bin2o -i 'data/$$minerghost2.clut' d_ghostc.o d_ghostc
+d_guard1.o: data/guard1.t8
+	bin2o -i data/guard1.t8 d_guard1.o d_guard1
+d_guard1c.o: data/guard1.clut
+	bin2o -i data/guard1.clut d_guard1c.o d_guard1c
 d_font.o: data/font.t8
 	bin2o -i data/font.t8 d_font.o d_font
 d_fontc.o: data/font.clut

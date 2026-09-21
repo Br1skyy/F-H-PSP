@@ -356,6 +356,7 @@ extern unsigned char d_flame_start[], d_flamec_start[];
 extern unsigned char d_creat_start[], d_creatc_start[];
 extern unsigned char d_mobj_start[], d_mobjc_start[];
 extern unsigned char d_ghost_start[], d_ghostc_start[];
+extern unsigned char d_guard1_start[], d_guard1c_start[];
 extern unsigned char d_font_start[], d_fontc_start[], d_fontadv_start[];
 extern unsigned char d_win_start[], d_winc_start[];
 extern unsigned char d_tmerc_start[], d_tmercc_start[];
@@ -376,7 +377,7 @@ static unsigned int *foe_cl[7];
 
 /* NPC sheets: t8/clut pointers, img_w/h active px, tex/stride upload dims.
  * Dims from converted meta.json; see docs/engine-notes.md ($ = single). */
-static struct { unsigned char *t8, *clut; int iw, ih, tw, th, stride, big; } npc_sheets[4];
+static struct { unsigned char *t8, *clut; int iw, ih, tw, th, stride, big; } npc_sheets[5];
 
 /* NPCs baked from Map030.json pg0 (id, sheet, tile, index, pattern,
  * dir_mv, trigger, priority, dirfix, talk list or NULL).
@@ -386,12 +387,13 @@ typedef struct {
     int ev_id, sheet, tx, ty, index, pattern, dir_mv, trig, prio, dirfix;
     const FhCmd *talk;
     int talk_len;
-    /* Alternate pages (OG scans pages last-first running the first whose
-     * switch conditions pass; pg0 baked as talk). Two slots cover our
-     * roster (EV020: 3581/501 both silent when set). */
+    /* Alternate pages (OG scans last-first; first passing switch wins). */
     int alt_sw[2];
     const FhCmd *alt_talk[2];
     int alt_len[2];
+    /* battle_troop: touch/talk battle starter (OG 301 chain stand-in;
+     * ballista fires troop 1 when bumped or faced + O). 0 = none. */
+    int battle_troop;
 } NpcDef;
 
 static NpcDef npcs[15];
@@ -466,6 +468,10 @@ static void load_map030(void) {
     npc_sheets[3].iw = 288; npc_sheets[3].ih = 192;
     npc_sheets[3].tw = 512; npc_sheets[3].th = 256;
     npc_sheets[3].stride = 512; npc_sheets[3].big = 0;
+    npc_sheets[4].t8 = d_guard1_start; npc_sheets[4].clut = d_guard1c_start;
+    npc_sheets[4].iw = 480; npc_sheets[4].ih = 440;
+    npc_sheets[4].tw = 512; npc_sheets[4].th = 512;
+    npc_sheets[4].stride = 512; npc_sheets[4].big = 0;
 
     /* NPC roster (Map030 pg0_trigger/priority/image as shipped) */
     static const NpcDef baked[] = {
@@ -484,8 +490,11 @@ static void load_map030(void) {
         {269, 2,104, 8, 4,0,6, 0,1,1, NULL, 0},
         { 20, 3, 84,20, 5,1,2, 0,1,1, M30_EV020, M30_EV020_LEN},
         { 21, 3, 84,19, 1,1,8, 0,1,1, NULL, 0},
+        /* Ballista guard: touch/talk battle starter (Map030 ev94 pg0,
+         * trig 2 prio 1; OG chain runs tint/common/301 — troop 1 here). */
+        { 94, 4, 58,23, 0,1,2, 2,1,0, NULL, 0},
     };
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < 15; i++) {
         npcs[i] = baked[i];
         npc_draw[i].t8 = npc_sheets[baked[i].sheet].t8;
         npc_draw[i].clut = (unsigned int *)npc_sheets[baked[i].sheet].clut;
@@ -506,7 +515,7 @@ static void load_map030(void) {
     /* Alternate pages (OG scans last-first; first passing switch wins).
      * EV213-pg1 (switch 2640): remains after the saw is taken.
      * EV020-pg1/pg2 (switches 501/3581): silent once lit/taken. */
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < 15; i++) {
         if (npcs[i].ev_id == 213) {
             npcs[i].alt_sw[0] = 2640;
             npcs[i].alt_talk[0] = M30_EV213_P1;
@@ -516,11 +525,13 @@ static void load_map030(void) {
             npcs[i].alt_sw[0] = 501;
             npcs[i].alt_sw[1] = 3581;
         }
+        if (npcs[i].ev_id == 94)
+            npcs[i].battle_troop = 1;
     }
     
-    /* Initialize player: debug spawn ON the saw-corpse tile (58,11).
-     * One O press opens its dialogue immediately. */
-    player_init(&player, 58, 11);
+    /* Initialize player: debug spawn by the ballista guard (battle).
+     * (58,19) is open; walk south to (58,22) and bump/O the guard. */
+    player_init(&player, 58, 19);
     player.dir = 0;
     player_set_sprite(&player, characters[0].sprite_data,
                      (unsigned int*)characters[0].clut_data, 480, 440, 0);
@@ -529,7 +540,7 @@ static void load_map030(void) {
      * isCollidedWithCharacters; prio 0 never blocks). Static roster, so
      * bake once. */
     memset(npc_solid, 0, sizeof(npc_solid));
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < 15; i++) {
         if (npcs[i].prio == 1)
             npc_solid[npcs[i].ty * MAP_W + npcs[i].tx] = 1;
     }
@@ -682,7 +693,7 @@ int main(int argc, char *argv[]) {
             for (int pass = 0; pass < 2 && found < 0; pass++) {
                 int tx = pass == 0 ? ptx : ptx + dx;
                 int ty = pass == 0 ? pty : pty + dy;
-                for (int i = 0; i < 14; i++) {
+                for (int i = 0; i < 15; i++) {
                     if (npcs[i].tx != tx || npcs[i].ty != ty) continue;
                     if (pass == 0) {
                         if (npcs[i].trig == 0 && npcs[i].prio == 0) found = i;
@@ -700,6 +711,13 @@ int main(int argc, char *argv[]) {
                     int mv = (ay > 0) ? 2 : (ay < 0) ? 8 :
                              (ax > 0) ? 6 : 4;
                     npc_draw[found].dir_mv = mv;
+                }
+                /* Touch/talk battle starter (OG 301 chain stand-in). */
+                if (npcs[found].battle_troop > 0) {
+                    u64 btick;
+                    sceRtcGetCurrentTick(&btick);
+                    btl_start(btick, current_character);
+                    continue;
                 }
                 if (npcs[found].talk && npcs[found].talk_len > 1) {
                     /* OG page scan (last page first): first alt whose
@@ -777,7 +795,7 @@ int main(int argc, char *argv[]) {
             render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
                         &player, current_character, char_sprites, char_cluts,
                         map_higher, sizeof(map_higher), total_frames,
-                        npc_draw, 14, torch_lit);
+                        npc_draw, 15, torch_lit);
             sceGuStart(GU_DIRECT, gu_list);
             render_message_window(&mit, msg_ended, msg_cursor, page_wait);
             sceGuFinish();
@@ -929,8 +947,38 @@ int main(int argc, char *argv[]) {
         }
         
         /* Update player */
+        int pre_px = player.x, pre_py = player.y;
         player_update(&player, input.buttons, (uint16_t*)map_passability,
                       MAP_W, MAP_H, npc_solid);
+
+        /* Touch-front battle starter (OG moveStraight bump-fail path:
+         * holding into a blocked tile checks the faced tile for
+         * trigger 1/2, normal priority). */
+        if (!player.moving && player.x == pre_px && player.y == pre_py) {
+            unsigned int held = input.buttons &
+                (PSP_CTRL_UP | PSP_CTRL_DOWN | PSP_CTRL_LEFT | PSP_CTRL_RIGHT);
+            if (held) {
+                int dx = 0, dy = 0;
+                switch (player.dir) {
+                    case 0: dy = 1; break;
+                    case 1: dx = -1; break;
+                    case 2: dx = 1; break;
+                    case 3: dy = -1; break;
+                }
+                int tx = player.x / TILE + dx, ty = player.y / TILE + dy;
+                for (int i = 0; i < 15; i++) {
+                    if (npcs[i].tx == tx && npcs[i].ty == ty &&
+                        npcs[i].trig >= 1 && npcs[i].trig <= 2 &&
+                        npcs[i].prio == 1 && npcs[i].battle_troop > 0) {
+                        u64 btick;
+                        sceRtcGetCurrentTick(&btick);
+                        btl_start(btick, current_character);
+                        break;
+                    }
+                }
+                if (battle_mode) continue;
+            }
+        }
         
         /* Center camera on player with smooth following */
         int target_x = player.x - SCR_W / 2;
@@ -950,7 +998,7 @@ int main(int argc, char *argv[]) {
         render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
                     &player, current_character, char_sprites, char_cluts,
                     map_higher, sizeof(map_higher), total_frames,
-                    npc_draw, 14, torch_lit);
+                    npc_draw, 15, torch_lit);
         
         /* Update debug text periodically (not every frame) */
         if (frames == 0 || frames - last_debug_update >= 30) {
