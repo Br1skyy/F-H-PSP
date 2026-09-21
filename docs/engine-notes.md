@@ -54,6 +54,18 @@ Sources: `rpg_objects.js` (Game_CharacterBase), `rpg_sprites.js`
 - `356` plugin strings land in the dispatch log (`Light on 27` verified
   end-to-end on PC); backends (sconce glow, torch swap) attach later.
 
+## Message window (`Window_Base`, `Window_Message`, skin)
+
+- Text colors: skin grid `px = 96+(n%8)*12+6`, `py = 144+floor(n/8)*12+6`
+  (32 entries; `\C[2]` item orange = 255,120,76; `\C[0]` white).
+- Font is the game's own `mplus-1m-regular.ttf` (monospace); baked at
+  13px into 16px cells, advance 7px, Latin-1 1:1 (`bake_font.py`).
+- `101` params `[faceName, faceIndex, background, position]` flow through
+  the emitter into `FhInterp.msg_face`; face sheets stage on demand
+  (all baked dialogue so far uses `''`).
+- Demo window: bottom box, 18px rows, skin fill ~(40,28,26,220), warm
+  gray border; choices decoded like body text (options carry escapes).
+
 ## Formulas
 
 Damage/params run on a small bytecode VM using **`double`**

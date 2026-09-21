@@ -33,12 +33,28 @@ static const FhCmd *msg_list = NULL;
 static int msg_len = 0;
 static char msg_title[64] = "";
 
+/* World state carried across conversations (switches, inventory).
+ * fh_interp_init memsets, so msg_open saves the previous session, then
+ * restores it into the fresh interpreter. First open carries zeros. */
+static unsigned char keep_sw[FH_MAX_SWITCHES];
+static int keep_item[FH_MAX_ITEMS];
+static int keep_weap[FH_MAX_WEAPONS];
+static int keep_arm[FH_MAX_ARMORS];
+
 static void msg_open(const FhCmd *list, int len, const char *title) {
+    memcpy(keep_sw, mit.sw, sizeof(keep_sw));
+    memcpy(keep_item, mit.inv_item, sizeof(keep_item));
+    memcpy(keep_weap, mit.inv_weap, sizeof(keep_weap));
+    memcpy(keep_arm, mit.inv_arm, sizeof(keep_arm));
     msg_list = list;
     msg_len = len;
     strncpy(msg_title, title, sizeof(msg_title) - 1);
     msg_title[sizeof(msg_title) - 1] = 0;
     fh_interp_init(&mit, msg_list, msg_len);
+    memcpy(mit.sw, keep_sw, sizeof(keep_sw));
+    memcpy(mit.inv_item, keep_item, sizeof(keep_item));
+    memcpy(mit.inv_weap, keep_weap, sizeof(keep_weap));
+    memcpy(mit.inv_arm, keep_arm, sizeof(keep_arm));
     msg_mode = 1;
     msg_ended = 0;
     msg_cursor = 0;
@@ -81,6 +97,8 @@ typedef struct {
     const char *name;
     unsigned char *sprite_data;
     unsigned char *clut_data;
+    unsigned char *torch_data;  /* lit variant (_torch sheet, same layout) */
+    unsigned char *torch_clut;
 } CharacterDef;
 
 static CharacterDef characters[4];
@@ -98,6 +116,10 @@ extern unsigned char d_creat_start[], d_creatc_start[];
 extern unsigned char d_mobj_start[], d_mobjc_start[];
 extern unsigned char d_ghost_start[], d_ghostc_start[];
 extern unsigned char d_font_start[], d_fontc_start[];
+extern unsigned char d_tmerc_start[], d_tmercc_start[];
+extern unsigned char d_toutl_start[], d_toutlc_start[];
+extern unsigned char d_tpriest_start[], d_tpriestc_start[];
+extern unsigned char d_tknight_start[], d_tknightc_start[];
 
 /* NPC sheets: t8/clut pointers, img_w/h active px, tex/stride upload dims.
  * Dims from converted meta.json; see docs/engine-notes.md ($ = single). */
@@ -147,6 +169,16 @@ static void load_map030(void) {
     characters[3].name = "Knight";
     characters[3].sprite_data = d_knight_start;
     characters[3].clut_data = d_knightc_start;
+
+    /* Lit torch variants (same 12×8 layout, torch raised). */
+    characters[0].torch_data = d_tmerc_start;
+    characters[0].torch_clut = d_tmercc_start;
+    characters[1].torch_data = d_toutl_start;
+    characters[1].torch_clut = d_toutlc_start;
+    characters[2].torch_data = d_tpriest_start;
+    characters[2].torch_clut = d_tpriestc_start;
+    characters[3].torch_data = d_tknight_start;
+    characters[3].torch_clut = d_tknightc_start;
 
     /* NPC sheets (!creature/!map_objects2/!Flame: 288×192 non-$, 24px cells;
      * $minerghost2: 120×220 single, 40×55 cells) */
@@ -283,23 +315,47 @@ int main(int argc, char *argv[]) {
     /* Debug text buffer (updated periodically, not every frame) */
     static char debug_text[128] = "";
     int last_debug_update = 0;
+
+    /* Torch state: EV020 lights switch 501; latched from conversation
+     * results every map frame (persists via msg_open state carry). */
+    int torch_lit = 0;
     
     /* Main loop */
     while (!exit_request) {
         input_update(&input);
+
+        /* Torch latch may have flipped inside the last conversation. */
+        if ((mit.sw[501] ? 1 : 0) != torch_lit) {
+            torch_lit = mit.sw[501] ? 1 : 0;
+            CharacterDef *cd = &characters[current_character];
+            if (torch_lit)
+                player_set_sprite(&player, cd->torch_data,
+                                  (unsigned int *)cd->torch_clut, 480, 440, 0);
+            else
+                player_set_sprite(&player, cd->sprite_data,
+                                  (unsigned int *)cd->clut_data, 480, 440, 0);
+        }
         
-        /* Character selection */
+        /* Character selection (torch variant follows the latch) */
         if (input_pressed(&input, PSP_CTRL_LTRIGGER)) {
             current_character = (current_character + 3) % 4;
-            player_set_sprite(&player, characters[current_character].sprite_data,
-                            (unsigned int*)characters[current_character].clut_data,
-                            480, 440, 0);
+            CharacterDef *cd = &characters[current_character];
+            if (torch_lit)
+                player_set_sprite(&player, cd->torch_data,
+                                  (unsigned int *)cd->torch_clut, 480, 440, 0);
+            else
+                player_set_sprite(&player, cd->sprite_data,
+                                  (unsigned int *)cd->clut_data, 480, 440, 0);
         }
         if (input_pressed(&input, PSP_CTRL_RTRIGGER)) {
             current_character = (current_character + 1) % 4;
-            player_set_sprite(&player, characters[current_character].sprite_data,
-                            (unsigned int*)characters[current_character].clut_data,
-                            480, 440, 0);
+            CharacterDef *cd = &characters[current_character];
+            if (torch_lit)
+                player_set_sprite(&player, cd->torch_data,
+                                  (unsigned int *)cd->torch_clut, 480, 440, 0);
+            else
+                player_set_sprite(&player, cd->sprite_data,
+                                  (unsigned int *)cd->clut_data, 480, 440, 0);
         }
         
         /* Exit */
@@ -432,7 +488,7 @@ int main(int argc, char *argv[]) {
         render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
                     &player, current_character, char_sprites, char_cluts,
                     map_higher, sizeof(map_higher), total_frames,
-                    npc_draw, 14);
+                    npc_draw, 14, torch_lit);
         
         /* Update debug text periodically (not every frame) */
         if (frames == 0 || frames - last_debug_update >= 30) {

@@ -289,14 +289,15 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
 
 /* Lighting composite: ONE fullscreen sprite sampling the baked radial
  * mask, recentered on the player every frame. out = dst × mask.
- * Steady radius: the OG only flickers Fire lights (event command), never
- * the default player globe (playerflicker = false). */
+ * torch_on restores the Fire flicker (radius ±7, the Terrax default);
+ * the plain player globe stays steady (playerflicker = false). */
 static void render_light_pass(const Player *player, int cam_x, int cam_y,
-                              int frames) {
-    (void)frames;
+                              int frames, int torch_on) {
     int px = player->x - cam_x + TILE / 2;
     int py = player->y - cam_y - 8;
     float r = (float)LIGHT_R;
+    if (torch_on)
+        r += (float)(((frames * 13) % 15) - 7);
     /* Texture px per screen px: texture radius (128) covers world r. */
     float k = ((float)LIGHT_TEX / 2.0f) / r;
     float u0 = (float)LIGHT_TEX / 2.0f - (float)px * k;
@@ -349,7 +350,7 @@ void render_frame(int cam_x, int cam_y,
                   unsigned char *char_sprites[4],
                   unsigned int *char_cluts[4],
                   const uint8_t *higher, int higher_len, int frames,
-                  const NpcSprite *npcs, int n_npcs) {
+                  const NpcSprite *npcs, int n_npcs, int torch_on) {
     sceGuStart(GU_DIRECT, gu_list_ptr);
     sceGuClearColor(0xff000000);
     sceGuClear(GU_COLOR_BUFFER_BIT);
@@ -404,7 +405,7 @@ void render_frame(int cam_x, int cam_y,
                       higher, higher_len, 1);
 
     /* Darkness + player glow. */
-    render_light_pass(player, cam_x, cam_y, frames);
+    render_light_pass(player, cam_x, cam_y, frames, torch_on);
 
     sceGuFinish();
     sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);

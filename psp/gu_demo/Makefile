@@ -7,7 +7,9 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o \
        d_priest.o d_priestc.o d_knight.o d_knightc.o \
        d_flame.o d_flamec.o d_creat.o d_creatc.o \
        d_mobj.o d_mobjc.o d_ghost.o d_ghostc.o \
-       d_font.o d_fontc.o
+       d_font.o d_fontc.o \
+       d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
+       d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o
 
 INCDIR =
 CFLAGS = -Wall -O2 -G0
@@ -96,6 +98,22 @@ d_font.o: data/font.t8
 	bin2o -i data/font.t8 d_font.o d_font
 d_fontc.o: data/font.clut
 	bin2o -i data/font.clut d_fontc.o d_fontc
+d_tmerc.o: data/mercenary_torch.t8
+	bin2o -i data/mercenary_torch.t8 d_tmerc.o d_tmerc
+d_tmercc.o: data/mercenary_torch.clut
+	bin2o -i data/mercenary_torch.clut d_tmercc.o d_tmercc
+d_toutl.o: data/outlander_torch.t8
+	bin2o -i data/outlander_torch.t8 d_toutl.o d_toutl
+d_toutlc.o: data/outlander_torch.clut
+	bin2o -i data/outlander_torch.clut d_toutlc.o d_toutlc
+d_tpriest.o: data/dark_priest_torch.t8
+	bin2o -i data/dark_priest_torch.t8 d_tpriest.o d_tpriest
+d_tpriestc.o: data/dark_priest_torch.clut
+	bin2o -i data/dark_priest_torch.clut d_tpriestc.o d_tpriestc
+d_tknight.o: data/knight_torch.t8
+	bin2o -i data/knight_torch.t8 d_tknight.o d_tknight
+d_tknightc.o: data/knight_torch.clut
+	bin2o -i data/knight_torch.clut d_tknightc.o d_tknightc
 
 # Runtime modules with proper include paths
 player_rt.o: ../../runtime/player.c

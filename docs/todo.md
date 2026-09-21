@@ -12,6 +12,7 @@
 - [x] Walk cycle persists across tiles (all 3 frames, OG rhythm)
 - [x] NPCs render (15 baked, Y-sorted) + talk trigger + EV213/EV020 dialogue
 - [x] 111-type-8 (has-item) in C + sim, goldens green
+- [x] Message window (game font, skin, colors, choices); O=confirm
 
 ## Next
 

@@ -44,7 +44,7 @@ void render_frame(int cam_x, int cam_y,
                   unsigned char *char_sprites[4],
                   unsigned int *char_cluts[4],
                   const uint8_t *higher, int higher_len, int frames,
-                  const NpcSprite *npcs, int n_npcs);
+                  const NpcSprite *npcs, int n_npcs, int torch_on);
 
 /* Render functions for specific elements.
  * upper_pass=0 draws z=0 tiles (below characters), =1 draws z=4 higher
