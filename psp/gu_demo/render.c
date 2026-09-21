@@ -5,6 +5,23 @@
 #include <pspdisplay.h>
 #include <pspdebug.h>
 #include <string.h>
+
+unsigned char *font_px = 0;
+unsigned int *font_cl = 0;
+
+/* Text colors sampled from the game's own Window.png palette grid
+ * (rpg_windows.js Window_Base.textColor: px = 96+(n%8)*12+6, and py row).
+ * Only 0 (white) and 2 (item orange) appear in baked dialogue so far. */
+static const unsigned int MSG_PAL[32] = {
+    0xffffffff, 0xffd6a020, 0xff4c78ff, 0xff40cc66,
+    0xffffcc99, 0xffffc0cc, 0xffa0ffff, 0xff808080,
+    0xffc0c0c0, 0xffcc8020, 0xff1038ff, 0xff10a000,
+    0xffde9a3e, 0xffff98a0, 0xff39d6fd, 0xff000000,
+    0xff9b7e64, 0xff7bdcdb, 0xff2020ff, 0xff402020,
+    0xff2a3023, 0xff112511, 0xff2a3023, 0xff112511,
+    0xff80ff80, 0xff8080c0, 0xffff8080, 0xfff0c041,
+    0xff40100a, 0xff60e060, 0xffe060a0, 0xffff80c0,
+};
 #include <math.h>
 
 #define NX (SCR_W / TILE + 2)
@@ -393,7 +410,202 @@ void render_frame(int cam_x, int cam_y,
     sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
 }
 
-void render_debug_text(const char *text) {
-    pspDebugScreenSetXY(0, 0);
+/* ---- Message window ---- */
+#define FONT_ADV 7
+#define FONT_ADV 7
+#define FONT_LINE 18
+#define MSG_COLS 62
+#define MSG_ROWS 7
+
+static char msg_rows[MSG_ROWS][MSG_COLS + 1];
+static unsigned char msg_cols[MSG_ROWS][MSG_COLS];
+static int msg_nrows, msg_cx, msg_ccol;
+
+static void msg_newrow(void) {
+    if (msg_nrows < MSG_ROWS) {
+        msg_cx = 0;
+        msg_ccol = 0;
+        msg_rows[msg_nrows][0] = 0;
+        msg_nrows++;
+    }
+}
+
+/* UTF-8 -> Latin-1 codepoint (atlas is Latin-1 1:1); others become '?'. */
+static void msg_put(unsigned int cp) {
+    if (cp >= 256) cp = '?';
+    if (cp < 32) cp = '?';
+    if (msg_nrows == 0) msg_newrow();
+    if (msg_cx >= MSG_COLS) msg_newrow();
+    if (msg_nrows > MSG_ROWS) return;
+    int r = msg_nrows - 1;
+    if (msg_cx < MSG_COLS) {
+        msg_rows[r][msg_cx] = (char)cp;
+        msg_cols[r][msg_cx] = (unsigned char)msg_ccol;
+        msg_cx++;
+        msg_rows[r][msg_cx] = 0;
+    }
+}
+
+static void msg_text_cb(const char *ptr, int len, void *ud) {
+    (void)ud;
+    int i = 0;
+    while (i < len) {
+        unsigned char c = (unsigned char)ptr[i];
+        if (c == '\n') {
+            msg_newrow();
+            i++;
+        } else if ((c & 0x80) == 0) {
+            msg_put(c);
+            i++;
+        } else if ((c & 0xe0) == 0xc0 && i + 1 < len) {
+            /* 2-byte UTF-8 -> Latin-1 when it fits (é in François). */
+            unsigned int cp = ((unsigned int)(c & 0x1f) << 6) |
+                              ((unsigned int)ptr[i + 1] & 0x3f);
+            msg_put(cp);
+            i += 2;
+        } else {
+            msg_put('?');
+            i++;
+        }
+    }
+}
+
+static void msg_code_cb(const char *code, int param, void *ud) {
+    (void)ud;
+    if (code[0] == 'C' && code[1] == 0 && param >= 0 && param < 32)
+        msg_ccol = param;
+}
+
+void render_message_window(const FhInterp *mit, int msg_ended, int cursor) {
+    /* 1. Layout the decoded text into colored rows. */
+    msg_nrows = 0;
+    msg_cx = 0;
+    msg_ccol = 0;
+    msg_newrow();
+    {
+        FhEscCtx ctx = {NULL, 0, NULL, 0, NULL, 0, NULL};
+        FhEscCb cb;
+        cb.on_text = &msg_text_cb;
+        cb.on_code = &msg_code_cb;
+        cb.ud = NULL;
+        fh_decode_escapes(mit->text, &ctx, &cb);
+    }
+    /* 2. Append the choice list. Each option is decoded like body text
+     * (options can carry raw escapes, e.g. \c[2]Torch); the selected row
+     * prints bright, others white, with an orange marker. */
+    if (mit->await_choice && mit->choice_text) {
+        FhEscCtx cctx = {NULL, 0, NULL, 0, NULL, 0, NULL};
+        FhEscCb ccb;
+        ccb.on_text = &msg_text_cb;
+        ccb.on_code = &msg_code_cb;
+        ccb.ud = NULL;
+        const char *p = mit->choice_text;
+        int idx = 0;
+        while (*p && msg_nrows < MSG_ROWS && idx < 8) {
+            const char *nl = strchr(p, '\n');
+            int n = nl ? (int)(nl - p) : (int)strlen(p);
+            /* Decode escapes into a temp run first (color spans), then
+             * re-emit as one row with marker. Simpler: marker row first. */
+            msg_newrow();
+            if (msg_nrows > MSG_ROWS) break;
+            int r = msg_nrows - 1;
+            msg_rows[r][0] = '>';
+            msg_cols[r][0] = 2;
+            msg_rows[r][1] = ' ';
+            msg_cols[r][1] = 0;
+            msg_cx = 2;
+            msg_ccol = (idx == cursor) ? 6 : 0;
+            char opt[128];
+            if (n > 127) n = 127;
+            memcpy(opt, p, (size_t)n);
+            opt[n] = 0;
+            fh_decode_escapes(opt, &cctx, &ccb);
+            idx++;
+            if (!nl) break;
+            p = nl + 1;
+        }
+    }
+    if (msg_ended && msg_nrows < MSG_ROWS) {
+        msg_newrow();
+        if (msg_nrows <= MSG_ROWS) {
+            int r = msg_nrows - 1;
+            const char *e = "-- END (O: continue) --";
+            int k = 0;
+            while (*e && k < MSG_COLS) {
+                msg_rows[r][k] = *e;
+                msg_cols[r][k] = 7;
+                k++;
+                e++;
+            }
+            msg_rows[r][k] = 0;
+        }
+    }
+
+    /* 3. Window box (fill + 2px border), sized to content. */
+    int rows = msg_nrows;
+    if (rows < 1) rows = 1;
+    if (rows > MSG_ROWS) rows = MSG_ROWS;
+    int box_h = rows * FONT_LINE + 20;
+    int x0 = 8, x1 = SCR_W - 8, y1 = SCR_H - 8, y0 = y1 - box_h;
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    TVert *b = (TVert *)sceGuGetMemory(4 * sizeof(TVert));
+    b[0].u = 0; b[0].v = 0; b[0].color = 0xff8c7d76;  /* warm gray border */
+    b[0].x = (float)x0; b[0].y = (float)y0; b[0].z = 0.0f;
+    b[1].u = 0; b[1].v = 0; b[1].color = 0xff8c7d76;
+    b[1].x = (float)x1; b[1].y = (float)y1; b[1].z = 0.0f;
+    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
+    b = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+    b[0].u = 0; b[0].v = 0; b[0].color = 0xdc2a1c1a;  /* F&H skin fill */
+    b[0].x = (float)(x0 + 2); b[0].y = (float)(y0 + 2); b[0].z = 0.0f;
+    b[1].u = 0; b[1].v = 0; b[1].color = 0xdc2a1c1a;
+    b[1].x = (float)(x1 - 2); b[1].y = (float)(y1 - 2); b[1].z = 0.0f;
+    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
+
+    /* 4. Glyphs, one batched draw, vertex colors carry \C spans. */
+    if (!font_px || !font_cl) {
+        sceGuDisable(GU_BLEND);
+        return;
+    }
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuClutLoad(32, font_cl);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+    sceGuTexImage(0, 256, 256, 256, font_px);
+    sceGuTexFlush();
+    sceGuTexSync();
+    int total = 0;
+    for (int r = 0; r < rows; r++)
+        total += (int)strlen(msg_rows[r]);
+    TVert *v = (TVert *)sceGuGetMemory(total * 2 * sizeof(TVert));
+    TVert *vp = v;
+    for (int r = 0; r < rows; r++) {
+        int gy = y0 + 10 + r * FONT_LINE;
+        for (int k = 0; msg_rows[r][k]; k++) {
+            unsigned int cp = (unsigned char)msg_rows[r][k];
+            float u0 = (float)((cp % 16) * 16);
+            float v0 = (float)((cp / 16) * 16);
+            unsigned int col = MSG_PAL[msg_cols[r][k] & 31];
+            float gx = (float)(x0 + 12 + k * FONT_ADV);
+            vp[0].u = u0; vp[0].v = v0; vp[0].color = col;
+            vp[0].x = gx; vp[0].y = (float)gy; vp[0].z = 0.0f;
+            vp[1].u = u0 + 16; vp[1].v = v0 + 16; vp[1].color = col;
+            vp[1].x = gx + 16; vp[1].y = (float)(gy + 16); vp[1].z = 0.0f;
+            vp += 2;
+        }
+    }
+    if (total > 0)
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, total * 2, 0, v);
+    sceGuDisable(GU_BLEND);
+    sceGuDisable(GU_TEXTURE_2D);
+}
+
+void render_debug_text(const char *text) {    pspDebugScreenSetXY(0, 0);
     pspDebugScreenPrintf("%s", text);
 }

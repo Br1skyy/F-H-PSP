@@ -1,7 +1,8 @@
 /* F&H PSP Port - Main Game Loop
  * 
  * Clean, modular implementation with rendering and input separated.
- * Controls: D-pad=move, L/R=change character, START=exit, SELECT=message demo
+ * Controls: D-pad=move, L/R=change character, CIRCLE=talk/confirm,
+ * CROSS=cancel, START=exit, SELECT=message demo
  */
 #include <pspkernel.h>
 #include <pspdisplay.h>
@@ -41,35 +42,6 @@ static void msg_open(const FhCmd *list, int len, const char *title) {
     msg_mode = 1;
     msg_ended = 0;
     msg_cursor = 0;
-}
-
-static void msg_print_text(const char *ptr, int len, void *ud) {
-    (void)ud;
-    pspDebugScreenPrintf("%.*s", len, ptr);
-}
-
-static void msg_print_code(const char *code, int param, void *ud) {
-    (void)ud; (void)code; (void)param;
-}
-
-static void msg_show(void) {
-    FhEscCtx ctx = {NULL, 0, NULL, 0, NULL, 0, NULL};
-    FhEscCb cb = {&msg_print_text, &msg_print_code, NULL};
-    pspDebugScreenSetXY(0, 3);
-    fh_decode_escapes(mit.text, &ctx, &cb);
-    pspDebugScreenPrintf("\n");
-    if (mit.await_choice && mit.choice_text) {
-        char tmp[512];
-        strncpy(tmp, mit.choice_text, sizeof(tmp) - 1);
-        tmp[sizeof(tmp) - 1] = 0;
-        char *line;
-        int i = 0;
-        for (line = strtok(tmp, "\n"); line; line = strtok(NULL, "\n"), i++)
-            pspDebugScreenPrintf("  %c %s\n", i == msg_cursor ? '>' : ' ', line);
-        pspDebugScreenPrintf("UP/DN+Cross (Circle=cancel)\n");
-    } else if (msg_ended) {
-        pspDebugScreenPrintf("-- END (item21=%d SELECT=map) --\n", mit.inv_item[21]);
-    }
 }
 
 /* --- Exit Callback --- */
@@ -125,6 +97,7 @@ extern unsigned char d_flame_start[], d_flamec_start[];
 extern unsigned char d_creat_start[], d_creatc_start[];
 extern unsigned char d_mobj_start[], d_mobjc_start[];
 extern unsigned char d_ghost_start[], d_ghostc_start[];
+extern unsigned char d_font_start[], d_fontc_start[];
 
 /* NPC sheets: t8/clut pointers, img_w/h active px, tex/stride upload dims.
  * Dims from converted meta.json; see docs/engine-notes.md ($ = single). */
@@ -233,7 +206,12 @@ static void load_map030(void) {
     player_init(&player, 70, 8);
     player_set_sprite(&player, characters[0].sprite_data,
                      (unsigned int*)characters[0].clut_data, 480, 440, 0);
-    
+
+    /* Game font atlas (baked by tools/bake_font.py from the game's own
+     * mplus-1m; assigned, not copied, like tile sheets) */
+    font_px = d_font_start;
+    font_cl = (unsigned int *)d_fontc_start;
+
     sceKernelDcacheWritebackAll();
 }
 
@@ -334,10 +312,11 @@ int main(int argc, char *argv[]) {
                 msg_open(DEMO_EV, DEMO_EV_LEN, "Map001 ev37 (rotten meat)");
         }
 
-        /* Talk: OK button. OG triggerButtonAction (rpg_objects.js): action
-         * trigger here ([0], below-priority tiles) then facing tile
-         * ([0,1,2], normal priority). Only standing starts events. */
-        if (input_pressed(&input, PSP_CTRL_CROSS) && !player.moving) {
+        /* Talk: OK button = CIRCLE on PSP (Eastern layout, per user).
+         * OG triggerButtonAction (rpg_objects.js): action trigger here
+         * ([0], below-priority tiles) then facing tile ([0,1,2], normal
+         * priority). Only standing starts events. */
+        if (input_pressed(&input, PSP_CTRL_CIRCLE) && !player.moving) {
             int ptx = player.x / TILE, pty = player.y / TILE;
             int dx = 0, dy = 0;
             switch (player.dir) {
@@ -385,11 +364,11 @@ int main(int argc, char *argv[]) {
                 if (mit.await_choice) {
                     if (input_pressed(&input, PSP_CTRL_UP) && msg_cursor > 0) msg_cursor--;
                     if (input_pressed(&input, PSP_CTRL_DOWN) && msg_cursor < mit.choice_n - 1) msg_cursor++;
-                    if (input_pressed(&input, PSP_CTRL_CROSS)) {
+                    if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                         mit.choice_sel = msg_cursor;
                         mit.await_choice = 0;
                     }
-                    if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                    if (input_pressed(&input, PSP_CTRL_CROSS)) {
                         mit.choice_sel = -1;
                         mit.await_choice = 0;
                     }
@@ -404,11 +383,9 @@ int main(int argc, char *argv[]) {
             sceGuStart(GU_DIRECT, gu_list);
             sceGuClearColor(0xff101018);
             sceGuClear(GU_COLOR_BUFFER_BIT);
+            render_message_window(&mit, msg_ended, msg_cursor);
             sceGuFinish();
             sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
-            pspDebugScreenSetXY(0, 0);
-            pspDebugScreenPrintf("MSG: %s", msg_title);
-            msg_show();
             sceDisplayWaitVblankStart();
             fbp0 = sceGuSwapBuffers();
             frames++;

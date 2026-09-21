@@ -53,6 +53,8 @@ typedef struct {
     int choice_n;       /* option count */
     char text[FH_TEXT_CAP];
     int text_len;
+    char msg_face[FH_NAME_CAP];             /* 101 face sheet name (may be "") */
+    int msg_face_idx;                       /* 101 face index */
     int party[FH_MAX_PARTY]; int party_n;       /* 129 roster */
     int tint[4]; int tint_frames;                /* 223 screen tone */
     char last_se[64]; int se_count;              /* 250 SE log (backend hooks later) */

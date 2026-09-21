@@ -527,6 +527,18 @@ int fh_interp_step(FhInterp *it) {
             case 101:
                 it->text_len = 0;
                 it->text[0] = '\0';
+                /* Face sheet for the message window (may be ""). */
+                if (c->s) {
+                    int i = 0;
+                    while (c->s[i] && i < FH_NAME_CAP - 1) {
+                        it->msg_face[i] = c->s[i];
+                        i++;
+                    }
+                    it->msg_face[i] = '\0';
+                } else {
+                    it->msg_face[0] = '\0';
+                }
+                it->msg_face_idx = c->p[0];
                 it->pc++;
                 break;
             case 401:

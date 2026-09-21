@@ -65,6 +65,10 @@ def emit_one(game, baked_jumps, map_name, ev_id, pg, sym):
 
         if code == 401 and p:
             s = cstr(str(p[0]))
+        elif code == 101 and p:
+            # params: [faceName, faceIndex, background, position]
+            pp = [num(1), num(2), num(3)] + [0] * 7
+            s = cstr(str(p[0]))
         elif code == 102 and p:
             s = cstr('\n'.join(str(x) for x in p[0]))
         elif code == 402 and p:

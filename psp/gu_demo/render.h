@@ -5,6 +5,8 @@
 #include <pspgu.h>
 #include <stdint.h>
 #include "../../runtime/player.h"
+#include "interp_rt.h"
+#include "text_rt.h"
 
 #define TILE 24
 #define SCR_W 480
@@ -51,6 +53,14 @@ void render_map_layers(int cam_x, int cam_y, const uint16_t *map_layers, int map
                        const uint8_t *higher, int higher_len, int upper_pass);
 void render_player_sprite(const Player *player, int cam_x, int cam_y,
                          unsigned char *sprite_data, unsigned int *clut_data);
+
+/* Message window (Window_Message replacement): dim box + game-font text
+ * with \C colors, choice list with cursor. Replaces debug-screen text. */
+void render_message_window(const FhInterp *mit, int msg_ended, int cursor);
+
+/* Game font atlas (baked by tools/bake_font.py, assigned at load). */
+extern unsigned char *font_px;
+extern unsigned int *font_cl;
 
 /* Debug overlay */
 void render_debug_text(const char *text);
