@@ -53,6 +53,8 @@ typedef struct {
     int choice_n;       /* option count */
     char text[FH_TEXT_CAP];
     int text_len;
+    int page_open;                      /* 1 = page accumulated, 2 = shown */
+    int trace_skip;                     /* skip one trace append (PAGE resume) */
     char msg_face[FH_NAME_CAP];             /* 101 face sheet name (may be "") */
     int msg_face_idx;                       /* 101 face index */
     int party[FH_MAX_PARTY]; int party_n;       /* 129 roster */
@@ -126,7 +128,8 @@ typedef struct {
     int waits;          /* total wait frames consumed */
 } FhInterp;
 
-enum { FH_RUN_END = 0, FH_RUN_WAIT = 1, FH_RUN_STEP = 2, FH_RUN_CHOICE = 3 };
+enum { FH_RUN_END = 0, FH_RUN_WAIT = 1, FH_RUN_STEP = 2, FH_RUN_CHOICE = 3,
+         FH_RUN_PAGE = 4 };
 
 void fh_interp_init(FhInterp *it, const FhCmd *list, int len);
 int fh_interp_step(FhInterp *it);   /* runs until WAIT or END; STEP if bounded */

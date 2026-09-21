@@ -429,7 +429,7 @@ void render_frame(int cam_x, int cam_y,
 #define FONT_ADV 7
 #define FONT_ADV 7
 #define FONT_LINE 18
-#define MSG_COLS 62
+#define MSG_COLS 52  /* ~50 chars/row like the OG at this scale */
 #define MSG_ROWS 7
 
 static char msg_rows[MSG_ROWS][MSG_COLS + 1];

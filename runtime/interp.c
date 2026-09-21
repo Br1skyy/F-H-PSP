@@ -77,15 +77,26 @@ int fh_interp_step(FhInterp *it) {
             it->len = it->callst[it->depth].len;
             it->pc = it->callst[it->depth].pc;
         }
-        if (it->pc >= it->len || guard-- <= 0) break;
+        if (guard-- <= 0) break;
+        if (it->pc >= it->len) {
+            if (it->page_open == 1 && it->text_len > 0) {
+                /* Event ended with an undisplayed page: pause on it. */
+                it->page_open = 2;
+                return FH_RUN_PAGE;
+            }
+            break;
+        }
         if (it->wait > 0) {
             it->wait--;
             it->waits++;
             return FH_RUN_WAIT;
         }
         const FhCmd *c = &it->list[it->pc];
-        if (it->trace_len < FH_TRACE_CAP)
+        /* A resumed PAGE pause must not re-trace the paused 101 (it was
+         * recorded when the pause began; traces log executions). */
+        if (!it->trace_skip && it->trace_len < FH_TRACE_CAP)
             it->trace[it->trace_len++] = it->pc | (it->depth << 24);
+        it->trace_skip = 0;
         switch (c->code) {
             case 0:   /* list terminator / empty filler */
             case 108: /* comment */
@@ -525,8 +536,16 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             case 101:
+                /* A new 101 while a page is open pauses first (OG waits OK
+                 * per page): UI shows the text, O resumes into this 101. */
+                if (it->page_open == 1) {
+                    it->page_open = 2;
+                    it->trace_skip = 1;
+                    return FH_RUN_PAGE;
+                }
                 it->text_len = 0;
                 it->text[0] = '\0';
+                it->page_open = 1;
                 /* Face sheet for the message window (may be ""). */
                 if (c->s) {
                     int i = 0;
@@ -554,6 +573,9 @@ int fh_interp_step(FhInterp *it) {
                     for (const char *p = c->s; *p; p++)
                         if (*p == '\n') it->choice_n++;
                 }
+                /* The page shows together with the choices; don't re-pause
+                 * on it when the next 101 arrives (see 101 rule). */
+                it->page_open = 2;
                 it->await_choice = 1;
                 it->pc++;
                 return FH_RUN_CHOICE;

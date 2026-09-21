@@ -32,6 +32,7 @@ static int msg_mode = 0, msg_ended = 0, msg_cursor = 0;
 static const FhCmd *msg_list = NULL;
 static int msg_len = 0;
 static char msg_title[64] = "";
+static int page_wait = 0;  /* 1 = page on screen, O advances */
 
 /* World state carried across conversations (switches, inventory).
  * fh_interp_init memsets, so msg_open saves the previous session, then
@@ -58,6 +59,26 @@ static void msg_open(const FhCmd *list, int len, const char *title) {
     msg_mode = 1;
     msg_ended = 0;
     msg_cursor = 0;
+    page_wait = 0;
+}
+
+/* Run the interpreter until it needs the player: a page to read (O),
+ * a choice to pick, or the event end. WAIT pacing resumes next frame. */
+static void msg_advance(void) {
+    int guard = 10000;
+    while (guard-- > 0) {
+        int r = fh_interp_step(&mit);
+        if (r == FH_RUN_PAGE) {
+            page_wait = 1;
+            break;
+        }
+        if (r == FH_RUN_CHOICE) break;
+        if (r == FH_RUN_END) {
+            msg_ended = 1;
+            break;
+        }
+        if (r == FH_RUN_WAIT) break;
+    }
 }
 
 /* --- Exit Callback --- */
@@ -420,7 +441,18 @@ int main(int argc, char *argv[]) {
             }
         }
         
-        /* Message mode (temporary demo) */
+        /* Character sprites for both world and message rendering. */
+        unsigned char *char_sprites[4] = {
+            characters[0].sprite_data, characters[1].sprite_data,
+            characters[2].sprite_data, characters[3].sprite_data
+        };
+        unsigned int *char_cluts[4] = {
+            (unsigned int*)characters[0].clut_data, (unsigned int*)characters[1].clut_data,
+            (unsigned int*)characters[2].clut_data, (unsigned int*)characters[3].clut_data
+        };
+
+        /* Message mode: world frozen behind the window (OG keeps the map
+         * visible). O advances pages / picks, Cross cancels, O at END exits. */
         if (msg_mode) {
             if (!msg_ended) {
                 if (mit.await_choice) {
@@ -434,17 +466,26 @@ int main(int argc, char *argv[]) {
                         mit.choice_sel = -1;
                         mit.await_choice = 0;
                     }
+                } else if (page_wait) {
+                    if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                        page_wait = 0;
+                        msg_advance();
+                    }
                 } else {
-                    int r = fh_interp_step(&mit);
-                    if (r == FH_RUN_END) msg_ended = 1;
-                    msg_cursor = 0;
+                    msg_advance();
                 }
+            } else if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                msg_mode = 0;
+                continue;
             }
-            
-            /* Render message screen */
+
+            /* Render frozen world (its own display list), then the
+             * dialogue window on top in a second list. */
+            render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
+                        &player, current_character, char_sprites, char_cluts,
+                        map_higher, sizeof(map_higher), total_frames,
+                        npc_draw, 14, torch_lit);
             sceGuStart(GU_DIRECT, gu_list);
-            sceGuClearColor(0xff101018);
-            sceGuClear(GU_COLOR_BUFFER_BIT);
             render_message_window(&mit, msg_ended, msg_cursor);
             sceGuFinish();
             sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
@@ -482,16 +523,7 @@ int main(int argc, char *argv[]) {
         cam_x = cam_x + (target_x - cam_x) / 2;
         cam_y = cam_y + (target_y - cam_y) / 2;
         
-        /* Render game world */
-        unsigned char *char_sprites[4] = {
-            characters[0].sprite_data, characters[1].sprite_data,
-            characters[2].sprite_data, characters[3].sprite_data
-        };
-        unsigned int *char_cluts[4] = {
-            (unsigned int*)characters[0].clut_data, (unsigned int*)characters[1].clut_data,
-            (unsigned int*)characters[2].clut_data, (unsigned int*)characters[3].clut_data
-        };
-        
+        /* Render game world (sprites shared with message mode above) */
         render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
                     &player, current_character, char_sprites, char_cluts,
                     map_higher, sizeof(map_higher), total_frames,
