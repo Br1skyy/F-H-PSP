@@ -50,10 +50,10 @@ static void light_swizzle(void) {
             lin[y * LIGHT_SIZE + x] = (unsigned char)(a * 255.0f);
         }
     }
-    /* Dim warm peak: bright tiles stay under scene brightness instead of
-     * blowing out (OG radius/flicker kept, brightness tamed for additive). */
+    /* Neutral white peak like the original (playercolor defaults to
+     * #FFFFFF); dim enough that additive light never blows out. */
     for (int i = 0; i < 256; i++)
-        light_cl[i] = 0x00000000 | (80u << 16) | (100u << 8) | 120u | ((unsigned int)i << 24);
+        light_cl[i] = 0x00000000 | (120u << 16) | (120u << 8) | 120u | ((unsigned int)i << 24);
     /* 16×8 swizzle (same layout as convert_assets.py). */
     static unsigned char sw[LIGHT_SIZE * LIGHT_SIZE];
     int dst = 0;
