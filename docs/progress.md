@@ -338,3 +338,13 @@ Findings against §9 open questions:
 > loads from the real formulas.bin (10B-safe decoder; struct-cast would
 > misread). Victory banner drops the dead EXP line (zero troops award).
 > Engine goldens updated to true data. FHDEMO.zip repacked.
+
+### 2026-09-21 — Battle text boxes fixed, OG bottom-box layout, 64px actors
+> WHITE-BOX ROOT CAUSE: the actor-sprite draw disables blend+alpha at
+> its end; the battle text pass never re-enabled them, so every glyph
+> cell rendered as a solid vertex-colored box (message window was immune:
+> its box setup leaves both on). Fix: enable both in the text pass.
+> LAYOUT (per reference): bottom skin box (commands left, Body/Mind
+> rows+bars right), help/banner text top transparent, marker-only limb
+> targeting (target list dropped), actor at 64px cells (rebaked 1024x512
+> battlers) bottom-left. FHDEMO.zip repacked.
