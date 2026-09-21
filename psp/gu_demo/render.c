@@ -259,12 +259,14 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
 
 /* Lighting composite: ONE fullscreen sprite sampling the baked radial
  * mask, recentered on the player every frame. out = dst × mask.
- * frames wobbles the radius ±7 (Terrax fire flicker). */
+ * Steady radius: the OG only flickers Fire lights (event command), never
+ * the default player globe (playerflicker = false). */
 static void render_light_pass(const Player *player, int cam_x, int cam_y,
                               int frames) {
+    (void)frames;
     int px = player->x - cam_x + TILE / 2;
     int py = player->y - cam_y - 8;
-    float r = (float)(LIGHT_R + (((frames * 13) % 15) - 7));
+    float r = (float)LIGHT_R;
     /* Texture px per screen px: texture radius (128) covers world r. */
     float k = ((float)LIGHT_TEX / 2.0f) / r;
     float u0 = (float)LIGHT_TEX / 2.0f - (float)px * k;
