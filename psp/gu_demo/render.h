@@ -18,10 +18,8 @@ extern const SheetDef SHEETS[9];
 extern unsigned char *sheet_px[9];
 extern unsigned int sheet_cl[9][256];
 
-/* Initialize rendering system. lightbuf is a 128x128x32 VRAM target for
- * the quarter-res light buffer (see render_light_pass in render.c). */
-void render_init(void *fbp0, void *fbp1, void *zbp, void *lightbuf,
-                 unsigned int *gu_list);
+/* Initialize rendering system */
+void render_init(void *fbp0, void *fbp1, void *zbp, unsigned int *gu_list);
 
 /* Render one frame of the game world.
  * higher/higher_len: higher-tile mask (flags[tid] & 0x10, baked from
@@ -32,8 +30,7 @@ void render_frame(int cam_x, int cam_y,
                   const Player *player, int current_char,
                   unsigned char *char_sprites[4],
                   unsigned int *char_cluts[4],
-                  const uint8_t *higher, int higher_len,
-                  void *drawbuf, int frames);
+                  const uint8_t *higher, int higher_len, int frames);
 
 /* Render functions for specific elements.
  * upper_pass=0 draws z=0 tiles (below characters), =1 draws z=4 higher

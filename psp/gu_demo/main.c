@@ -187,16 +187,13 @@ int main(int argc, char *argv[]) {
     /* Initialize subsystems */
     input_init();
     
-    /* Allocate framebuffers (+64KB quarter-res light target) */
+    /* Allocate framebuffers */
     void *fbp0 = guGetStaticVramBuffer(BUF_W, SCR_H, GU_PSM_8888);
     void *fbp1 = guGetStaticVramBuffer(BUF_W, SCR_H, GU_PSM_8888);
     void *zbp = guGetStaticVramBuffer(BUF_W, SCR_H, GU_PSM_4444);
-    void *lightbuf = guGetStaticVramBuffer(128, 128, GU_PSM_8888);
-    /* libgu's draw target flips every swap; track it for the light pass. */
-    void *vram_fbp0 = fbp0, *vram_fbp1 = fbp1, *drawbuf = fbp0;
     int total_frames = 0;
     
-    render_init(fbp0, fbp1, zbp, lightbuf, gu_list);
+    render_init(fbp0, fbp1, zbp, gu_list);
 #ifdef DIAG_STAGES
     diag_color(0xffff0000, "gu-init\n", fbp0, fbp1);  /* red = GU up */
 #endif
@@ -283,7 +280,6 @@ int main(int argc, char *argv[]) {
             msg_show();
             sceDisplayWaitVblankStart();
             fbp0 = sceGuSwapBuffers();
-            drawbuf = (drawbuf == vram_fbp0) ? vram_fbp1 : vram_fbp0;
             frames++;
             
             /* Update FPS counter */
@@ -327,7 +323,7 @@ int main(int argc, char *argv[]) {
         
         render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
                     &player, current_character, char_sprites, char_cluts,
-                    map_higher, sizeof(map_higher), drawbuf, total_frames);
+                    map_higher, sizeof(map_higher), total_frames);
         
         /* Update debug text periodically (not every frame) */
         if (frames == 0 || frames - last_debug_update >= 30) {
@@ -339,7 +335,6 @@ int main(int argc, char *argv[]) {
         
         sceDisplayWaitVblankStart();
         fbp0 = sceGuSwapBuffers();
-        drawbuf = (drawbuf == vram_fbp0) ? vram_fbp1 : vram_fbp0;
         frames++;
         total_frames++;
 #ifdef DIAG_STAGES

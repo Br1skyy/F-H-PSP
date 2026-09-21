@@ -22,18 +22,46 @@ const SheetDef SHEETS[9] = {
 unsigned char *sheet_px[9] = {0};
 unsigned int sheet_cl[9][256] __attribute__((aligned(16)));
 
-/* Lighting (Terrax replacement, full §5.5 path at 1/4 res).
- * Light buffer: 120×68 in a 128-stride 8888 VRAM target. Per frame it is
- * cleared to darkness, the player glow is added, then it is multiplied
- * over the scene (blend ADD, src×dst). */
-#define LIGHT_W 120
-#define LIGHT_H 68
-#define LIGHT_STRIDE 128
+/* Lighting (Terrax replacement): NO render target, NO multiply blend —
+ * only ops already proven on this path (T8 swizzled + CLUT + alpha blend).
+ * 1. Fullscreen black quad at 92% alpha knocks the scene to ~8%.
+ * 2. Warm radial glow sprite(s) add light back (ADD, src×alpha).
+ * Looks like torchlight, costs 2 quads. */
 #define LIGHT_R 150     /* player radius, screen px (Terrax 300 @ full scale) */
-#define LIGHT_DARK 0xff141418  /* ~8% floor visibility outside the glow */
+#define LIGHT_DARK_A 235  /* darken quad alpha: scene kept = 1 - 235/255 ≈ 8% */
+#define LIGHT_SIZE 128
 
-static void *light_buf = 0;
-static unsigned int light_grad[64 * 64];  /* white, alpha = radial falloff */
+static unsigned char light_px[LIGHT_SIZE * LIGHT_SIZE];
+static unsigned int light_cl[256] __attribute__((aligned(16)));
+
+static void light_swizzle(void) {
+    static unsigned char lin[LIGHT_SIZE * LIGHT_SIZE];
+    for (int y = 0; y < LIGHT_SIZE; y++) {
+        for (int x = 0; x < LIGHT_SIZE; x++) {
+            float dx = ((float)x - 63.5f) / 64.0f;
+            float dy = ((float)y - 63.5f) / 64.0f;
+            float d = dx * dx + dy * dy;
+            float a = 1.0f - d;
+            if (a < 0.0f) a = 0.0f;
+            lin[y * LIGHT_SIZE + x] = (unsigned char)(a * 255.0f);
+        }
+    }
+    for (int i = 0; i < 256; i++)
+        light_cl[i] = 0x00000000 | (170u << 16) | (214u << 8) | 255u | ((unsigned int)i << 24);
+    /* 16×8 swizzle (same layout as convert_assets.py). */
+    static unsigned char sw[LIGHT_SIZE * LIGHT_SIZE];
+    int dst = 0;
+    for (int by = 0; by < LIGHT_SIZE; by += 8) {
+        for (int bx = 0; bx < LIGHT_SIZE; bx += 16) {
+            for (int r = 0; r < 8; r++) {
+                int src = (by + r) * LIGHT_SIZE + bx;
+                for (int k = 0; k < 16; k++) sw[dst + k] = lin[src + k];
+                dst += 16;
+            }
+        }
+    }
+    for (int i = 0; i < LIGHT_SIZE * LIGHT_SIZE; i++) light_px[i] = sw[i];
+}
 
 /* Vertex type for textured quads */
 typedef struct { float u, v; unsigned int color; float x, y, z; } TVert;
@@ -41,24 +69,9 @@ typedef struct { float u, v; unsigned int color; float x, y, z; } TVert;
 
 static unsigned int *gu_list_ptr;
 
-void render_init(void *fbp0, void *fbp1, void *zbp, void *lightbuf,
-                   unsigned int *gu_list) {
+void render_init(void *fbp0, void *fbp1, void *zbp, unsigned int *gu_list) {
     gu_list_ptr = gu_list;
-    light_buf = lightbuf;
-
-    /* Baked radial glow: alpha falls off quadratically from center. */
-    for (int y = 0; y < 64; y++) {
-        for (int x = 0; x < 64; x++) {
-            float dx = ((float)x - 31.5f) / 32.0f;
-            float dy = ((float)y - 31.5f) / 32.0f;
-            float d = dx * dx + dy * dy;
-            float a = 1.0f - d;
-            if (a < 0.0f) a = 0.0f;
-            a *= a;
-            light_grad[y * 64 + x] = 0x00ffffff | ((unsigned int)(a * 255.0f) << 24);
-        }
-    }
-
+    light_swizzle();
     sceGuInit();
     sceGuStart(GU_DIRECT, gu_list);
     sceGuDrawBuffer(GU_PSM_8888, fbp0, BUF_W);
@@ -235,59 +248,45 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
     sceGuDisable(GU_TEXTURE_2D);
 }
 
-/* Lighting composite: darkness buffer + player glow, multiplied over the
- * scene. drawbuf is libgu's current draw target (tracked by the caller —
- * it flips every swap); state changed here is restored before returning.
+/* Lighting composite: darken everything, then add the player glow.
+ * Uses only the proven sprite path (T8 swizzled + CLUT + alpha blend).
  * frames drives the torch flicker. */
 static void render_light_pass(const Player *player, int cam_x, int cam_y,
-                              void *drawbuf, int frames) {
-    /* Player glow center (sprite middle) with a small torch flicker. */
+                              int frames) {
+    /* 1. Knock the scene down to ~8% with a fullscreen black quad.
+     * out = dst × (1 - alpha), standard sprite blend. */
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    TVert *d = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+    d[0].u = 0; d[0].v = 0; d[0].color = ((unsigned int)LIGHT_DARK_A << 24);
+    d[0].x = 0; d[0].y = 0; d[0].z = 0.0f;
+    d[1].u = 0; d[1].v = 0; d[1].color = ((unsigned int)LIGHT_DARK_A << 24);
+    d[1].x = SCR_W; d[1].y = SCR_H; d[1].z = 0.0f;
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, d);
+
+    /* 2. Add the warm glow back around the player (ADD, src×alpha). */
     int px = player->x - cam_x + TILE / 2;
     int py = player->y - cam_y - 8;
     int r = LIGHT_R + ((frames % 9) - 4);
-    float lx = (float)px * 0.25f, ly = (float)py * 0.25f, lr = (float)r * 0.25f;
-
-    /* 1. Render darkness + glow into the quarter-res light buffer. */
-    sceGuDrawBufferList(GU_PSM_8888, light_buf, LIGHT_STRIDE);
-    sceGuOffset(2048 - LIGHT_W / 2, 2048 - LIGHT_H / 2);
-    sceGuViewport(2048, 2048, LIGHT_W, LIGHT_H);
-    sceGuScissor(0, 0, LIGHT_W, LIGHT_H);
-    sceGuClearColor(LIGHT_DARK);
-    sceGuClear(GU_COLOR_BUFFER_BIT);
-    sceGuDisable(GU_ALPHA_TEST);
     sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexMode(GU_PSM_8888, 0, 0, 0);  /* unswizzled 64×64 gradient */
-    sceGuTexImage(0, 64, 64, 64, light_grad);
-    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
     sceGuTexFilter(GU_LINEAR, GU_LINEAR);
     sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuClutLoad(32, light_cl);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+    sceGuTexImage(0, LIGHT_SIZE, LIGHT_SIZE, LIGHT_SIZE, light_px);
+    sceGuTexFlush();
+    sceGuTexSync();
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0xffffff);
     TVert *g = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
     g[0].u = 0; g[0].v = 0; g[0].color = 0xffffffff;
-    g[0].x = lx - lr; g[0].y = ly - lr; g[0].z = 0.0f;
-    g[1].u = 64; g[1].v = 64; g[1].color = 0xffffffff;
-    g[1].x = lx + lr; g[1].y = ly + lr; g[1].z = 0.0f;
+    g[0].x = (float)(px - r); g[0].y = (float)(py - r); g[0].z = 0.0f;
+    g[1].u = LIGHT_SIZE; g[1].v = LIGHT_SIZE; g[1].color = 0xffffffff;
+    g[1].x = (float)(px + r); g[1].y = (float)(py + r); g[1].z = 0.0f;
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, g);
-    sceGuTexFlush();
-    sceGuTexSync();
-
-    /* 2. Multiply the light buffer over the scene (out = tex × fb). */
-    sceGuDrawBufferList(GU_PSM_8888, drawbuf, BUF_W);
-    sceGuOffset(2048 - (SCR_W / 2), 2048 - (SCR_H / 2));
-    sceGuViewport(2048, 2048, SCR_W, SCR_H);
-    sceGuScissor(0, 0, SCR_W, SCR_H);
-    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-    sceGuTexImage(0, 128, 128, LIGHT_STRIDE, light_buf);
-    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
-    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-    sceGuBlendFunc(GU_ADD, GU_OTHER_COLOR, GU_FIX, 0, 0);
-    TVert *m = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-    m[0].u = 0; m[0].v = 0; m[0].color = 0xffffffff;
-    m[0].x = 0; m[0].y = 0; m[0].z = 0.0f;
-    m[1].u = LIGHT_W; m[1].v = LIGHT_H; m[1].color = 0xffffffff;
-    m[1].x = SCR_W; m[1].y = SCR_H; m[1].z = 0.0f;
-    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, m);
     sceGuTexFlush();
     sceGuTexSync();
     sceGuDisable(GU_BLEND);
@@ -299,8 +298,7 @@ void render_frame(int cam_x, int cam_y,
                   const Player *player, int current_char,
                   unsigned char *char_sprites[4],
                   unsigned int *char_cluts[4],
-                  const uint8_t *higher, int higher_len,
-                  void *drawbuf, int frames) {
+                  const uint8_t *higher, int higher_len, int frames) {
     sceGuStart(GU_DIRECT, gu_list_ptr);
     sceGuClearColor(0xff000000);
     sceGuClear(GU_COLOR_BUFFER_BIT);
@@ -319,8 +317,8 @@ void render_frame(int cam_x, int cam_y,
     render_map_layers(cam_x, cam_y, map_layers, map_w, map_h,
                       higher, higher_len, 1);
 
-    /* Darkness + player glow multiplied over everything. */
-    render_light_pass(player, cam_x, cam_y, drawbuf, frames);
+    /* Darkness + player glow. */
+    render_light_pass(player, cam_x, cam_y, frames);
 
     sceGuFinish();
     sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
