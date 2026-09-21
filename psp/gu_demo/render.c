@@ -9,12 +9,12 @@
 #include <math.h>
 
 unsigned char *font_px = 0;
-unsigned int *font_cl = 0;
+unsigned int font_cl[256] __attribute__((aligned(16)));
 unsigned char *font_adv = 0;
 unsigned char *window_px = 0;
-unsigned int *window_cl = 0;
+unsigned int window_cl[256] __attribute__((aligned(16)));
 unsigned char *floor_px = 0;
-unsigned int *floor_cl = 0;
+unsigned int floor_cl[256] __attribute__((aligned(16)));
 
 /* Text colors sampled from the game's own Window.png palette grid
  * (rpg_windows.js Window_Base.textColor: px = 96+(n%8)*12+6, and py row).
@@ -695,7 +695,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
 
     /* Skin frame (8 quads, one batched draw) for bg 0 only. Transparent
      * corners are discarded by the alpha test like tile texels. */
-    if (bg == 0 && window_px && window_cl) {
+    if (bg == 0 && window_px) {
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);
@@ -793,7 +793,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     }
 
     /* 4. Glyphs, one batched draw, vertex colors carry \C spans. */
-    if (!font_px || !font_cl) {
+    if (!font_px) {
         sceGuDisable(GU_BLEND);
         return;
     }
@@ -893,6 +893,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    const char *targets[], int ntargets, int tcursor,
                    int show_targets, const char *banner,
                    unsigned char *actor_t8, unsigned int *actor_cl,
+                   int actor_mcol, int actor_mrow,
                    int tgt_x, int tgt_y) {
     /* Backdrop: mines tunnel, centered native (scissor clips overflow).
      * Falls back to flat maroon when the art is missing. */
@@ -906,7 +907,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     bd[1].u = 0; bd[1].v = 0; bd[1].color = 0xff180a0c;
     bd[1].x = (float)SCR_W; bd[1].y = (float)SCR_H; bd[1].z = 0.0f;
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bd);
-    if (floor_px && floor_cl) {
+    if (floor_px) {
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);
@@ -965,12 +966,13 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     }
     sceGuDisable(GU_TEXTURE_2D);
 
-    /* Actor battler: walking-down idle cell of the current sheet. */
+    /* Actor battler: side-view motion cell (56px grid, middle pattern).
+     * Motions (rpg_sprites.js): col = motionIndex/6*3+1, row = index%6;
+     * wait=1 idle, guard=3, thrust=6, swing=7, missile=8. */
     if (actor_t8 && actor_cl) {
-        int fx, fy, fw, fh;
-        char_cell(480, 440, 0, 0, 1, 2, &fx, &fy, &fw, &fh);
-        render_character_cell(actor_t8, actor_cl, 512, 512, 512, fx, fy, fw,
-                              fh, 110 - fw / 2, (SCR_H - 100) - fh);
+        render_character_cell(actor_t8, actor_cl, 512, 512, 512,
+                              actor_mcol * 56, actor_mrow * 56, 56, 56,
+                              110 - 28, (SCR_H - 100) - 56);
     }
 
     /* Actor status: Body/Mind labels like the OG status rows, with bars. */
@@ -984,7 +986,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         (cmdtotal + targtotal + poptotal + bannerlen + 1) * 2 * sizeof(TVert));
     TVert *vp = v;
     /* Text pass needs the font texture bound. */
-    if (font_px && font_cl) {
+    if (font_px) {
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);

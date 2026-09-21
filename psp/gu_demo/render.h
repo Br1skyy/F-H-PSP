@@ -67,16 +67,16 @@ void msg_content_changed(void);
 
 /* Game font atlas (baked by tools/bake_font.py, assigned at load). */
 extern unsigned char *font_px;
-extern unsigned int *font_cl;
+extern unsigned int font_cl[256];
 extern unsigned char *font_adv;  /* 256 per-glyph advances, half-px units */
 
 /* Window skin (baked by tools/bake_window.py from Window.png). */
 extern unsigned char *window_px;
-extern unsigned int *window_cl;
+extern unsigned int window_cl[256];
 
 /* Battle backdrop (floor1, staged like tile sheets). */
 extern unsigned char *floor_px;
-extern unsigned int *floor_cl;
+extern unsigned int floor_cl[256];
 
 /* Battle scene (front-view limbs + command UI). All text via the game
  * font atlas; popups rise and fade. */
@@ -99,6 +99,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    const char *targets[], int ntargets, int tcursor,
                    int show_targets, const char *banner,
                    unsigned char *actor_t8, unsigned int *actor_cl,
+                   int actor_mcol, int actor_mrow,
                    int tgt_x, int tgt_y);
 
 /* Debug overlay */

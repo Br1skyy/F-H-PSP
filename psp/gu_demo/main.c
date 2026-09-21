@@ -95,6 +95,7 @@ static BtPopup btl_pops[8];
 static char btl_banner[64];
 static int btl_banner_t;
 static int btl_actor_row;
+static int btl_pose_col, btl_pose_row, btl_pose_t;
 
 static const BtSkill *btl_skill(int id) {
     for (int i = 0; i < 5; i++)
@@ -187,13 +188,20 @@ static void btl_start(u64 tick, int char_idx) {
     btl_tgt = 0;
     btl_banner[0] = 0;
     btl_banner_t = 0;
+    btl_pose_col = 1;
+    btl_pose_row = 1;  /* wait/idle motion */
+    btl_pose_t = 0;
     for (int i = 0; i < 8; i++) btl_pops[i].ttl = 0;
     battle_mode = 1;
 }
 
 /* Queue the actor's action, let foes pick AI, build the turn order. */
 static void btl_begin_exec(void) {
-    if (btl_act_kind == 1) btl.f[0].guard = 1;  /* Guard applies now */
+    if (btl_act_kind == 1) {
+        btl.f[0].guard = 1;  /* Guard applies now */
+        btl_pose_col = 4;
+        btl_pose_row = 3;  /* guard motion */
+    }
     for (int i = 0; i < 7; i++) {
         /* AI tables per limb (Enemies.json actions). */
         const BtAiAct *tab = NULL;
@@ -239,6 +247,16 @@ static int btl_exec_step(void) {
         const BtSkill *sk = btl_skill(1);
         BtF *tgt = &btl.f[1 + btl_act_target];
         if (!tgt->alive) return 0;
+        /* Attack motion by weapon (System.json attackMotions): bow =
+         * missile, blades = swing. Outlander (index 1) carries the bow. */
+        if (btl_actor_row == 3) {
+            btl_pose_col = 4;
+            btl_pose_row = 2;
+        } else {
+            btl_pose_col = 4;
+            btl_pose_row = 1;
+        }
+        btl_pose_t = 30;
         int crit, missed, evaded;
         int dmg = bt_strike(&btl, sk, sub, tgt, NULL, NULL, &crit, &missed,
                             &evaded);
@@ -372,10 +390,18 @@ extern unsigned char d_e3_start[], d_e3c_start[];
 extern unsigned char d_e4_start[], d_e4c_start[];
 extern unsigned char d_e5_start[], d_e5c_start[];
 extern unsigned char d_e6_start[], d_e6c_start[];
+extern unsigned char d_bv0_start[], d_bv0c_start[];
+extern unsigned char d_bv1_start[], d_bv1c_start[];
+extern unsigned char d_bv2_start[], d_bv2c_start[];
+extern unsigned char d_bv3_start[], d_bv3c_start[];
 
 /* Guard1 art (order matches DEMO_TROOP/DEMO_FOE_*). */
 static unsigned char *foe_t8[7];
 static unsigned int *foe_cl[7];
+
+/* Side-view battlers (order matches characters[]). */
+static unsigned char *bv_t8[4];
+static unsigned int *bv_cl[4];
 
 /* NPC sheets: t8/clut pointers, img_w/h active px, tex/stride upload dims.
  * Dims from converted meta.json; see docs/engine-notes.md ($ = single). */
@@ -451,6 +477,10 @@ static void load_map030(void) {
     foe_t8[4] = d_e4_start; foe_cl[4] = (unsigned int *)d_e4c_start;
     foe_t8[5] = d_e5_start; foe_cl[5] = (unsigned int *)d_e5c_start;
     foe_t8[6] = d_e6_start; foe_cl[6] = (unsigned int *)d_e6c_start;
+    bv_t8[0] = d_bv0_start; bv_cl[0] = (unsigned int *)d_bv0c_start;
+    bv_t8[1] = d_bv1_start; bv_cl[1] = (unsigned int *)d_bv1c_start;
+    bv_t8[2] = d_bv2_start; bv_cl[2] = (unsigned int *)d_bv2c_start;
+    bv_t8[3] = d_bv3_start; bv_cl[3] = (unsigned int *)d_bv3c_start;
 
     /* NPC sheets (!creature/!map_objects2/!Flame: 288x192 non-$, 24px
      * cells; $minerghost2: 120x220 single, 40x55 cells) */
@@ -550,16 +580,16 @@ static void load_map030(void) {
     /* Game font atlas (baked by tools/bake_font.py from the game's own
      * mplus-1m; assigned, not copied, like tile sheets) */
     font_px = d_font_start;
-    font_cl = (unsigned int *)d_fontc_start;
+    memcpy(font_cl, d_fontc_start, sizeof(font_cl));
     font_adv = d_fontadv_start;
 
     /* Window skin (baked by tools/bake_window.py from Window.png) */
     window_px = d_win_start;
-    window_cl = (unsigned int *)d_winc_start;
+    memcpy(window_cl, d_winc_start, sizeof(window_cl));
 
     /* Battle backdrop (mines tunnel floor). */
     floor_px = d_floor_start;
-    floor_cl = (unsigned int *)d_floorc_start;
+    memcpy(floor_cl, d_floorc_start, sizeof(floor_cl));
 
     sceKernelDcacheWritebackAll();
 }
@@ -832,9 +862,14 @@ int main(int argc, char *argv[]) {
         /* Battle mode */
         if (battle_mode) {
             static const char *cmds[] = {"Attack", "Guard", "Escape"};
-            /* Tick popups. */
+            /* Tick popups + attack pose timer. */
             for (int i = 0; i < 8; i++)
                 if (btl_pops[i].ttl > 0) btl_pops[i].ttl--;
+            if (btl_pose_t > 0 && --btl_pose_t == 0 &&
+                !btl.f[0].guard) {
+                btl_pose_col = 1;
+                btl_pose_row = 1;
+            }
             if (btl_banner_t > 0) btl_banner_t--;
 
             if (btl_phase == 0) {
@@ -889,6 +924,8 @@ int main(int argc, char *argv[]) {
                     /* Round done: clear guard, next turn. */
                     bt_round_end(&btl);
                     btl.turn++;
+                    btl_pose_col = 1;
+                    btl_pose_row = 1;
                     btl_phase = 0;
                 } else {
                     btl_wait = 25;
@@ -953,8 +990,8 @@ int main(int argc, char *argv[]) {
                          btl_phase == 0, targets, ntgt, tcursor,
                          btl_phase == 1,
                          (btl_phase == 3 || btl_banner_t > 0) ? btl_banner : NULL,
-                         characters[current_character].sprite_data,
-                         (unsigned int *)characters[current_character].clut_data,
+                         bv_t8[current_character], bv_cl[current_character],
+                         btl_pose_col, btl_pose_row,
                          mtx, mty);
             sceGuFinish();
             sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);

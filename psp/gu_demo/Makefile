@@ -12,7 +12,8 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o b
        d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
        d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o \
        d_e0.o d_e0c.o d_e1.o d_e1c.o d_e2.o d_e2c.o d_e3.o d_e3c.o \
-       d_e4.o d_e4c.o d_e5.o d_e5c.o d_e6.o d_e6c.o
+       d_e4.o d_e4c.o d_e5.o d_e5c.o d_e6.o d_e6c.o \
+       d_bv0.o d_bv0c.o d_bv1.o d_bv1c.o d_bv2.o d_bv2c.o d_bv3.o d_bv3c.o
 
 INCDIR =
 CFLAGS = -Wall -O2 -G0
@@ -113,6 +114,22 @@ d_floor.o: data/floor1.t8
 	bin2o -i data/floor1.t8 d_floor.o d_floor
 d_floorc.o: data/floor1.clut
 	bin2o -i data/floor1.clut d_floorc.o d_floorc
+d_bv0.o: data/bv_Actor1_1.t8
+	bin2o -i data/bv_Actor1_1.t8 d_bv0.o d_bv0
+d_bv0c.o: data/bv_Actor1_1.clut
+	bin2o -i data/bv_Actor1_1.clut d_bv0c.o d_bv0c
+d_bv1.o: data/bv_knight1_1.t8
+	bin2o -i data/bv_knight1_1.t8 d_bv1.o d_bv1
+d_bv1c.o: data/bv_knight1_1.clut
+	bin2o -i data/bv_knight1_1.clut d_bv1c.o d_bv1c
+d_bv2.o: data/bv_darkpriest1_1.t8
+	bin2o -i data/bv_darkpriest1_1.t8 d_bv2.o d_bv2
+d_bv2c.o: data/bv_darkpriest1_1.clut
+	bin2o -i data/bv_darkpriest1_1.clut d_bv2c.o d_bv2c
+d_bv3.o: data/bv_outlander1_1.t8
+	bin2o -i data/bv_outlander1_1.t8 d_bv3.o d_bv3
+d_bv3c.o: data/bv_outlander1_1.clut
+	bin2o -i data/bv_outlander1_1.clut d_bv3c.o d_bv3c
 d_fontadv.o: data/font_adv.bin
 	bin2o -i data/font_adv.bin d_fontadv.o d_fontadv
 d_tmerc.o: data/mercenary_torch.t8
