@@ -933,13 +933,14 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     }
     sceGuDisable(GU_TEXTURE_2D);
 
-    /* Actor battler: side-view motion cell (64px grid, middle pattern).
+    /* Actor battler: side-view motion cell (56px grid, middle pattern).
      * Motions (rpg_sprites.js): col = motionIndex/6*3+1, row = index%6;
-     * wait=1 idle, guard=3, thrust=6, swing=7, missile=8. */
+     * wait=1 idle, guard=3, thrust=6, swing=7, missile=8. Textures must
+     * stay within the 512px GE limit (1024-wide uploads vanish). */
     if (actor_t8 && actor_cl) {
-        render_character_cell(actor_t8, actor_cl, 1024, 512, 1024,
-                              actor_mcol * 64, actor_mrow * 64, 64, 64,
-                              110 - 32, (SCR_H - 100) - 64);
+        render_character_cell(actor_t8, actor_cl, 512, 512, 512,
+                              actor_mcol * 56, actor_mrow * 56, 56, 56,
+                              110 - 28, (SCR_H - 100) - 56);
     }
 
     /* Actor status: Body/Mind labels like the OG status rows, with bars. */

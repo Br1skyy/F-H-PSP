@@ -23,7 +23,7 @@ import struct
 import sys
 from PIL import Image
 
-CELL = 64
+CELL = 56
 COLS, ROWS = 9, 6
 
 
