@@ -653,7 +653,9 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     if (bg != 2) {
         TVert *b = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-        unsigned int fill = (bg == 1) ? 0xa0000000 : 0xdc2a1c1a;
+        /* Skin fill pattern sampled from Window.png top-left quadrant
+         * (was byte-swapped blue before — this is the true warm fill). */
+        unsigned int fill = (bg == 1) ? 0xa0000000 : 0xc8343c42;
         b[0].u = 0; b[0].v = 0; b[0].color = fill;
         b[0].x = (float)x0; b[0].y = (float)y0; b[0].z = 0.0f;
         b[1].u = 0; b[1].v = 0; b[1].color = fill;

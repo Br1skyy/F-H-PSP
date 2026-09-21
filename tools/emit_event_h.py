@@ -19,6 +19,7 @@ import pathlib
 
 DEFAULT_EVS = [
     ('Map030', 213, 0, 'M30_EV213'),
+    ('Map030', 213, 1, 'M30_EV213_P1'),
     ('Map030', 20, 0, 'M30_EV020'),
 ]
 

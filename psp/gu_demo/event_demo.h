@@ -20,6 +20,14 @@ static const FhCmd M30_EV213[] = {
   {0,0,16,0,{0,0,0,0,0,0,0,0,0,0},NULL},
 };
 static const int M30_EV213_LEN = 16;
+/* Map030 ev213 pg1 (4 cmds) */
+static const FhCmd M30_EV213_P1[] = {
+  {101,0,4,0,{0,0,2,0,0,0,0,0,0,0},""},
+  {401,0,4,0,{0,0,0,0,0,0,0,0,0,0},"The body has been cut into several pieces. Some of the "},
+  {401,0,4,0,{0,0,0,0,0,0,0,0,0,0},"markings on the limbs suggest that he was cut into food."},
+  {0,0,4,0,{0,0,0,0,0,0,0,0,0,0},NULL},
+};
+static const int M30_EV213_P1_LEN = 4;
 /* Map030 ev20 pg0 (31 cmds) */
 static const FhCmd M30_EV020[] = {
   {111,0,17,8,{7,0,0,0,0,0,0,0,0,0},NULL},

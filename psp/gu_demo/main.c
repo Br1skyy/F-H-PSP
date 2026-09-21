@@ -156,6 +156,12 @@ typedef struct {
     int ev_id, sheet, tx, ty, index, pattern, dir_mv, trig, prio, dirfix;
     const FhCmd *talk;
     int talk_len;
+    /* Alternate pages (OG scans pages last-first running the first whose
+     * switch conditions pass; pg0 baked as talk). Two slots cover our
+     * roster (EV020: 3581/501 both silent when set). */
+    int alt_sw[2];
+    const FhCmd *alt_talk[2];
+    int alt_len[2];
 } NpcDef;
 
 static NpcDef npcs[15];
@@ -256,6 +262,21 @@ static void load_map030(void) {
         npc_draw[i].pattern = baked[i].pattern;
         npc_draw[i].dir_mv = baked[i].dir_mv;
         npc_draw[i].prio = baked[i].prio;
+    }
+
+    /* Alternate pages (OG scans last-first; first passing switch wins).
+     * EV213-pg1 (switch 2640): remains after the saw is taken.
+     * EV020-pg1/pg2 (switches 501/3581): silent once lit/taken. */
+    for (int i = 0; i < 14; i++) {
+        if (npcs[i].ev_id == 213) {
+            npcs[i].alt_sw[0] = 2640;
+            npcs[i].alt_talk[0] = M30_EV213_P1;
+            npcs[i].alt_len[0] = M30_EV213_P1_LEN;
+        }
+        if (npcs[i].ev_id == 20) {
+            npcs[i].alt_sw[0] = 501;
+            npcs[i].alt_sw[1] = 3581;
+        }
     }
     
     /* Initialize player: debug spawn next to the saw-corpse cluster.
@@ -438,11 +459,25 @@ int main(int argc, char *argv[]) {
                     npc_draw[found].dir_mv = mv;
                 }
                 if (npcs[found].talk && npcs[found].talk_len > 1) {
-                    char title[64];
-                    snprintf(title, sizeof(title), "Map030 ev%d (%s)",
-                             npcs[found].ev_id,
-                             npcs[found].ev_id == 20 ? "torch" : "saw corpse");
-                    msg_open(npcs[found].talk, npcs[found].talk_len, title);
+                    /* OG page scan (last page first): first alt whose
+                     * switch is ON wins; NULL alt = silent event. */
+                    const FhCmd *list = npcs[found].talk;
+                    int len = npcs[found].talk_len;
+                    for (int k = 1; k >= 0; k--) {
+                        int sw = npcs[found].alt_sw[k];
+                        if (sw > 0 && sw < FH_MAX_SWITCHES && mit.sw[sw]) {
+                            list = npcs[found].alt_talk[k];
+                            len = npcs[found].alt_len[k];
+                            break;
+                        }
+                    }
+                    if (list && len > 1) {
+                        char title[64];
+                        snprintf(title, sizeof(title), "Map030 ev%d (%s)",
+                                 npcs[found].ev_id,
+                                 npcs[found].ev_id == 20 ? "torch" : "saw corpse");
+                        msg_open(list, len, title);
+                    }
                 }
             }
         }
