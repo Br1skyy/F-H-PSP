@@ -97,21 +97,25 @@ int player_update(Player *p, unsigned int buttons, const uint16_t *passability,
         }
 
         if (p->step_count >= TILE_SIZE) {
-            /* Finished moving one tile: OG straighten(). */
+            /* Finished one tile. OG does NOT straighten here when the
+             * next step continues (resetPattern only fires while stopped),
+             * so the walk cycle runs on across tiles: 1,2,1,0... */
             p->step_count = 0;
             p->moving = 0;
             p->move_acc = 0.0f;
-            p->anim_pattern = 1;
-            p->anim_count = 0.0f;
-            p->step_frame = 0;  /* return to center frame */
         }
         return 1;
     }
     
     /* Not moving: check for new input */
     int dir = player_input_dir(buttons);
-    if (dir < 0)
+    if (dir < 0) {
+        /* Truly stopped: OG straighten() — back to idle pattern. */
+        p->anim_pattern = 1;
+        p->anim_count = 0.0f;
+        p->step_frame = 0;
         return 0;  /* no input */
+    }
     
     /* Update facing direction */
     p->dir = dir;
@@ -128,8 +132,13 @@ int player_update(Player *p, unsigned int buttons, const uint16_t *passability,
     }
     
     /* Check collision */
-    if (!player_can_pass(p, target_x, target_y, passability, map_w, map_h))
+    if (!player_can_pass(p, target_x, target_y, passability, map_w, map_h)) {
+        /* Bumped: stopped, so straighten to idle like the OG. */
+        p->anim_pattern = 1;
+        p->anim_count = 0.0f;
+        p->step_frame = 0;
         return 0;  /* blocked */
+    }
     
     /* Start moving (OG keeps idle pattern until the anim count fires). */
     p->moving = 1;
