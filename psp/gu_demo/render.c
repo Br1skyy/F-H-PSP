@@ -958,7 +958,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     int poptotal = npops * 8;
     int bannerlen = banner ? (int)strlen(banner) : 0;
     TVert *v = (TVert *)sceGuGetMemory(
-        (cmdtotal + targtotal + poptotal + bannerlen + 1) * 2 * sizeof(TVert));
+        (cmdtotal + targtotal + poptotal + bannerlen + 3) * 2 * sizeof(TVert));
     TVert *vp = v;
     /* Battle vignette: same Terrax darkness over the scene, below UI.
      * Wide steady pool covers party and troop (targeting stays readable;
@@ -1063,6 +1063,19 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     }
     if (vp > v)
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
+    /* TEMP TEXT DIAGNOSTIC (remove after white-box verdict): thumbnail of
+     * the raw font atlas (REPLACE) top-right. Glyphs visible here =>
+     * upload+CLUT+sampling fine, MODULATE path broken. White here too =>
+     * the texture itself arrives broken. */
+    {
+        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+        TVert *t = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        t[0].u = 0; t[0].v = 64; t[0].color = 0xffffffff;
+        t[0].x = 344; t[0].y = 8; t[0].z = 0.0f;
+        t[1].u = 256; t[1].v = 128; t[1].color = 0xffffffff;
+        t[1].x = 472; t[1].y = 40; t[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, t);
+    }
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);
     sceGuDisable(GU_ALPHA_TEST);
