@@ -84,7 +84,8 @@ typedef struct {
     unsigned char *t8;
     unsigned int *clut;
     int tw, th, stride, w, h;
-    int x, y;   /* screen anchor: bottom-center (MV battler home) */
+    float x, y;  /* screen anchor: bottom-center (float: int truncation
+                  * shifts limbs by whole pixels) */
     int alive;
 } BtFoeDraw;
 
@@ -100,7 +101,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    int show_targets, const char *banner,
                    unsigned char *actor_t8, unsigned int *actor_cl,
                    int actor_mcol, int actor_mrow,
-                   int tgt_x, int tgt_y);
+                   float tgt_x, float tgt_y);
 
 /* Debug overlay */
 void render_debug_text(const char *text);

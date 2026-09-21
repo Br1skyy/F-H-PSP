@@ -294,16 +294,10 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
 }
 
 /* Lighting composite: ONE fullscreen sprite sampling the baked radial
- * mask, recentered on the player every frame. out = dst × mask.
- * torch_on restores the Fire flicker (radius ±7, the Terrax default);
- * the plain player globe stays steady (playerflicker = false). */
-static void render_light_pass(const Player *player, int cam_x, int cam_y,
-                              int frames, int torch_on) {
-    int px = player->x - cam_x + TILE / 2;
-    int py = player->y - cam_y - 8;
-    float r = (float)LIGHT_R;
-    if (torch_on)
-        r += (float)(((frames * 13) % 15) - 7);
+ * mask, recentered every frame. out = dst × mask. Shared by map and
+ * battle (Terrax darkness continues in battle, above the scene but
+ * below all UI text). */
+static void light_mask_blt(float px, float py, float r) {
     /* Texture px per screen px: texture radius (128) covers world r. */
     float k = ((float)LIGHT_TEX / 2.0f) / r;
     float u0 = (float)LIGHT_TEX / 2.0f - (float)px * k;
@@ -331,6 +325,19 @@ static void render_light_pass(const Player *player, int cam_x, int cam_y,
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);
+}
+
+/* Map light: globe follows the player sprite.
+ * torch_on restores the Fire flicker (radius ±7, the Terrax default);
+ * the plain player globe stays steady (playerflicker = false). */
+static void render_light_pass(const Player *player, int cam_x, int cam_y,
+                              int frames, int torch_on) {
+    float px = (float)(player->x - cam_x) + (float)TILE / 2.0f;
+    float py = (float)(player->y - cam_y) - 8.0f;
+    float r = (float)LIGHT_R;
+    if (torch_on)
+        r += (float)(((frames * 13) % 15) - 7);
+    light_mask_blt(px, py, r);
 }
 
 /* Draw one NPC's paged cell (pattern/dir taken straight from the page). */
@@ -861,7 +868,11 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    int show_targets, const char *banner,
                    unsigned char *actor_t8, unsigned int *actor_cl,
                    int actor_mcol, int actor_mrow,
-                   int tgt_x, int tgt_y) {
+                   const char *targets[], int ntargets, int tcursor,
+                   int show_targets, const char *banner,
+                   unsigned char *actor_t8, unsigned int *actor_cl,
+                   int actor_mcol, int actor_mrow,
+                   float tgt_x, float tgt_y) {
     /* Backdrop: mines tunnel, centered native (scissor clips overflow).
      * Falls back to flat maroon when the art is missing. */
     sceGuDisable(GU_TEXTURE_2D);
@@ -953,6 +964,11 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     TVert *v = (TVert *)sceGuGetMemory(
         (cmdtotal + targtotal + poptotal + bannerlen + 1) * 2 * sizeof(TVert));
     TVert *vp = v;
+    /* Battle vignette: same Terrax darkness over the scene, below UI.
+     * Wide steady pool covers party and troop (targeting stays readable;
+     * edges fall to black like the map). */
+    light_mask_blt(200.0f, 160.0f, 220.0f);
+
     /* Text pass needs the font texture bound (blend + alpha test were
      * left disabled by the actor draw above — without them every glyph
      * cell renders as a solid box). */

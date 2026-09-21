@@ -137,13 +137,14 @@ static void btl_resolve_skills(void) {
     }
 }
 
-static void btl_foe_xy(int i, int *x, int *y) {
+static void btl_foe_xy(int i, float *x, float *y) {
     int seen = -1;
     for (int k = 0; TROOP_MB[k].troop; k++) {
         if (TROOP_MB[k].troop != 1) continue;
         if (++seen == i) {
-            *x = TROOP_MB[k].x * SCR_W / 816;
-            *y = TROOP_MB[k].y * SCR_H / 624;
+            /* Float precision: integer truncation here shifts limbs. */
+            *x = (float)TROOP_MB[k].x * (float)SCR_W / 816.0f;
+            *y = (float)TROOP_MB[k].y * (float)SCR_H / 624.0f;
             return;
         }
     }
@@ -152,12 +153,12 @@ static void btl_foe_xy(int i, int *x, int *y) {
 }
 
 static void btl_popup(int foe_idx, int value, int kind) {
-    int x, y;
+    float x, y;
     btl_foe_xy(foe_idx, &x, &y);
     for (int i = 0; i < 8; i++) {
         if (btl_pops[i].ttl <= 0) {
-            btl_pops[i].x = x;
-            btl_pops[i].y = y - 60;
+            btl_pops[i].x = (int)x;
+            btl_pops[i].y = (int)y - 60;
             btl_pops[i].value = value;
             btl_pops[i].kind = kind;
             btl_pops[i].ttl = btl_pops[i].max = 45;
@@ -980,7 +981,7 @@ int main(int argc, char *argv[]) {
             /* Render the battle. */
             BtFoeDraw draws[7];
             for (int i = 0; i < 7; i++) {
-                int x, y;
+                float x, y;
                 btl_foe_xy(i, &x, &y);
                 int r = 0;
                 while (FOE_DB[r].id && FOE_DB[r].id != btl.f[1 + i].ref) r++;
@@ -1017,13 +1018,13 @@ int main(int argc, char *argv[]) {
             sceGuClearColor(0xff000000);
             sceGuClear(GU_COLOR_BUFFER_BIT);
             /* Target marker position (aimed limb, target phase only). */
-            int mtx = -1, mty = -1;
+            float mtx = -1.0f, mty = -1.0f;
             if (btl_phase == 1) {
                 int seen = 0;
                 for (int i = 0; i < 7; i++) {
                     if (!btl.f[1 + i].alive) continue;
                     if (seen == tcursor) {
-                        int fx, fy;
+                        float fx, fy;
                         btl_foe_xy(i, &fx, &fy);
                         int r = 0;
                         while (FOE_DB[r].id &&
