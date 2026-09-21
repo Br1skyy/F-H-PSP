@@ -20,7 +20,7 @@
 #include "../../runtime/player.h"
 #include "../../runtime/battle.h"
 #include "event_demo.h"
-#include "battle_demo.h"
+#include "battle_db.h"
 
 PSP_MODULE_INFO("F&H port", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -97,15 +97,58 @@ static int btl_banner_t;
 static int btl_actor_row;
 static int btl_pose_col, btl_pose_row, btl_pose_t;
 
+/* Resolved skill cache (programs decoded from formulas.bin at battle
+ * start; BtIns is 16B, on-disk ins are 10B — never cast). */
+static BtSkill btl_skills[4];
+static BtIns btl_progbuf[4][24];
+
 static const BtSkill *btl_skill(int id) {
-    for (int i = 0; i < 5; i++)
-        if (DEMO_SKILLS[i].id == id) return &DEMO_SKILLS[i];
-    return &DEMO_SKILLS[0];
+    for (int i = 0; i < 4; i++)
+        if (btl_skills[i].id == id) return &btl_skills[i];
+    return &btl_skills[0];
+}
+
+static void btl_resolve_skills(void) {
+    extern unsigned char d_form_start[];
+    static const int ids[4] = {1, 3, 4, 5};
+    for (int i = 0; i < 4; i++) {
+        const unsigned char *raw = NULL;
+        int n = bt_prog_find(d_form_start, 0, ids[i], &raw);
+        btl_skills[i].id = ids[i];
+        btl_skills[i].prog = btl_progbuf[i];
+        btl_skills[i].nins = 0;
+        if (raw && n > 0 && n <= 24) {
+            for (int k = 0; k < n; k++)
+                bt_ins_get(raw + (unsigned)k * 10u, &btl_progbuf[i][k]);
+            btl_skills[i].nins = n;
+        }
+        for (int k = 0; SKILL_DB[k].id; k++) {
+            if (SKILL_DB[k].id == ids[i]) {
+                btl_skills[i].hit_type = SKILL_DB[k].hit;
+                btl_skills[i].scope = SKILL_DB[k].scope;
+                btl_skills[i].speed = SKILL_DB[k].speed;
+                btl_skills[i].variance = SKILL_DB[k].var;
+                btl_skills[i].element = SKILL_DB[k].elem;
+                btl_skills[i].dmg_type = SKILL_DB[k].type;
+                btl_skills[i].crit = SKILL_DB[k].crit;
+                break;
+            }
+        }
+    }
 }
 
 static void btl_foe_xy(int i, int *x, int *y) {
-    *x = DEMO_TROOP[i].x * SCR_W / 816;
-    *y = DEMO_TROOP[i].y * SCR_H / 624;
+    int seen = -1;
+    for (int k = 0; TROOP_MB[k].troop; k++) {
+        if (TROOP_MB[k].troop != 1) continue;
+        if (++seen == i) {
+            *x = TROOP_MB[k].x * SCR_W / 816;
+            *y = TROOP_MB[k].y * SCR_H / 624;
+            return;
+        }
+    }
+    *x = SCR_W / 2;
+    *y = SCR_H / 2;
 }
 
 static void btl_popup(int foe_idx, int value, int kind) {
@@ -125,60 +168,64 @@ static void btl_popup(int foe_idx, int value, int kind) {
 
 static void btl_start(u64 tick, int char_idx) {
     /* Actor = selected character (fresh copy; map HP untouched). */
-    int want = DEMO_CHAR_ACTOR[char_idx];
+    static const int char_actor[4] = {1, 5, 4, 3};
+    int want = char_actor[char_idx];
     int row = 0;
-    for (int i = 0; i < 4; i++)
-        if (DEMO_ACTORS[i].id == want) row = i;
+    for (; ACTOR_DB[row].id; row++)
+        if (ACTOR_DB[row].id == want) break;
     btl_actor_row = row;
     memset(&btl, 0, sizeof(btl));
     BtF *a = &btl.f[0];
     a->is_foe = 0;
-    a->ref = DEMO_ACTORS[row].id;
-    a->maxhp = a->hp = DEMO_ACTORS[row].mhp;
-    a->maxmp = a->mp = DEMO_ACTORS[row].mmp;
-    a->maxmp = a->mp = DEMO_ACTORS[row].mmp;
-    a->atk = DEMO_ACTORS[row].atk;
-    a->def = DEMO_ACTORS[row].def;
-    a->mat = DEMO_ACTORS[row].mat;
-    a->mdf = DEMO_ACTORS[row].mdf;
-    a->agi = DEMO_ACTORS[row].agi;
-    a->luk = DEMO_ACTORS[row].luk;
-    a->hit = 0.97;
-    a->eva = 0.05;
-    a->cri = 0.04;
+    a->ref = want;
+    a->maxhp = a->hp = ACTOR_DB[row].mhp;
+    a->maxmp = a->mp = ACTOR_DB[row].mmp;
+    a->atk = ACTOR_DB[row].atk;
+    a->def = ACTOR_DB[row].def;
+    a->mat = ACTOR_DB[row].mat;
+    a->mdf = ACTOR_DB[row].mdf;
+    a->agi = ACTOR_DB[row].agi;
+    a->luk = ACTOR_DB[row].luk;
+    a->hit = ACTOR_DB[row].hit;
+    a->eva = ACTOR_DB[row].eva;
+    a->cri = ACTOR_DB[row].cri;
     a->cev = 0.0;
     a->pdr = a->mdr = a->grd = 1.0;
-    for (int i = 0; i < BT_ERATE_N; i++) a->erate[i] = 1.0;
-    a->erate[1] = DEMO_ACTORS[row].er1;
-    a->erate[2] = DEMO_ACTORS[row].er2;
-    a->erate[3] = DEMO_ACTORS[row].er3;
-    a->atk_elem = DEMO_ACTORS[row].elem;
-    a->level = DEMO_ACTORS[row].level;
+    for (int i = 0; i < BT_ERATE_N; i++) a->erate[i] = ACTOR_DB[row].er[i];
+    a->atk_elem = ACTOR_DB[row].elem;
+    a->level = ACTOR_DB[row].level;
+    a->exp_cur = ACTOR_DB[row].exp;
     a->alive = 1;
     btl.n_party = 1;
-    /* Guard1 limbs. */
-    btl.n_foes = 7;
+    /* Troop 1 limbs from TROOP_MB + FOE_DB. */
+    btl.n_foes = 0;
     int tagi = 0;
-    for (int i = 0; i < 7; i++) {
-        BtF *f = &btl.f[1 + i];
+    for (int k = 0; TROOP_MB[k].troop; k++) {
+        if (TROOP_MB[k].troop != 1) continue;
+        int id = TROOP_MB[k].foe, r = 0;
+        for (; FOE_DB[r].id; r++)
+            if (FOE_DB[r].id == id) break;
+        if (!FOE_DB[r].id) continue;
+        BtF *f = &btl.f[1 + btl.n_foes];
         f->is_foe = 1;
-        f->ref = i;
-        f->maxhp = f->hp = DEMO_FOES[i].mhp;
-        f->atk = DEMO_FOES[i].atk;
-        f->def = DEMO_FOES[i].def;
-        f->mat = DEMO_FOES[i].mat;
-        f->mdf = DEMO_FOES[i].mdf;
-        f->agi = DEMO_FOES[i].agi;
-        f->luk = DEMO_FOES[i].luk;
-        f->hit = DEMO_FOES[i].hit;
-        f->eva = DEMO_FOES[i].eva;
+        f->ref = id;
+        f->maxhp = f->hp = FOE_DB[r].mhp;
+        f->atk = FOE_DB[r].atk;
+        f->def = FOE_DB[r].def;
+        f->mat = FOE_DB[r].mat;
+        f->mdf = FOE_DB[r].mdf;
+        f->agi = FOE_DB[r].agi;
+        f->luk = FOE_DB[r].luk;
+        f->hit = FOE_DB[r].hit;
+        f->eva = FOE_DB[r].eva;
         f->cri = 0.0;
         f->cev = 0.0;
         f->pdr = f->mdr = f->grd = 1.0;
-        for (int k = 0; k < BT_ERATE_N; k++) f->erate[k] = 1.0;
-        f->atk_elem = DEMO_FOES[i].elem;
+        for (int e = 0; e < BT_ERATE_N; e++) f->erate[e] = FOE_DB[r].er[e];
+        f->atk_elem = FOE_DB[r].elem;
         f->alive = 1;
         tagi += f->agi;
+        btl.n_foes++;
     }
     btl.turn = 1;
     bt_srand(&btl, (unsigned)(tick & 0xffffffffu));
@@ -202,23 +249,7 @@ static void btl_begin_exec(void) {
         btl_pose_col = 4;
         btl_pose_row = 3;  /* guard motion */
     }
-    for (int i = 0; i < 7; i++) {
-        /* AI tables per limb (Enemies.json actions). */
-        const BtAiAct *tab = NULL;
-        int ntab = 0;
-        if (i == 0) {
-            tab = DEMO_AI_TORSO;
-            ntab = 1;
-        } else if (i == 3) {
-            tab = DEMO_AI_ARM_L;
-            ntab = 1;
-        } else if (i == 6) {
-            tab = DEMO_AI_STING;
-            ntab = 3;
-        }
-        (void)tab;
-        (void)ntab;
-    }
+    btl_resolve_skills();
     btl_norder = bt_order(&btl, btl_order, 12);
     btl_oi = 0;
     btl_wait = 20;
@@ -248,8 +279,8 @@ static int btl_exec_step(void) {
         BtF *tgt = &btl.f[1 + btl_act_target];
         if (!tgt->alive) return 0;
         /* Attack motion by weapon (System.json attackMotions): bow =
-         * missile, blades = swing. Outlander (index 1) carries the bow. */
-        if (btl_actor_row == 3) {
+         * missile, blades = swing (outlander actor id 5 has the bow). */
+        if (btl.f[0].ref == 5) {
             btl_pose_col = 4;
             btl_pose_row = 2;
         } else {
@@ -263,20 +294,21 @@ static int btl_exec_step(void) {
         if (missed || evaded) btl_popup(btl_act_target, 0, 1);
         else btl_popup(btl_act_target, dmg, crit ? 2 : 0);
     } else {
-        int li = sub->ref;
-        const BtAiAct *tab = NULL;
-        int ntab = 0, skill = -1;
-        if (li == 0) {
-            tab = DEMO_AI_TORSO;
-            ntab = 1;
-        } else if (li == 3) {
-            tab = DEMO_AI_ARM_L;
-            ntab = 1;
-        } else if (li == 6) {
-            tab = DEMO_AI_STING;
-            ntab = 3;
+        /* Enemy AI from FOE_AI (baked Enemies.json actions). */
+        static BtAiAct tab[8];
+        int ntab = 0;
+        for (int k = 0; FOE_AI[k].foe; k++) {
+            if (FOE_AI[k].foe == sub->ref && ntab < 8) {
+                tab[ntab].skill = FOE_AI[k].skill;
+                tab[ntab].rating = FOE_AI[k].rating;
+                tab[ntab].ctype = FOE_AI[k].ctype;
+                tab[ntab].cp1 = FOE_AI[k].cp1;
+                tab[ntab].cp2 = FOE_AI[k].cp2;
+                ntab++;
+            }
         }
-        if (tab) {
+        int skill = -1;
+        if (ntab > 0) {
             int pick = bt_ai_pick(&btl, tab, ntab, 2, btl.turn, mit.sw);
             if (pick >= 0) skill = tab[pick].skill;
         }
@@ -301,14 +333,23 @@ static int btl_exec_step(void) {
     /* Battle end after every action. */
     {
         int foes_alive = 0, party_alive = 0;
-        for (int i = 0; i < 7; i++)
+        for (int i = 0; i < btl.n_foes; i++)
             if (btl.f[1 + i].alive) foes_alive++;
         if (btl.f[0].alive) party_alive++;
         if (!foes_alive) {
             btl.over = 1;
+            /* Rewards from TROOP_RW (all zeros in practice: F&H awards no
+             * EXP/gold — loot comes from drops instead). */
             btl.exp_all = 0;
             btl.gold_all = 0;
-            strncpy(btl_banner, "Victory!  EXP 0", sizeof(btl_banner) - 1);
+            for (int k = 0; TROOP_RW[k].id; k++) {
+                if (TROOP_RW[k].id == 1) {
+                    btl.exp_all = TROOP_RW[k].exp;
+                    btl.gold_all = TROOP_RW[k].gold;
+                    break;
+                }
+            }
+            strncpy(btl_banner, "Victory!", sizeof(btl_banner) - 1);
             btl_phase = 3;
         } else if (!party_alive) {
             btl.over = 2;
@@ -390,6 +431,7 @@ extern unsigned char d_e3_start[], d_e3c_start[];
 extern unsigned char d_e4_start[], d_e4c_start[];
 extern unsigned char d_e5_start[], d_e5c_start[];
 extern unsigned char d_e6_start[], d_e6c_start[];
+extern unsigned char d_form_start[];  /* converted/code/formulas.bin */
 extern unsigned char d_bv0_start[], d_bv0c_start[];
 extern unsigned char d_bv1_start[], d_bv1c_start[];
 extern unsigned char d_bv2_start[], d_bv2c_start[];
@@ -940,21 +982,27 @@ int main(int argc, char *argv[]) {
             for (int i = 0; i < 7; i++) {
                 int x, y;
                 btl_foe_xy(i, &x, &y);
+                int r = 0;
+                while (FOE_DB[r].id && FOE_DB[r].id != btl.f[1 + i].ref) r++;
                 draws[i].t8 = foe_t8[i];
                 draws[i].clut = foe_cl[i];
-                draws[i].tw = DEMO_FOE_DIMS[i].tw;
-                draws[i].th = DEMO_FOE_DIMS[i].th;
-                draws[i].stride = DEMO_FOE_DIMS[i].stride;
-                draws[i].w = DEMO_FOE_DIMS[i].w;
-                draws[i].h = DEMO_FOE_DIMS[i].h;
+                draws[i].tw = FOE_DB[r].tw;
+                draws[i].th = FOE_DB[r].th;
+                draws[i].stride = FOE_DB[r].stride;
+                draws[i].w = FOE_DB[r].w;
+                draws[i].h = FOE_DB[r].h;
                 draws[i].x = x;
                 draws[i].y = y;
                 draws[i].alive = btl.f[1 + i].alive;
             }
             const char *targets[7];
             int ntgt = 0;
-            for (int i = 0; i < 7; i++)
-                if (btl.f[1 + i].alive) targets[ntgt++] = DEMO_FOE_NAMES[i];
+            for (int i = 0; i < 7; i++) {
+                if (!btl.f[1 + i].alive) continue;
+                int r = 0;
+                while (FOE_DB[r].id && FOE_DB[r].id != btl.f[1 + i].ref) r++;
+                targets[ntgt++] = FOE_DB[r].id ? FOE_DB[r].name : "?";
+            }
             char st_name[32];
             snprintf(st_name, sizeof(st_name), "%s",
                      characters[current_character].name);
@@ -977,8 +1025,12 @@ int main(int argc, char *argv[]) {
                     if (seen == tcursor) {
                         int fx, fy;
                         btl_foe_xy(i, &fx, &fy);
+                        int r = 0;
+                        while (FOE_DB[r].id &&
+                               FOE_DB[r].id != btl.f[1 + i].ref)
+                            r++;
                         mtx = fx;
-                        mty = fy - DEMO_FOE_DIMS[i].h;
+                        mty = fy - (FOE_DB[r].id ? FOE_DB[r].h : 60);
                         break;
                     }
                     seen++;

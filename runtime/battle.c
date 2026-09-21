@@ -1,6 +1,7 @@
 /* See battle.h. Line-by-line ports noted per function. */
 #include "battle.h"
 #include <math.h>
+#include <stddef.h>
 
 void bt_srand(Bt *bt, unsigned seed) { bt->rng = seed ? seed : 1u; }
 
@@ -64,6 +65,38 @@ double bt_vm(const BtIns *p, int n, const BtF *a, const BtF *b,
         if (sp > 32) sp = 32;
     }
     return sp > 0 ? st[sp - 1] : 0.0;
+}
+
+int bt_prog_find(const unsigned char *blob, int kind, int id,
+                 const unsigned char **out) {
+    *out = NULL;
+    if (!blob) return 0;
+    unsigned n = (unsigned)blob[0] | ((unsigned)blob[1] << 8) |
+                 ((unsigned)blob[2] << 16) | ((unsigned)blob[3] << 24);
+    const unsigned char *p = blob + 4;
+    for (unsigned i = 0; i < n; i++) {
+        int k = p[0];
+        int eid = (int)p[1] | ((int)p[2] << 8);
+        int nins = (int)p[3] | ((int)p[4] << 8);
+        p += 5;
+        if (k == kind && eid == id) {
+            *out = p;
+            return nins;
+        }
+        p += (unsigned)nins * 10u;
+    }
+    return 0;
+}
+
+void bt_ins_get(const unsigned char *raw, BtIns *out) {
+    out->op = raw[0];
+    out->arg = raw[1];
+    {
+        double v = 0.0;
+        unsigned char *d = (unsigned char *)&v;
+        for (int i = 0; i < 8; i++) d[i] = raw[2 + i];
+        out->imm = v;
+    }
 }
 
 int bt_param(int base, int plus, double rate, int stage) {

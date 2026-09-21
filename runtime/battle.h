@@ -48,6 +48,7 @@ typedef struct {
     double erate[BT_ERATE_N];
     int atk_elem;
     int level;
+    long exp_cur;
     int alive, guard;
     int states[BT_MAX_STATES];
     int nstates;
@@ -72,6 +73,16 @@ unsigned bt_randn(Bt *bt, unsigned n);
 /* Formula VM (double math per plan §5.3). vars/switches nullable (0). */
 double bt_vm(const BtIns *p, int n, const BtF *a, const BtF *b,
              const int32_t *vars, const unsigned char *sw);
+
+/* Locate a compiled program in a formulas.bin blob (u32 count, then
+ * u8 kind, u16 id, u16 nins + nins x 10B raw ins). Returns ins count with
+ * *out set to the raw bytes (use bt_ins_get; never cast: on-disk ins are
+ * 10 bytes, BtIns is 16). Kinds: 0 skill, 1 item, ... */
+int bt_prog_find(const unsigned char *blob, int kind, int id,
+                 const unsigned char **out);
+
+/* Decode one raw ins into a BtIns (memcpy: bin doubles are unaligned). */
+void bt_ins_get(const unsigned char *raw, BtIns *out);
 
 /* Full strike pipeline (apply()): hit/eva/crit rolls, makeDamageValue
  * (element, pdr/mdr, critical x3, variance, guard, round), HP applied,

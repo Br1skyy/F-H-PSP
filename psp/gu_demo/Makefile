@@ -12,7 +12,7 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o b
        d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
        d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o \
        d_e0.o d_e0c.o d_e1.o d_e1c.o d_e2.o d_e2c.o d_e3.o d_e3c.o \
-       d_e4.o d_e4c.o d_e5.o d_e5c.o d_e6.o d_e6c.o \
+       d_e4.o d_e4c.o d_e5.o d_e5c.o d_e6.o d_e6c.o d_form.o \
        d_bv0.o d_bv0c.o d_bv1.o d_bv1c.o d_bv2.o d_bv2c.o d_bv3.o d_bv3c.o
 
 INCDIR =
@@ -176,6 +176,8 @@ d_e6.o: data/guard1_stinger.t8
 	bin2o -i data/guard1_stinger.t8 d_e6.o d_e6
 d_e6c.o: data/guard1_stinger.clut
 	bin2o -i data/guard1_stinger.clut d_e6c.o d_e6c
+d_form.o: ../../converted/code/formulas.bin
+	bin2o -i ../../converted/code/formulas.bin d_form.o d_form
 
 # Runtime modules with proper include paths
 player_rt.o: ../../runtime/player.c

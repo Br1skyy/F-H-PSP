@@ -60,14 +60,40 @@ int main(void) {
         printf("info: seeded strike dmg=%d\n", d);
     }
 
-    /* 3. Zero hit always misses (guard left arm vs mercenary). */
+    /* 3. Arm Hack now HITS (hit 0.95 from data, not 0). */
     {
-        BtF a = mk(10, 0, 10, 0.0, 0.0), b = mk(57, 36, 10, 0.97, 0.05);
+        BtF a = mk(10, 0, 10, 0.95, 0.05), b = mk(57, 36, 10, 0.97, 0.05);
         bt_srand(&bt, 7);
         int d = bt_strike(&bt, &SK_ATK, &a, &b, NULL, NULL, &crit, &missed,
                           &evaded);
-        CHECK(missed && d == 0, "zero-hit should miss (m=%d d=%d)", missed,
-              d);
+        CHECK(!missed, "arm should usually hit (m=%d)", missed);
+        (void)d;
+    }
+
+    /* 3b. Head evades 55% (0.05 + 0.5 traits, additive xparam). */
+    {
+        int evades = 0;
+        for (int s = 0; s < 20; s++) {
+            BtF a = mk(57, 0, 10, 1.0, 0.0), b = mk(0, 10, 10, 1.0, 0.55);
+            bt_srand(&bt, 100 + (unsigned)s);
+            int d = bt_strike(&bt, &SK_ATK, &a, &b, NULL, NULL, &crit,
+                              &missed, &evaded);
+            (void)d;
+            if (evaded) evades++;
+        }
+        CHECK(evades > 5 && evades < 17, "head evades=%d/20", evades);
+    }
+
+    /* 3c. Slash takes +15% on limbs (element-rate trait). */
+    {
+        BtF a = mk(57, 0, 10, 1.0, 0.0), b = mk(0, 10, 10, 1.0, 0.0);
+        b.maxhp = b.hp = 5000;
+        b.erate[2] = 1.15;
+        bt_srand(&bt, 1234);
+        int d = bt_strike(&bt, &SK_ATK, &a, &b, NULL, NULL, &crit, &missed,
+                          &evaded);
+        /* base 208 * 1.15 = 239.2, variance on top */
+        CHECK(d >= 191 && d <= 287, "slash-boosted %d", d);
     }
 
     /* 4. Certain hit ignores hit/eva (stinger thrust, element 3). */
@@ -148,6 +174,27 @@ int main(void) {
 
     /* 10. Buffed param: (30 + 27) * 1 * (1 + 0.25) at +1 stage. */
     CHECK(bt_param(30, 27, 1.0, 1) == 71, "buffed atk");
+
+    /* 11. Real formulas.bin decodes skill 1 to 208 (atk 57, def 10). */
+    {
+        FILE *f = fopen("converted/code/formulas.bin", "rb");
+        if (f) {
+            static unsigned char blob[8192];
+            size_t n = fread(blob, 1, sizeof(blob), f);
+            fclose(f);
+            (void)n;
+            const unsigned char *raw = NULL;
+            int nins = bt_prog_find(blob, 0, 1, &raw);
+            CHECK(nins == 8 && raw, "bin skill1 nins=%d", nins);
+            if (raw && nins == 8) {
+                BtIns prog[8];
+                for (int i = 0; i < 8; i++) bt_ins_get(raw + i * 10, &prog[i]);
+                BtF a = mk(57, 0, 10, 1.0, 0.0), b = mk(0, 10, 10, 1.0, 0.0);
+                double v = bt_vm(prog, 8, &a, &b, NULL, NULL);
+                CHECK(v == 208.0, "bin vm %f", v);
+            }
+        }
+    }
 
     if (fails) printf("%d FAILURES\n", fails);
     else printf("ALL PASS\n");
