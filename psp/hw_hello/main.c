@@ -1,7 +1,5 @@
-/* Bare-minimum hardware sanity test: no GU, no threads, no data.
- * If this boots, the toolchain/packaging/firmware path is fine and the
- * freeze is in the game's startup. If this is ALSO black, the issue is
- * environmental (transfer, firmware, packaging) — not game code. */
+
+
 #include <pspkernel.h>
 #include <pspdebug.h>
 #include <pspdisplay.h>

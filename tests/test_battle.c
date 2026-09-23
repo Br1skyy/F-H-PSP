@@ -1,9 +1,8 @@
-/* Golden-master: battle engine (runtime/battle.c) vs hand-derived OG values.
- * Damage pipeline, AI picks, turn order, escape, EXP curve, states.
- * Build: gcc -Wall -O2 -I runtime -o test_battle test_battle.c ../runtime/battle.c -lm && ./test_battle
- */
+
+
 #include <stdio.h>
 #include "../runtime/battle.h"
+#include <string.h>
 
 static int fails = 0;
 #define CHECK(cond, fmt, ...) do { \
@@ -31,22 +30,22 @@ static const BtIns PROG_ATK[] = {
     {14, 0, 0.0}, {0, 0, 4.0}, {3, 0, 0.0}, {15, 1, 0.0},
     {0, 0, 2.0}, {3, 0, 0.0}, {2, 0, 0.0}, {21, 0, 0.0},
 };
-static const BtSkill SK_ATK = {1, 1, 1, 0, 20, -1, 1, 0, PROG_ATK, 8};
+static const BtSkill SK_ATK = {1, 1, 1, 0, 20, -1, 1, 0, 100, PROG_ATK, 8};
 static const BtIns PROG_45[] = { {0, 0, 45.0}, {21, 0, 0.0} };
-static const BtSkill SK_THRUST = {4, 0, 1, 0, 20, 3, 1, 0, PROG_45, 2};
+static const BtSkill SK_THRUST = {4, 0, 1, 0, 20, 3, 1, 0, 100, PROG_45, 2};
 
 int main(void) {
     Bt bt;
     int crit, missed, evaded;
 
-    /* 1. VM: a.atk*4-b.def*2 with atk 57, def 10 -> 208. */
+
     {
         BtF a = mk(57, 0, 10, 1.0, 0.0), b = mk(0, 10, 10, 1.0, 0.0);
         double v = bt_vm(PROG_ATK, 8, &a, &b, NULL, NULL);
         CHECK(v == 208.0, "vm base %f != 208", v);
     }
 
-    /* 2. Full strike, fixed seed: base 208, variance +/-20%%, no crit. */
+
     {
         BtF a = mk(57, 0, 10, 1.0, 0.0), b = mk(0, 10, 10, 1.0, 0.0);
         b.maxhp = b.hp = 1300;
@@ -60,7 +59,7 @@ int main(void) {
         printf("info: seeded strike dmg=%d\n", d);
     }
 
-    /* 3. Arm Hack now HITS (hit 0.95 from data, not 0). */
+
     {
         BtF a = mk(10, 0, 10, 0.95, 0.05), b = mk(57, 36, 10, 0.97, 0.05);
         bt_srand(&bt, 7);
@@ -70,7 +69,7 @@ int main(void) {
         (void)d;
     }
 
-    /* 3b. Head evades 55% (0.05 + 0.5 traits, additive xparam). */
+
     {
         int evades = 0;
         for (int s = 0; s < 20; s++) {
@@ -84,7 +83,7 @@ int main(void) {
         CHECK(evades > 5 && evades < 17, "head evades=%d/20", evades);
     }
 
-    /* 3c. Slash takes +15% on limbs (element-rate trait). */
+
     {
         BtF a = mk(57, 0, 10, 1.0, 0.0), b = mk(0, 10, 10, 1.0, 0.0);
         b.maxhp = b.hp = 5000;
@@ -92,11 +91,11 @@ int main(void) {
         bt_srand(&bt, 1234);
         int d = bt_strike(&bt, &SK_ATK, &a, &b, NULL, NULL, &crit, &missed,
                           &evaded);
-        /* base 208 * 1.15 = 239.2, variance on top */
+
         CHECK(d >= 191 && d <= 287, "slash-boosted %d", d);
     }
 
-    /* 4. Certain hit ignores hit/eva (stinger thrust, element 3). */
+
     {
         BtF a = mk(10, 0, 10, 0.0, 0.0), b = mk(57, 36, 10, 0.97, 0.99);
         b.erate[3] = 1.0;
@@ -107,7 +106,7 @@ int main(void) {
         CHECK(d >= 36 && d <= 54, "thrust %d out of 45+-20%%", d);
     }
 
-    /* 5. Guard halves (same seed both runs; guarded == round(ung/2)). */
+
     {
         BtF a = mk(10, 0, 10, 0.0, 0.0), b = mk(57, 36, 10, 0.97, 0.0);
         b.guard = 1;
@@ -119,12 +118,12 @@ int main(void) {
                        &evaded);
         bt_srand(&bt, 42);
         d2 = bt_strike(&bt, &SK_THRUST, &a, &b, NULL, NULL, &c2, &m2, &e2);
-        /* guarded path divides the identical pre-round value by 2 */
+
         CHECK(d2 * 2 >= d1 - 1 && d2 * 2 <= d1 + 1,
               "guard %d vs unguarded %d", d2, d1);
     }
 
-    /* 6. Death records state 1 and clears alive. */
+
     {
         BtF b = mk(0, 0, 10, 1.0, 0.0);
         b.hp = 5;
@@ -134,7 +133,7 @@ int main(void) {
         CHECK(!b.alive && b.hp == 0 && bt_has_state(&b, 1), "death not set");
     }
 
-    /* 7. Turn order: agi desc; actor wins ties vs limbs. */
+
     {
         bt.n_party = 1;
         bt.n_foes = 2;
@@ -149,7 +148,7 @@ int main(void) {
               "order wrong (%d,%d,%d)", out[0], out[1], out[2]);
     }
 
-    /* 8. AI: torso idle with switches off; arm hacks; stinger valid pick. */
+
     {
         unsigned char sw[64] = {0};
         BtAiAct torso[] = {{6, 5, 6, 17, 0}};
@@ -162,7 +161,7 @@ int main(void) {
         CHECK(p >= 0 && p < 3, "stinger pick %d", p);
     }
 
-    /* 9. EXP curve (class [19,38,50,10]): 45/107/194/316 at lv 2..5. */
+
     {
         long e2 = bt_exp_for(2, 19, 38, 50, 10);
         long e3 = bt_exp_for(3, 19, 38, 50, 10);
@@ -172,10 +171,10 @@ int main(void) {
               "exp %ld %ld %ld %ld", e2, e3, e4, e5);
     }
 
-    /* 10. Buffed param: (30 + 27) * 1 * (1 + 0.25) at +1 stage. */
+
     CHECK(bt_param(30, 27, 1.0, 1) == 71, "buffed atk");
 
-    /* 11. Real formulas.bin decodes skill 1 to 208 (atk 57, def 10). */
+
     {
         FILE *f = fopen("converted/code/formulas.bin", "rb");
         if (f) {
@@ -194,6 +193,107 @@ int main(void) {
                 CHECK(v == 208.0, "bin vm %f", v);
             }
         }
+    }
+
+
+    {
+
+        BtSkill mp = {9, 0, 1, 0, 0, 0, 2, 0, 100, PROG_45, 2};
+        Bt bt2;
+        memset(&bt2, 0, sizeof(bt2));
+        BtF a = mk(10, 10, 10, 1.0, 0.0), b = mk(10, 10, 10, 1.0, 0.0);
+        a.alive = b.alive = 1;
+        b.maxmp = b.mp = 100;
+        bt_srand(&bt2, 7);
+        int c0, m0, e0;
+        int d = bt_strike(&bt2, &mp, &a, &b, NULL, NULL, &c0, &m0, &e0);
+        CHECK(d == 45 && b.mp == 55 && b.hp == 100 && b.alive,
+              "mpdmg d=%d mp=%d", d, b.mp);
+
+        BtSkill hr = {9, 0, 7, 0, 0, 0, 3, 0, 100, PROG_45, 2};
+        b.hp = 60;
+        d = bt_strike(&bt2, &hr, &a, &b, NULL, NULL, &c0, &m0, &e0);
+        CHECK(d == 45 && b.hp == 100, "hprec d=%d hp=%d", d, b.hp);
+
+        BtSkill dr = {9, 1, 1, 0, 0, 3, 5, 0, 100, PROG_45, 2};
+        a.hit = 1.0;
+        b.hp = 100;
+        a.hp = 50;
+        a.maxhp = 100;
+        d = bt_strike(&bt2, &dr, &a, &b, NULL, NULL, &c0, &m0, &e0);
+        CHECK(d == 45 && b.hp == 55 && a.hp == 95,
+              "drain d=%d bhp=%d ahp=%d", d, b.hp, a.hp);
+    }
+
+
+    {
+        BtSkill hack = {3, 1, 1, 0, 20, 2, 1, 0, 90, PROG_45, 2};
+        Bt bt2;
+        memset(&bt2, 0, sizeof(bt2));
+        BtF a = mk(50, 10, 10, 1.0, 0.0), b = mk(10, 10, 10, 1.0, 0.0);
+        a.alive = b.alive = 1;
+        bt_srand(&bt2, 1234);
+        int misses = 0;
+        for (int s = 0; s < 40; s++) {
+            int c0, m0, e0;
+            b.hp = 100;
+            b.alive = 1;
+            bt_strike(&bt2, &hack, &a, &b, NULL, NULL, &c0, &m0, &e0);
+            misses += m0;
+        }
+        CHECK(misses > 0 && misses < 40, "succ90 misses=%d/40", misses);
+    }
+
+
+    {
+        Bt bt2;
+        memset(&bt2, 0, sizeof(bt2));
+        BtF a = mk(10, 10, 10, 1.0, 0.0), b = mk(10, 10, 10, 1.0, 0.0);
+        a.alive = b.alive = 1;
+        a.luk = b.luk = 10;
+        int res[8], nres = 0;
+
+        BtFx fx1[] = {{11, 0, 0.5, 0}};
+        b.hp = 20;
+        bt_srand(&bt2, 1);
+        bt_apply_fx(&bt2, &a, &b, fx1, 1, 1, 0, 0.0, res, &nres);
+        CHECK(b.hp == 70, "fx11 hp=%d", b.hp);
+
+        BtFx fx2[] = {{21, 18, 1.0, 0}};
+        bt_apply_fx(&bt2, &a, &b, fx2, 1, 1, 0, 0.0, res, &nres);
+        CHECK(bt_has_state(&b, 18), "fx21 state18");
+
+        BtFx fx3[] = {{22, 18, 1.0, 0}};
+        bt_apply_fx(&bt2, &a, &b, fx3, 1, 1, 0, 0.0, res, &nres);
+        CHECK(!bt_has_state(&b, 18), "fx22 state18 gone");
+
+        BtFx fx4[] = {{31, 2, 1.0, 0}};
+        bt_apply_fx(&bt2, &a, &b, fx4, 1, 1, 0, 0.0, res, &nres);
+        CHECK(b.buff[2] == 1, "fx31 buff=%d", b.buff[2]);
+        BtFx fx5[] = {{33, 2, 0.0, 0}};
+        bt_apply_fx(&bt2, &a, &b, fx5, 1, 1, 0, 0.0, res, &nres);
+        CHECK(b.buff[2] == 0, "fx33 buff=%d", b.buff[2]);
+
+        BtFx fx6[] = {{44, 145, 1.0, 0}};
+        bt_apply_fx(&bt2, &a, &b, fx6, 1, 1, 0, 0.0, res, &nres);
+        CHECK(nres == 0, "fx44 ignored nres=%d", nres);
+    }
+
+
+    {
+        Bt bt2;
+        memset(&bt2, 0, sizeof(bt2));
+        bt2.n_party = 1;
+        bt2.n_foes = 1;
+        bt2.f[0] = mk(10, 10, 50, 1.0, 0.0);
+        bt2.f[0].is_foe = 0;
+        bt2.f[1] = mk(10, 10, 60, 1.0, 0.0);
+        bt2.f[1].is_foe = 1;
+        int spd[2] = {2000, 0};
+        int out[4];
+        bt_srand(&bt2, 5);
+        int n = bt_order_act(&bt2, spd, out, 4);
+        CHECK(n >= 2 && out[0] == 0, "guard-first (%d,%d)", out[0], out[1]);
     }
 
     if (fails) printf("%d FAILURES\n", fails);

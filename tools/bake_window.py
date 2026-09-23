@@ -51,7 +51,7 @@ def main() -> None:
         clut += struct.pack('<I', 0xFF000000 | (b << 16) | (g << 8) | r)
 
     stride = 256
-    tex_h = 256  # pad 192 -> pow2 height for TexImage
+    tex_h = 256
     padded = bytearray(stride * tex_h)
     for y in range(h):
         padded[y * stride:y * stride + w] = idx[y * w:(y + 1) * w]

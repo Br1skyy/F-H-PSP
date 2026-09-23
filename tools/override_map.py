@@ -33,7 +33,7 @@ def main():
         src = f.read_text(encoding='utf-8', errors='ignore')
         for cls, meth in pat.findall(src):
             touch[f'{cls}.{meth}'].append(p['name'])
-        # crude obfuscation heuristic: tiny file with very long lines, or no header comment
+
         lines = src.splitlines()
         avglen = sum(len(l) for l in lines[:50]) / max(1, len(lines[:50]))
         if (len(lines) < 30 and avglen > 300) or '_0x' in src[:2000]:

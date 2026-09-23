@@ -16,8 +16,8 @@ import pathlib
 import sys
 
 CHAR_DIR = pathlib.Path('converted/characters')
-# Demo-roster stems (dims/stride read from each .meta.json; --dir switches
-# the category for enemy sheets, which have arbitrary sizes).
+
+
 SHEETS = [
     'mercenary_torch', 'outlander_torch', 'dark_priest_torch', 'knight_torch',
     'mercenary', 'outlander', 'dark_priest', 'knight',
@@ -68,7 +68,7 @@ def pad_sheet(name: str) -> None:
     raw = t8.read_bytes()
     assert len(raw) == w * h, f'{name}: expected {w*h}, got {len(raw)}'
     linear_old = deswizzle8(raw, w, h)
-    linear_new = bytearray(new_w * new_h)  # zero = transparent index 0
+    linear_new = bytearray(new_w * new_h)
     for y in range(h):
         linear_new[y * new_w:y * new_w + w] = linear_old[y * w:(y + 1) * w]
     swiz = swizzle8(bytes(linear_new), new_w, new_h)

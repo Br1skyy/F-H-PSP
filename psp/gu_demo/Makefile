@@ -13,7 +13,15 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o b
        d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o \
        d_e0.o d_e0c.o d_e1.o d_e1c.o d_e2.o d_e2c.o d_e3.o d_e3c.o \
        d_e4.o d_e4c.o d_e5.o d_e5c.o d_e6.o d_e6c.o d_form.o \
-       d_bv0.o d_bv0c.o d_bv1.o d_bv1c.o d_bv2.o d_bv2c.o d_bv3.o d_bv3c.o
+       d_b0.o d_b0c.o d_b1.o d_b1c.o d_b2.o d_b2c.o d_b3.o d_b3c.o \
+       d_b4.o d_b4c.o d_b5.o d_b5c.o \
+       d_an0.o d_an0c.o d_an1.o d_an1c.o d_an2.o d_an2c.o d_an3.o d_an3c.o \
+       d_an4.o d_an4c.o d_an5.o d_an5c.o \
+       d_an6.o d_an6c.o d_an7.o d_an7c.o d_ico.o d_icoc.o \
+       d_bv0a.o d_bv0ac.o d_bv0b.o d_bv0bc.o \
+       d_bv1a.o d_bv1ac.o d_bv1b.o d_bv1bc.o \
+       d_bv2a.o d_bv2ac.o d_bv2b.o d_bv2bc.o \
+       d_bv3a.o d_bv3ac.o d_bv3b.o d_bv3bc.o
 
 INCDIR =
 CFLAGS = -Wall -O2 -G0
@@ -33,7 +41,7 @@ include $(PSPSDK)/lib/build.mak
 
 # We use no networking: drop the SDK's default net libs. They drag in
 # kernel-only imports (sceNetInet, SysclibForKernel, ...) which a user-mode
-# homebrew must not carry — PPSSPP tolerates them, real hardware does not.
+# homebrew must not carry - PPSSPP tolerates them, real hardware does not.
 LIBS := $(filter-out -lpspnet -lpspnet_apctl,$(LIBS))
 
 # Embedded demo data: single-file EBOOT (no MS file I/O). Regenerate on
@@ -114,22 +122,38 @@ d_floor.o: data/floor1.t8
 	bin2o -i data/floor1.t8 d_floor.o d_floor
 d_floorc.o: data/floor1.clut
 	bin2o -i data/floor1.clut d_floorc.o d_floorc
-d_bv0.o: data/bv_Actor1_1.t8
-	bin2o -i data/bv_Actor1_1.t8 d_bv0.o d_bv0
-d_bv0c.o: data/bv_Actor1_1.clut
-	bin2o -i data/bv_Actor1_1.clut d_bv0c.o d_bv0c
-d_bv1.o: data/bv_knight1_1.t8
-	bin2o -i data/bv_knight1_1.t8 d_bv1.o d_bv1
-d_bv1c.o: data/bv_knight1_1.clut
-	bin2o -i data/bv_knight1_1.clut d_bv1c.o d_bv1c
-d_bv2.o: data/bv_darkpriest1_1.t8
-	bin2o -i data/bv_darkpriest1_1.t8 d_bv2.o d_bv2
-d_bv2c.o: data/bv_darkpriest1_1.clut
-	bin2o -i data/bv_darkpriest1_1.clut d_bv2c.o d_bv2c
-d_bv3.o: data/bv_outlander1_1.t8
-	bin2o -i data/bv_outlander1_1.t8 d_bv3.o d_bv3
-d_bv3c.o: data/bv_outlander1_1.clut
-	bin2o -i data/bv_outlander1_1.clut d_bv3c.o d_bv3c
+d_bv0a.o: data/bv_Actor1_1a.t8
+	bin2o -i data/bv_Actor1_1a.t8 d_bv0a.o d_bv0a
+d_bv0ac.o: data/bv_Actor1_1a.clut
+	bin2o -i data/bv_Actor1_1a.clut d_bv0ac.o d_bv0ac
+d_bv0b.o: data/bv_Actor1_1b.t8
+	bin2o -i data/bv_Actor1_1b.t8 d_bv0b.o d_bv0b
+d_bv0bc.o: data/bv_Actor1_1b.clut
+	bin2o -i data/bv_Actor1_1b.clut d_bv0bc.o d_bv0bc
+d_bv1a.o: data/bv_knight1_1a.t8
+	bin2o -i data/bv_knight1_1a.t8 d_bv1a.o d_bv1a
+d_bv1ac.o: data/bv_knight1_1a.clut
+	bin2o -i data/bv_knight1_1a.clut d_bv1ac.o d_bv1ac
+d_bv1b.o: data/bv_knight1_1b.t8
+	bin2o -i data/bv_knight1_1b.t8 d_bv1b.o d_bv1b
+d_bv1bc.o: data/bv_knight1_1b.clut
+	bin2o -i data/bv_knight1_1b.clut d_bv1bc.o d_bv1bc
+d_bv2a.o: data/bv_darkpriest1_1a.t8
+	bin2o -i data/bv_darkpriest1_1a.t8 d_bv2a.o d_bv2a
+d_bv2ac.o: data/bv_darkpriest1_1a.clut
+	bin2o -i data/bv_darkpriest1_1a.clut d_bv2ac.o d_bv2ac
+d_bv2b.o: data/bv_darkpriest1_1b.t8
+	bin2o -i data/bv_darkpriest1_1b.t8 d_bv2b.o d_bv2b
+d_bv2bc.o: data/bv_darkpriest1_1b.clut
+	bin2o -i data/bv_darkpriest1_1b.clut d_bv2bc.o d_bv2bc
+d_bv3a.o: data/bv_outlander1_1a.t8
+	bin2o -i data/bv_outlander1_1a.t8 d_bv3a.o d_bv3a
+d_bv3ac.o: data/bv_outlander1_1a.clut
+	bin2o -i data/bv_outlander1_1a.clut d_bv3ac.o d_bv3ac
+d_bv3b.o: data/bv_outlander1_1b.t8
+	bin2o -i data/bv_outlander1_1b.t8 d_bv3b.o d_bv3b
+d_bv3bc.o: data/bv_outlander1_1b.clut
+	bin2o -i data/bv_outlander1_1b.clut d_bv3bc.o d_bv3bc
 d_fontadv.o: data/font_adv.bin
 	bin2o -i data/font_adv.bin d_fontadv.o d_fontadv
 d_tmerc.o: data/mercenary_torch.t8
@@ -176,6 +200,66 @@ d_e6.o: data/guard1_stinger.t8
 	bin2o -i data/guard1_stinger.t8 d_e6.o d_e6
 d_e6c.o: data/guard1_stinger.clut
 	bin2o -i data/guard1_stinger.clut d_e6c.o d_e6c
+d_b0.o: data/bal_torso.t8
+	bin2o -i data/bal_torso.t8 d_b0.o d_b0
+d_b0c.o: data/bal_torso.clut
+	bin2o -i data/bal_torso.clut d_b0c.o d_b0c
+d_b1.o: data/bal_head.t8
+	bin2o -i data/bal_head.t8 d_b1.o d_b1
+d_b1c.o: data/bal_head.clut
+	bin2o -i data/bal_head.clut d_b1c.o d_b1c
+d_b2.o: data/bal_ballista.t8
+	bin2o -i data/bal_ballista.t8 d_b2.o d_b2
+d_b2c.o: data/bal_ballista.clut
+	bin2o -i data/bal_ballista.clut d_b2c.o d_b2c
+d_b3.o: data/bal_legR.t8
+	bin2o -i data/bal_legR.t8 d_b3.o d_b3
+d_b3c.o: data/bal_legR.clut
+	bin2o -i data/bal_legR.clut d_b3c.o d_b3c
+d_b4.o: data/bal_legL.t8
+	bin2o -i data/bal_legL.t8 d_b4.o d_b4
+d_b4c.o: data/bal_legL.clut
+	bin2o -i data/bal_legL.clut d_b4c.o d_b4c
+d_b5.o: data/bal_stinger.t8
+	bin2o -i data/bal_stinger.t8 d_b5.o d_b5
+d_b5c.o: data/bal_stinger.clut
+	bin2o -i data/bal_stinger.clut d_b5c.o d_b5c
+d_an0.o: data/anim_coin_flip.t8
+	bin2o -i data/anim_coin_flip.t8 d_an0.o d_an0
+d_an0c.o: data/anim_coin_flip.clut
+	bin2o -i data/anim_coin_flip.clut d_an0c.o d_an0c
+d_an1.o: data/anim_pinecone_pig.t8
+	bin2o -i data/anim_pinecone_pig.t8 d_an1.o d_an1
+d_an1c.o: data/anim_pinecone_pig.clut
+	bin2o -i data/anim_pinecone_pig.clut d_an1c.o d_an1c
+d_an2.o: data/anim_bloodsplurt.t8
+	bin2o -i data/anim_bloodsplurt.t8 d_an2.o d_an2
+d_an2c.o: data/anim_bloodsplurt.clut
+	bin2o -i data/anim_bloodsplurt.clut d_an2c.o d_an2c
+d_an3.o: data/anim_blood_shot.t8
+	bin2o -i data/anim_blood_shot.t8 d_an3.o d_an3
+d_an3c.o: data/anim_blood_shot.clut
+	bin2o -i data/anim_blood_shot.clut d_an3c.o d_an3c
+d_an4.o: data/anim_bugs1.t8
+	bin2o -i data/anim_bugs1.t8 d_an4.o d_an4
+d_an4c.o: data/anim_bugs1.clut
+	bin2o -i data/anim_bugs1.clut d_an4c.o d_an4c
+d_an5.o: data/anim_bugs2.t8
+	bin2o -i data/anim_bugs2.t8 d_an5.o d_an5
+d_an5c.o: data/anim_bugs2.clut
+	bin2o -i data/anim_bugs2.clut d_an5c.o d_an5c
+d_an6.o: data/anim_slash1.t8
+	bin2o -i data/anim_slash1.t8 d_an6.o d_an6
+d_an6c.o: data/anim_slash1.clut
+	bin2o -i data/anim_slash1.clut d_an6c.o d_an6c
+d_an7.o: data/anim_needle_worm.t8
+	bin2o -i data/anim_needle_worm.t8 d_an7.o d_an7
+d_an7c.o: data/anim_needle_worm.clut
+	bin2o -i data/anim_needle_worm.clut d_an7c.o d_an7c
+d_ico.o: data/icon_IconSet.t8
+	bin2o -i data/icon_IconSet.t8 d_ico.o d_ico
+d_icoc.o: data/icon_IconSet.clut
+	bin2o -i data/icon_IconSet.clut d_icoc.o d_icoc
 d_form.o: ../../converted/code/formulas.bin
 	bin2o -i ../../converted/code/formulas.bin d_form.o d_form
 
@@ -184,3 +268,20 @@ player_rt.o: ../../runtime/player.c
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
 battle_rt.o: ../../runtime/battle.c
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
+
+# interp_rt/text_rt/map_runtime are copies of runtime sources: refresh
+# automatically so the EBOOT can never pin a stale copy again (past
+# incidents: 111-4/5, RNG, 340, mirror).
+interp_rt.c: ../../runtime/interp.c
+	sed '1s/.*/\/\* COPY of runtime\/interp.c - see runtime\/. Refresh with cp. \*\//; s/#include "interp.h"/#include "interp_rt.h"/' ../../runtime/interp.c > interp_rt.c
+interp_rt.h: ../../runtime/interp.h
+	sed 's/FH_INTERP_H/FH_INTERP_RT_H/g' ../../runtime/interp.h > interp_rt.h
+interp_rt.o: interp_rt.c interp_rt.h
+text_rt.c: ../../runtime/text.c
+	sed '1s/.*/\/\* COPY of runtime\/text.c - see runtime\/. Refresh with cp. \*\//; s/#include "text.h"/#include "text_rt.h"/' ../../runtime/text.c > text_rt.c
+text_rt.h: ../../runtime/text.h
+	sed 's/FH_TEXT_H/FH_TEXT_RT_H/g' ../../runtime/text.h > text_rt.h
+map_runtime.c: ../../runtime/map.c
+	sed '1s/.*/\/\* COPY of runtime\/map.c - see runtime\/. Refresh with cp. \*\//; s/#include "map.h"/#include "map_runtime.h"/' ../../runtime/map.c > map_runtime.c
+map_runtime.h: ../../runtime/map.h
+	sed 's/FH_MAP_H/FH_MAP_RUNTIME_H/g' ../../runtime/map.h > map_runtime.h

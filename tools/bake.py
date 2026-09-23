@@ -19,10 +19,7 @@ Verifies: unmatched branches == 0; table sizes; passability spot checks.
 """
 import json, sys, pathlib, struct
 
-# Commands whose false/mismatch path is skipBranch (next cmd with indent <=
-# mine, else list end). Ports Game_Interpreter.skipBranch + command111/411/
-# 402/403/601/602/603 (rpg_objects.js). 403 (cancel) is symmetric to 402.
-# 411 included: command411 skips the else body when branch != false.
+
 SKIP_CMDS = (111, 411, 402, 403, 601, 602, 603)
 
 def resolve_jumps(lst):
@@ -42,15 +39,15 @@ def resolve_jumps(lst):
             j = next((k for k in range(i + 1, n) if inds[k] <= inds[i]), n)
             jumps[i] = j
         elif code == 413:
-            # Game_Interpreter.command413: scan back to same indent (the 112)
+
             j = next((k for k in range(i - 1, -1, -1) if inds[k] == inds[i]), None)
             if j is not None and codes[j] == 112:
                 jumps[i] = j
             else:
                 problems.append({'index': i, 'code': 413, 'reason': 'no matching 112'})
         elif code == 113:
-            # Game_Interpreter.command113: forward scan, depth-counted, to a 413
-            # with indent strictly less than mine
+
+
             depth, j = 0, None
             for k in range(i + 1, n):
                 if codes[k] == 112:
@@ -64,18 +61,17 @@ def resolve_jumps(lst):
             if j is not None:
                 jumps[i] = j
             else:
-                # Engine behavior: scan runs off the list end, so 113 outside
-                # a loop aborts the event (jump past end). Used 6676x in this
-                # game as an early-exit idiom — replicate, don't flag.
+
+
                 jumps[i] = n
                 problems.append({'index': i, 'code': 113, 'reason': 'break-outside-loop: jump to end (engine-faithful)'})
         elif code == 119:
-            # command119: whole-list scan for a 118 with the same name
+
             nm = str((lst[i].get('parameters', [''])[0] if isinstance(lst[i], dict) else ''))
             jumps[i] = labels.get(nm, n)
             if nm not in labels:
                 problems.append({'index': i, 'code': 119, 'reason': f'label {nm!r} missing: fall through (engine-faithful)'})
-    # soft expectations (editor-shaped data should satisfy these)
+
     expect = {111: (411, 412), 411: (412,), 402: (402, 403, 404), 403: (404,),
               601: (602, 603, 604), 602: (603, 604), 603: (604,)}
     for i, j in jumps.items():
@@ -105,7 +101,7 @@ def main():
     def load(n): return json.loads((data / n).read_text(encoding='utf-8'))
     tilesets = load('Tilesets.json')
 
-    # ---- 1. jumps ----
+
     jumps, problems, n_openers = {}, [], 0
     def bake_list(lst, key):
         j, p = resolve_jumps(lst)
@@ -133,7 +129,7 @@ def main():
     print(f'jumps: {total_openers} skip/loop cmds in {len(jumps)} lists, '
           f'notes={len(problems)} ' + str(dict(_c.Counter(p["reason"] for p in problems))))
 
-    # ---- 2. passability ----
+
     nmaps = 0
     for f in sorted(data.glob('Map[0-9]*.json')):
         d = load(f.name)
@@ -146,22 +142,22 @@ def main():
             for x in range(w):
                 tiles = [raw[(z * h + y) * w + x] or 0 for z in (3, 2, 1, 0)]
                 m = 0
-                for bit_i, bit in ((0, 1), (1, 2), (2, 4), (3, 8)):  # down left right up
+                for bit_i, bit in ((0, 1), (1, 2), (2, 4), (3, 8)):
                     if check_passage(flags, tiles, bit):
                         m |= 1 << bit_i
                 mask[y * w + x] = m
         (out / 'passability' / (f.stem + '.bin')).write_bytes(bytes(mask))
         nmaps += 1
-    # spot checks: empty tile (id 0, flag 0) is passable-overridable...
+
     print(f'passability: {nmaps} maps baked')
 
-    # ---- 3. autotile tables (copied from rpg_core.js:5386+, verified sizes) ----
+
     import re
     src = (game / 'js/rpg_core.js').read_text(encoding='utf-8')
     def grab(name):
         m = re.search(name + r'\s*=\s*\[(.*?)\];', src, re.S)
         return json.loads('[' + m.group(1).replace(']', '],').rstrip(',') + ']')
-    # simpler: tables are pure [[a,b],...] literals — parse as JSON directly
+
     def grab2(name):
         m = re.search(name + r'\s*=\s*(\[.*?\]);', src, re.S)
         return json.loads(m.group(1))
@@ -175,7 +171,7 @@ def main():
     (out / 'autotiles.json').write_text(json.dumps(auto))
     print('autotiles: FLOOR=48 WALL=16 WATERFALL=4 OK')
 
-    # ---- 4. animations ----
+
     anims = []
     for a in filter(None, load('Animations.json') or []):
         anims.append({'id': a['id'], 'name': a['name'],

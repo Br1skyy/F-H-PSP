@@ -1,4 +1,4 @@
-/* Input handling implementation */
+
 #include "input.h"
 #include <string.h>
 

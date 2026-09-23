@@ -1,12 +1,5 @@
-/* Quad dump driver for the §3.5 diff: reads raw layer tileIds (u16 LE,
- * z-major, 4 layers) + dims, resolves every tile via runtime/map.c, and
- * prints quad rows identical in format to tools/render_map.py --dump-quads:
- *   normal:   "z x y slot su sv 48 48"
- *   autotile: "z x y qi slot su sv 24 24" (qi 0..3, dx=x*48+(qi%2)*24 ...)
- *
- * Build: gcc -Wall -O2 -o dump_quads dump_quads.c ../runtime/map.c
- * Usage: ./dump_quads W H layers.bin > quads_c.txt
- */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -34,8 +27,8 @@ int main(int argc, char **argv) {
                     if (!fh_auto_cell(tid, &set, &bx, &by, &table)) continue;
                     int shape = fh_auto_shape(tid);
                     const int (*tab)[2] = NULL;
-                    /* engine: autotileTable[shape] is undefined (skipped) when
-                     * shape exceeds the table — replicate, don't wrap. */
+
+
                     if (table == 0) tab = FH_AUTO_FLOOR[shape];
                     else if (table == 1 && shape < 16) tab = FH_AUTO_WALL[shape];
                     else if (table == 2 && shape < 4) tab = FH_AUTO_WATERFALL[shape];

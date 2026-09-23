@@ -13,7 +13,7 @@ import sys, pathlib, json
 
 def decrypt_bytes(blob: bytes, key_hex: str) -> bytes:
     key = bytes.fromhex(key_hex)
-    body = bytearray(blob[16:])  # drop fake header
+    body = bytearray(blob[16:])
     for i in range(16):
         body[i] ^= key[i]
     return bytes(body)

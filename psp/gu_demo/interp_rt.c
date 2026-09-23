@@ -1,4 +1,5 @@
-/* COPY of runtime/interp.c — see runtime/. Refresh with cp. */
+/* COPY of runtime/interp.c - see runtime/. Refresh with cp. */
+
 #include "interp_rt.h"
 #include <string.h>
 #include <stdio.h>
@@ -8,7 +9,8 @@ void fh_interp_init(FhInterp *it, const FhCmd *list, int len) {
     memset(it, 0, sizeof(*it));
     it->list = list;
     it->len = len;
-    /* engine defaults (all enabled/visible unless the game disables them) */
+    it->rng = 1;
+
     it->save_on = 1;
     it->encounter_on = 1;
     it->formation_on = 1;
@@ -27,9 +29,45 @@ static void emit_text(FhInterp *it, const char *s) {
 }
 
 static int eval_111(const FhInterp *it, const FhCmd *c) {
-    /* op: cond type. type 0 = switch, type 1 = variable, type 8 = party
-     * possesses item (p[0] = item id, e.g. Map030 EV020 checks tinderbox).
-     * Others: unknown->false + count. */
+
+
+    if (c->op == 8) {
+        int id = c->p[0];
+        if (id < 0 || id >= FH_MAX_ITEMS) return 0;
+        return it->inv_item[id] > 0;
+    }
+    if (c->op == 4) {
+        int a = c->p[0], sub = c->p[1], n = c->p[2];
+        if (a < 0 || a >= FH_MAX_ACTORS) return 0;
+        if (sub == 0) {
+            for (int i = 0; i < it->party_n; i++)
+                if (it->party[i] == a) return 1;
+            return 0;
+        }
+        if (sub == 1) {
+            if (!c->s) return 0;
+            return strcmp(it->aname[a], c->s) == 0;
+        }
+        if (sub == 2) return it->aclass[a] == n;
+        if (sub == 3)
+            return n >= 0 && n < FH_MAX_SKILLS && it->askill[a][n];
+        if (sub == 4 || sub == 5) {
+            for (int s = 0; s < 8; s++)
+                if (it->equip[a][s] == n) return 1;
+            return 0;
+        }
+        if (sub == 6)
+            return n >= 0 && n < FH_MAX_STATES && it->astate[a][n];
+        return 0;
+    }
+    if (c->op == 5) {
+        int e = c->p[0], sub = c->p[1], n = c->p[2];
+        if (e < 0 || e >= it->troop_n || e >= FH_MAX_ENEMIES) return 0;
+        if (sub == 0) return it->ehp[e] > 0;
+        if (sub == 1)
+            return n >= 0 && n < FH_MAX_STATES && it->estate[e][n];
+        return 0;
+    }
     if (c->op == 8) {
         int id = c->p[0];
         if (id < 0 || id >= FH_MAX_ITEMS) return 0;
@@ -44,11 +82,11 @@ static int eval_111(const FhInterp *it, const FhCmd *c) {
         int id = c->p[0];
         if (id < 0 || id >= FH_MAX_VARS) return 0;
         int v1 = it->var[id], v2 = c->p[2];
-        if (c->p[1] == 1) {  /* operand is variable */
+        if (c->p[1] == 1) {
             if (v2 < 0 || v2 >= FH_MAX_VARS) return 0;
             v2 = it->var[v2];
         } else if (c->p[1] != 0) {
-            return 0;  /* random/gamedata/script: false in test core, counted below */
+            return 0;
         }
         switch (c->p[3]) {
             case 0: return v1 == v2;
@@ -66,7 +104,7 @@ static int eval_111(const FhInterp *it, const FhCmd *c) {
 int fh_interp_step(FhInterp *it) {
     int guard = 1 << 20;
     for (;;) {
-        while (it->pc >= it->len && it->depth > 0) {  /* 117 child returned */
+        while (it->pc >= it->len && it->depth > 0) {
             it->depth--;
             it->list = it->callst[it->depth].list;
             it->len = it->callst[it->depth].len;
@@ -75,7 +113,7 @@ int fh_interp_step(FhInterp *it) {
         if (guard-- <= 0) break;
         if (it->pc >= it->len) {
             if (it->page_open == 1 && it->text_len > 0) {
-                /* Event ended with an undisplayed page: pause on it. */
+
                 it->page_open = 2;
                 return FH_RUN_PAGE;
             }
@@ -87,41 +125,41 @@ int fh_interp_step(FhInterp *it) {
             return FH_RUN_WAIT;
         }
         const FhCmd *c = &it->list[it->pc];
-        /* A resumed PAGE pause must not re-trace the paused 101 (it was
-         * recorded when the pause began; traces log executions). */
+
+
         if (!it->trace_skip && it->trace_len < FH_TRACE_CAP)
             it->trace[it->trace_len++] = it->pc | (it->depth << 24);
         it->trace_skip = 0;
         switch (c->code) {
-            case 0:   /* list terminator / empty filler */
-            case 108: /* comment */
-            case 112: /* loop head (no-op; 413 jumps back here) */
-            case 404: /* choice end */
-            case 412: /* conditional end */
-            case 604: /* battle-branch end */
-            case 505: /* move-route body (data lives in 205 params; engine skips) */
-            case 118: /* label (command118 no-op; 119 jumps here) */
+            case 0:
+            case 108:
+            case 112:
+            case 404:
+            case 412:
+            case 604:
+            case 505:
+            case 118:
                 it->pc++;
                 break;
-            case 115: /* exit event processing */
+            case 115:
                 it->pc = it->len;
                 break;
-            case 119: /* jump to label (baked; missing label = fall through) */
+            case 119:
                 it->pc = c->jump;
                 break;
-            case 123: { /* self switch A-D (current map event only) */
+            case 123: {
                 int ev = it->ev_id, L = c->p[0];
                 if (it->ev_id > 0 && ev >= 0 && ev < 512 && L >= 0 && L < 4)
                     it->selfsw[ev][L] = (unsigned char)(c->p[1] == 0 ? 1 : 0);
                 it->pc++;
                 break;
             }
-            case 124: /* timer start (seconds->frames) / stop */
+            case 124:
                 if (c->p[0] == 0) { it->timer_on = 1; it->timer_frames = c->p[1] * 60; }
                 else it->timer_on = 0;
                 it->pc++;
                 break;
-            case 125: { /* gain gold via operateValue */
+            case 125: {
                 int v = (c->p[1] == 0) ? c->p[2] : 0;
                 if (c->p[1] == 1 && c->p[2] >= 0 && c->p[2] < FH_MAX_VARS)
                     v = it->var[c->p[2]];
@@ -132,37 +170,37 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 132: /* battle BGM name */
+            case 132:
                 if (c->s) snprintf(it->bbgm, FH_NAME_CAP, "%s", c->s);
                 it->pc++;
                 break;
-            case 135: /* menu access */
+            case 135:
                 it->menu_disabled = (c->p[0] == 0);
                 it->pc++;
                 break;
-            case 221: /* fade out + wait 24 (fadeSpeed) */
+            case 221:
                 it->fade = -1;
                 it->wait += 24;
                 it->pc++;
                 break;
-            case 222: /* fade in + wait 24 */
+            case 222:
                 it->fade = 1;
                 it->wait += 24;
                 it->pc++;
                 break;
-            case 224: /* screen flash */
+            case 224:
                 it->flash[0] = c->p[0]; it->flash[1] = c->p[1];
                 it->flash[2] = c->p[2]; it->flash[3] = c->p[3];
                 it->flash_frames = c->p[4];
                 if (c->op) it->wait += c->p[4];
                 it->pc++;
                 break;
-            case 225: /* screen shake */
+            case 225:
                 it->shake[0] = c->p[0]; it->shake[1] = c->p[1]; it->shake[2] = c->p[2];
                 if (c->op) it->wait += c->p[2];
                 it->pc++;
                 break;
-            case 231: { /* show picture */
+            case 231: {
                 int id = c->p[0];
                 int x = (c->p[2] == 0) ? c->p[3] : 0;
                 int y = (c->p[2] == 0) ? c->p[4] : 0;
@@ -181,7 +219,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 232: { /* move picture */
+            case 232: {
                 int id = c->p[0];
                 int x = (c->p[2] == 0) ? c->p[3] : 0;
                 int y = (c->p[2] == 0) ? c->p[4] : 0;
@@ -199,13 +237,13 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 233: { /* rotate picture */
+            case 233: {
                 int id = c->p[0];
                 if (id >= 1 && id <= FH_MAX_PICS) it->pic[id - 1].rot = c->p[1];
                 it->pc++;
                 break;
             }
-            case 234: { /* tint picture + optional wait */
+            case 234: {
                 int id = c->p[0];
                 if (id >= 1 && id <= FH_MAX_PICS && it->pic[id - 1].used) {
                     it->pic[id - 1].tone[0] = c->p[1];
@@ -217,19 +255,19 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 235: { /* erase picture */
+            case 235: {
                 int id = c->p[0];
                 if (id >= 1 && id <= FH_MAX_PICS) it->pic[id - 1].used = 0;
                 it->pc++;
                 break;
             }
-            case 236: /* weather (in-battle guard lives with battle system) */
+            case 236:
                 it->weather[0] = c->p[0]; it->weather[1] = c->p[1]; it->weather[2] = c->p[2];
                 if (c->op) it->wait += c->p[2];
                 it->pc++;
                 break;
-            /* ---- actor admin (iterateActorEx unless noted) ---- */
-            case 314: { /* recover all: states cleared + TP reset (HP/MP need actor DB) */
+
+            case 314: {
                 int sel = c->p[0], idv = c->p[1], i;
                 int ids[FH_MAX_PARTY + 1], nids = 0;
                 if (sel == 0) {
@@ -250,7 +288,7 @@ int fh_interp_step(FhInterp *it) {
             case 315:
             case 316:
             case 317:
-            case 326: { /* exp / level / param / TP via operateValue */
+            case 326: {
                 int sel = c->p[0], idv = c->p[1];
                 int v = (c->p[3] == 0) ? c->p[4] : 0;
                 if (c->p[3] == 1 && c->p[4] >= 0 && c->p[4] < FH_MAX_VARS)
@@ -277,7 +315,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 318: { /* learn/forget skill */
+            case 318: {
                 int sel = c->p[0], idv = c->p[1], sk = c->p[3], i;
                 int ids[FH_MAX_PARTY + 1], nids = 0;
                 if (sel == 0) {
@@ -293,41 +331,41 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 319: { /* change equipment by slot */
+            case 319: {
                 int a = c->p[0], slot = c->p[1];
                 if (a >= 0 && a < FH_MAX_ACTORS && slot >= 0 && slot < 8)
                     it->equip[a][slot] = c->p[2];
                 it->pc++;
                 break;
             }
-            case 320: { /* actor name */
+            case 320: {
                 int a = c->p[0];
                 if (a >= 0 && a < FH_MAX_ACTORS && c->s)
                     snprintf(it->aname[a], FH_NAME_CAP, "%s", c->s);
                 it->pc++;
                 break;
             }
-            case 321: { /* change class */
+            case 321: {
                 int a = c->p[0];
                 if (a >= 0 && a < FH_MAX_ACTORS) it->aclass[a] = c->p[1];
                 it->pc++;
                 break;
             }
-            case 324: { /* nickname */
+            case 324: {
                 int a = c->p[0];
                 if (a >= 0 && a < FH_MAX_ACTORS && c->s)
                     snprintf(it->anick[a], FH_NAME_CAP, "%s", c->s);
                 it->pc++;
                 break;
             }
-            case 325: { /* profile */
+            case 325: {
                 int a = c->p[0];
                 if (a >= 0 && a < FH_MAX_ACTORS && c->s)
                     snprintf(it->aprof[a], sizeof(it->aprof[a]), "%s", c->s);
                 it->pc++;
                 break;
             }
-            /* ---- enemy ops (troop members; index<0 = all) ---- */
+
             case 331:
             case 332:
             case 342: {
@@ -341,7 +379,7 @@ int fh_interp_step(FhInterp *it) {
                 for (int e = 0; e < it->troop_n && e < FH_MAX_ENEMIES; e++) {
                     if (idx >= 0 && e != idx) continue;
                     if (c->code == 331) {
-                        if (it->ehp[e] > 0) {  /* changeHp alive-only */
+                        if (it->ehp[e] > 0) {
                             if (!c->p[4] && it->ehp[e] <= -v) v = 1 - it->ehp[e];
                             it->ehp[e] += v;
                         }
@@ -353,7 +391,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 333: { /* enemy add/remove state */
+            case 333: {
                 int idx = c->p[0], add = (c->p[1] == 0), st = c->p[2];
                 for (int e = 0; e < it->troop_n && e < FH_MAX_ENEMIES; e++) {
                     if (idx >= 0 && e != idx) continue;
@@ -363,16 +401,21 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 334: /* enemy recover all: states cleared (HP/MP need enemy DB) */
+            case 334:
+
+
                 for (int e = 0; e < it->troop_n && e < FH_MAX_ENEMIES; e++) {
                     int idx = c->p[0];
                     if (idx >= 0 && e != idx) continue;
                     memset(it->estate[e], 0, FH_MAX_STATES);
+                    it->ehp[e] = it->emaxhp[e];
+                    it->emp[e] = it->emaxmp[e];
+                    it->erecover[e] = 1;
                 }
                 it->pc++;
                 break;
-            case 335: /* enemy appear */
-            case 336: { /* enemy transform (enemy DB application pending) */
+            case 335:
+            case 336: {
                 int idx = c->p[0];
                 for (int e = 0; e < it->troop_n && e < FH_MAX_ENEMIES; e++) {
                     if (idx >= 0 && e != idx) continue;
@@ -382,35 +425,36 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 337: /* show battle animation: queued with anims (char = -100-enemyIdx) */
+            case 337:
                 if (it->anim_n < FH_ANIM_Q) {
                     it->anims[it->anim_n].ch = -100 - c->p[0];
                     it->anims[it->anim_n].anim = c->p[1];
+                    it->anims[it->anim_n].mirror = c->p[2] ? 1 : 0;
                     it->anim_n++;
                 }
                 it->pc++;
                 break;
-            case 339: /* force action (battle system consumes) */
+            case 339:
                 it->force.side = c->p[0]; it->force.idx = c->p[1];
                 it->force.skill = c->p[2]; it->force.target = c->p[3];
                 it->force.pending = 1;
                 it->pc++;
                 break;
-            case 340: /* abort battle */
-                it->battle.pending = 0;
+            case 340:
+                it->battle.pending = 2;
                 it->pc++;
                 break;
-            /* ---- flow: battle / shop / name / scenes ---- */
-            case 301: /* battle setup (branch consumed by 601/602/603 via harness) */
+
+            case 301:
                 if (c->p[0] == 0) it->battle.troop = c->p[1];
                 else if (c->p[0] == 1 && c->p[1] >= 0 && c->p[1] < FH_MAX_VARS)
                     it->battle.troop = it->var[c->p[1]];
-                else it->battle.troop = -1;  /* random encounter: overworld system */
+                else it->battle.troop = -1;
                 it->battle.esc = c->p[2]; it->battle.lose = c->p[3];
                 it->battle.pending = 1;
                 it->pc++;
                 break;
-            case 302: { /* shop: own goods + following 605 lines (no engine handler) */
+            case 302: {
                 int gi = 0;
                 it->shop[gi].type = c->p[0]; it->shop[gi].id = c->p[1];
                 it->shop[gi].price = c->p[2]; gi++;
@@ -422,13 +466,13 @@ int fh_interp_step(FhInterp *it) {
                 }
                 it->shop_n = gi;
                 it->shop_only = c->p[3];
-                it->pc += gi;  /* 302 + consumed 605s */
+                it->pc += gi;
                 break;
             }
-            case 605: /* shop goods body (consumed by 302; stray = skip like engine) */
+            case 605:
                 it->pc++;
                 break;
-            case 303: /* name input */
+            case 303:
                 it->nameinput[0] = c->p[0]; it->nameinput[1] = c->p[1];
                 it->pc++;
                 break;
@@ -436,23 +480,23 @@ int fh_interp_step(FhInterp *it) {
             case 352: it->scene_req = 2; it->pc++; break;
             case 353: it->scene_req = 3; it->pc++; break;
             case 354: it->scene_req = 4; it->pc++; break;
-            case 103: /* number input (dead in this game; recorded) */
+            case 103:
                 it->numinput[0] = c->p[0]; it->numinput[1] = c->p[1]; it->numinput[2] = c->p[2];
                 it->pc++;
                 break;
-            case 104: /* item choice (dead; recorded) */
+            case 104:
                 it->itemchoice[0] = c->p[0]; it->itemchoice[1] = c->p[1];
                 it->pc++;
                 break;
-            case 105: /* scrolling text head: clear buffer (405s append) */
+            case 105:
                 it->text_len = 0;
                 it->text[0] = '\0';
                 it->pc++;
                 break;
-            /* ---- audio ---- */
+
             case 241:
             case 245:
-            case 249: /* play bgm/bgs/me */
+            case 249:
                 if (c->s) {
                     char *dst = it->last_bgm;
                     if (c->code == 245) dst = it->last_bgs;
@@ -466,11 +510,11 @@ int fh_interp_step(FhInterp *it) {
             case 251: it->se_stop = 1; it->pc++; break;
             case 243: it->bgm_saved = 1; it->pc++; break;
             case 244: it->bgm_replayed = 1; it->pc++; break;
-            case 133: /* victory ME */
+            case 133:
                 if (c->s) snprintf(it->victory_me, FH_NAME_CAP, "%s", c->s);
                 it->pc++;
                 break;
-            case 139: /* defeat ME */
+            case 139:
                 if (c->s) snprintf(it->defeat_me, FH_NAME_CAP, "%s", c->s);
                 it->pc++;
                 break;
@@ -487,10 +531,10 @@ int fh_interp_step(FhInterp *it) {
                 if (c->s) snprintf(it->vehbgm.name, FH_NAME_CAP, "%s", c->s);
                 it->pc++;
                 break;
-            /* ---- map/system misc ---- */
+
             case 281: it->namedisp = (c->p[0] == 0); it->pc++; break;
             case 282: it->tileset = c->p[0]; it->pc++; break;
-            case 283: { /* change battleback (two names) */
+            case 283: {
                 if (c->s) {
                     char b[80];
                     strncpy(b, c->s, sizeof(b) - 1);
@@ -508,12 +552,12 @@ int fh_interp_step(FhInterp *it) {
                 it->parallax.sx = c->p[2]; it->parallax.sy = c->p[3];
                 it->pc++;
                 break;
-            case 285: /* get location info: recorded (map context pending, no var write) */
+            case 285:
                 it->locinfo.var = c->p[0]; it->locinfo.type = c->p[1];
                 it->locinfo.x = c->p[2]; it->locinfo.y = c->p[3];
                 it->pc++;
                 break;
-            case 202: /* vehicle locate */
+            case 202:
                 it->vehloc.veh = c->p[0];
                 if (c->p[1] == 0) {
                     it->vehloc.map = c->p[2]; it->vehloc.x = c->p[3]; it->vehloc.y = c->p[4];
@@ -526,13 +570,13 @@ int fh_interp_step(FhInterp *it) {
                 break;
             case 206: it->vehicle_in = !it->vehicle_in; it->pc++; break;
             case 217: it->gather = 1; it->pc++; break;
-            case 261: /* play movie */
+            case 261:
                 if (c->s) snprintf(it->movie, FH_NAME_CAP, "%s", c->s);
                 it->pc++;
                 break;
             case 101:
-                /* A new 101 while a page is open pauses first (OG waits OK
-                 * per page): UI shows the text, O resumes into this 101. */
+
+
                 if (it->page_open == 1) {
                     it->page_open = 2;
                     it->trace_skip = 1;
@@ -541,7 +585,7 @@ int fh_interp_step(FhInterp *it) {
                 it->text_len = 0;
                 it->text[0] = '\0';
                 it->page_open = 1;
-                /* Face sheet for the message window (may be ""). */
+
                 if (c->s) {
                     int i = 0;
                     while (c->s[i] && i < FH_NAME_CAP - 1) {
@@ -562,7 +606,7 @@ int fh_interp_step(FhInterp *it) {
                 emit_text(it, c->s);
                 it->pc++;
                 break;
-            case 102: { /* choices shown; UI picks (await_choice handshake) */
+            case 102: {
                 it->choice_text = c->s;
                 it->choice_n = 0;
                 if (c->s) {
@@ -570,8 +614,8 @@ int fh_interp_step(FhInterp *it) {
                     for (const char *p = c->s; *p; p++)
                         if (*p == '\n') it->choice_n++;
                 }
-                /* The page shows together with the choices; don't re-pause
-                 * on it when the next 101 arrives (see 101 rule). */
+
+
                 it->page_open = 2;
                 it->await_choice = 1;
                 it->pc++;
@@ -580,20 +624,23 @@ int fh_interp_step(FhInterp *it) {
             case 402:
                 it->pc = (it->choice_sel == c->p[0]) ? it->pc + 1 : c->jump;
                 break;
-            case 403: /* cancel body: enters iff choice was cancelled (branch<0) */
+            case 403:
                 it->pc = (it->choice_sel < 0) ? it->pc + 1 : c->jump;
                 break;
             case 111:
-                if ((c->op > 1 && c->op != 8)) it->unknown++; else {
+
+
+                if (c->op == 11) { it->unknown++; it->pc = c->jump; break; }
+                if ((c->op > 1 && c->op != 4 && c->op != 5 && c->op != 8)) it->unknown++; else {
                     int r = eval_111(it, c);
                     if (c->indent < 16) it->branchv[c->indent] = r;
                     it->pc = r ? it->pc + 1 : c->jump;
                     break;
                 }
-                it->pc = c->jump;  /* unknown cond type: fail safe to else/end */
+                it->pc = c->jump;
                 break;
             case 411:
-                /* command411: branch!=false (true body fell through) -> skip else */
+
                 it->pc = (c->indent < 16 && it->branchv[c->indent]) ? c->jump : it->pc + 1;
                 break;
             case 113:
@@ -609,10 +656,12 @@ int fh_interp_step(FhInterp *it) {
                 break;
             }
             case 121: {
+
+
                 int a = c->p[0], b = c->p[1], v = c->p[2];
                 if (a < 0) a = 0;
                 if (b >= FH_MAX_SWITCHES) b = FH_MAX_SWITCHES - 1;
-                for (int i = a; i <= b; i++) it->sw[i] = (unsigned char)(v ? 1 : 0);
+                for (int i = a; i <= b; i++) it->sw[i] = (unsigned char)(v == 0 ? 1 : 0);
                 it->pc++;
                 break;
             }
@@ -620,11 +669,30 @@ int fh_interp_step(FhInterp *it) {
                 int a = c->p[0], b = c->p[1];
                 if (a < 0) a = 0;
                 if (b >= FH_MAX_VARS) b = FH_MAX_VARS - 1;
+                if (c->p[2] == 2) {
+
+                    int lo = c->p[3], span = c->p[4] - lo + 1;
+                    if (span < 1) span = 1;
+                    for (int i = a; i <= b; i++) {
+                        int rhs = lo + (int)fh_randn(it, (unsigned)span);
+                        switch (c->op) {
+                            case 0: it->var[i] = rhs; break;
+                            case 1: it->var[i] += rhs; break;
+                            case 2: it->var[i] -= rhs; break;
+                            case 3: it->var[i] *= rhs; break;
+                            case 4: if (rhs != 0) it->var[i] /= rhs; break;
+                            case 5: if (rhs != 0) it->var[i] %= rhs; break;
+                            default: it->unknown++; break;
+                        }
+                    }
+                    it->pc++;
+                    break;
+                }
                 int rhs = c->p[3];
-                if (c->p[2] == 1) {  /* variable operand */
+                if (c->p[2] == 1) {
                     rhs = (rhs >= 0 && rhs < FH_MAX_VARS) ? it->var[rhs] : 0;
                 } else if (c->p[2] != 0) {
-                    it->unknown++;   /* random/gamedata/script operand */
+                    it->unknown++;
                     it->pc++;
                     break;
                 }
@@ -647,7 +715,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             case 355:
-            case 655: { /* script lines: 4 known actor-appearance ops + refresh */
+            case 655: {
                 const char *s = c->s ? c->s : "";
                 int actor = 0;
                 if (!strcmp(s, "$gamePlayer.refresh();") || !strcmp(s, "$gamePlayer.refresh()")) {
@@ -655,7 +723,7 @@ int fh_interp_step(FhInterp *it) {
                 } else if (sscanf(s, "$gameActors.actor(%d).", &actor) == 1 &&
                            actor >= 0 && actor < FH_MAX_ACTORS) {
                     const char *dot = strchr(s, ')');
-                    dot = dot ? dot + 2 : NULL;  /* past ")." */
+                    dot = dot ? dot + 2 : NULL;
                     char nm[FH_NAME_CAP];
                     int ix = 0;
                     if (dot && sscanf(dot, "setCharacterImage('%31[^']', %d)", nm, &ix) == 2) {
@@ -671,7 +739,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 356: { /* plugin command: command + args (command356 split) */
+            case 356: {
                 const char *s = c->s ? c->s : "";
                 while (*s == ' ') s++;
                 if (it->plug_n < FH_PLUG_Q) {
@@ -687,7 +755,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 117: { /* call common event: child frame (setupChild) */
+            case 117: {
                 int id = c->p[0], k;
                 for (k = 0; k < it->ce_n; k++)
                     if (it->ce_ids[k] == id) break;
@@ -705,7 +773,7 @@ int fh_interp_step(FhInterp *it) {
                 }
                 break;
             }
-            case 129: { /* party add/remove (command129; init/setup deferred) */
+            case 129: {
                 int actor = c->p[0], i, at = -1;
                 for (i = 0; i < it->party_n; i++)
                     if (it->party[i] == actor) { at = i; break; }
@@ -718,7 +786,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 205: /* move route queued; movement system pending */
+            case 205:
                 if (it->route_n < FH_ROUTE_Q) {
                     it->routes[it->route_n].ch = c->p[0];
                     it->routes[it->route_n].steps = c->p[1];
@@ -727,14 +795,14 @@ int fh_interp_step(FhInterp *it) {
                 }
                 it->pc++;
                 break;
-            case 223: /* screen tint (command223) */
+            case 223:
                 it->tint[0] = c->p[0]; it->tint[1] = c->p[1];
                 it->tint[2] = c->p[2]; it->tint[3] = c->p[3];
                 it->tint_frames = c->p[4];
                 if (c->op) it->wait += c->p[4];
                 it->pc++;
                 break;
-            case 250: /* play SE: logged; backend hooks later */
+            case 250:
                 if (c->s) {
                     int n = (int)strlen(c->s);
                     if (n > 63) n = 63;
@@ -746,7 +814,7 @@ int fh_interp_step(FhInterp *it) {
                 break;
             case 126:
             case 127:
-            case 128: { /* change items/weapons/armor: gainItem(operateValue) */
+            case 128: {
                 int id = c->p[0];
                 int v = (c->p[2] == 0) ? c->p[3] : 0;
                 if (c->p[2] == 1 && c->p[3] >= 0 && c->p[3] < FH_MAX_VARS)
@@ -761,7 +829,7 @@ int fh_interp_step(FhInterp *it) {
                 break;
             }
             case 311:
-            case 312: { /* change HP/MP over iterateActorEx set */
+            case 312: {
                 int sel = c->p[0], idv = c->p[1];
                 int v = (c->p[3] == 0) ? c->p[4] : 0;
                 if (c->p[3] == 1 && c->p[4] >= 0 && c->p[4] < FH_MAX_VARS)
@@ -781,41 +849,42 @@ int fh_interp_step(FhInterp *it) {
                 for (i = 0; i < nids; i++) {
                     int a = ids[i];
                     if (a < 0 || a >= FH_MAX_ACTORS) continue;
-                    if (c->code == 311) { /* changeHp: alive-only, allowDeath flag */
+                    if (c->code == 311) {
                         if (it->hp[a] > 0) {
                             if (!c->p[5] && it->hp[a] <= -v) v = 1 - it->hp[a];
                             it->hp[a] += v;
                         }
                     } else {
-                        it->mp[a] += v;   /* gainMp; upper mmp clamp needs actor data */
+                        it->mp[a] += v;
                         if (it->mp[a] < 0) it->mp[a] = 0;
                     }
                 }
                 it->pc++;
                 break;
             }
-            case 212: /* requestAnimation; wait = frames*4+1 (rpg_sprites rate) */
+            case 212:
                 if (it->anim_n < FH_ANIM_Q) {
                     it->anims[it->anim_n].ch = c->p[0];
                     it->anims[it->anim_n].anim = c->p[1];
+                    it->anims[it->anim_n].mirror = 0;
                     it->anim_n++;
                 }
                 if (c->p[2]) it->wait += c->p[3] * 4 + 1;
                 it->pc++;
                 break;
-            case 211: /* player transparency (0 = transparent) */
+            case 211:
                 it->transparent = (c->p[0] == 0);
                 it->pc++;
                 break;
-            case 216: /* followers show/hide + refresh */
+            case 216:
                 it->followers_on = (c->p[0] == 0);
                 it->refresh_n++;
                 it->pc++;
                 break;
-            case 322: { /* change actor graphic: char+face+battler, then refresh */
+            case 322: {
                 int a = c->p[0];
                 if (a >= 0 && a < FH_MAX_ACTORS && c->s) {
-                    /* s lines: charName, charIdx, faceName, faceIdx, battler */
+
                     char b[160];
                     strncpy(b, c->s, sizeof(b) - 1);
                     b[sizeof(b) - 1] = '\0';
@@ -835,7 +904,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 201: /* reserve transfer (map system executes; wait-mode pending) */
+            case 201:
                 if (c->p[0] == 0) {
                     it->transfer.map = c->p[1]; it->transfer.x = c->p[2]; it->transfer.y = c->p[3];
                 } else {
@@ -848,7 +917,7 @@ int fh_interp_step(FhInterp *it) {
                 it->transfer.pending = 1;
                 it->pc++;
                 break;
-            case 213: /* balloon icon queued (timing with char system, pending) */
+            case 213:
                 if (it->balloon_n < FH_ANIM_Q) {
                     it->balloons[it->balloon_n].ch = c->p[0];
                     it->balloons[it->balloon_n].icon = c->p[1];
@@ -856,12 +925,12 @@ int fh_interp_step(FhInterp *it) {
                 }
                 it->pc++;
                 break;
-            case 214: /* erase this event (current map only) */
+            case 214:
                 if (it->on_map && it->ev_id > 0 && it->erased_n < 64)
                     it->erased[it->erased_n++] = it->ev_id;
                 it->pc++;
                 break;
-            case 204: /* map scroll queued (scroll system pending) */
+            case 204:
                 if (it->scroll_n < 16) {
                     it->scrolls[it->scroll_n].dir = c->p[0];
                     it->scrolls[it->scroll_n].dist = c->p[1];
@@ -870,7 +939,7 @@ int fh_interp_step(FhInterp *it) {
                 }
                 it->pc++;
                 break;
-            case 203: { /* set event location (direct / var / swap) + direction */
+            case 203: {
                 int ci = c->p[0] + 2, cj = c->p[2] + 2;
                 if (c->p[1] == 0) {
                     if (ci >= 0 && ci < FH_MAX_CHARS) {
@@ -891,7 +960,7 @@ int fh_interp_step(FhInterp *it) {
                 it->pc++;
                 break;
             }
-            case 313: { /* actor add/remove state (iterateActorEx) */
+            case 313: {
                 int sel = c->p[0], idv = c->p[1], add = (c->p[2] == 0), st = c->p[3];
                 int ids[FH_MAX_PARTY + 1], nids = 0, i;
                 if (sel == 0) {
@@ -924,10 +993,21 @@ int fh_interp_run(FhInterp *it, int max_steps) {
         int r = fh_interp_step(it);
         if (r == FH_RUN_END) return FH_RUN_END;
         if (r == FH_RUN_CHOICE) {
-            /* non-interactive driver: preset choice_sel applies; the UI
-             * path uses step() and resolves await_choice itself. */
+
+
             it->await_choice = 0;
         }
         if (++steps >= max_steps) return FH_RUN_STEP;
     }
+}
+
+void fh_srand(FhInterp *it, unsigned seed) {
+    it->rng = seed ? seed : 1u;
+}
+
+unsigned fh_randn(FhInterp *it, unsigned n) {
+
+    it->rng = it->rng * 1664525u + 1013904223u;
+    if (n == 0) return 0;
+    return (unsigned)(((it->rng >> 16) * (uint64_t)n) >> 16) % n;
 }

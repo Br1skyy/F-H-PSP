@@ -1,6 +1,5 @@
-/* See map.h. Tables themselves live in baked data; quadrant lookup takes
- * the table as 48/16/4 x 4 x 2 ints supplied by the caller (keeps this
- * file data-free and unit-testable). */
+
+
 #include "map.h"
 
 int fh_is_autotile(int tid) { return tid >= FH_TILE_A1 && tid < FH_TILE_MAX; }
@@ -39,7 +38,7 @@ int fh_auto_cell(int tid, int *set, int *bx, int *by, int *table) {
         *by = ty * 6 + (tx / 2) % 2 * 3;
         if (kind % 2 == 0) { *table = 0; return 1; }
         *bx += 6;
-        *table = 2;  /* waterfall (frame-0 row) */
+        *table = 2;
         return 1;
     }
     if (is_a2(tid)) {
@@ -57,7 +56,7 @@ int fh_auto_cell(int tid, int *set, int *bx, int *by, int *table) {
         return 1;
     }
     if (!is_a4(tid)) return 0;
-    /* A4 */
+
     *set = 3;
     *bx = tx * 2;
     *by = (int)((ty - 10) * 2.5 + (ty % 2 == 1 ? 0.5 : 0));
@@ -70,8 +69,8 @@ int fh_collect(int x0, int y0, int nx, int ny, int tile_px, int ox, int oy,
                FhDraw *out, int max) {
     int n = 0;
 #ifdef REVERSE_ORDER
-    /* Diagnostic: collect bottom-up. If failing cells change, the fault is
-     * buffer-order-dependent, not data-dependent. */
+
+
     for (int ty = ny - 1; ty >= 0; ty--) {
         for (int tx = nx - 1; tx >= 0; tx--) {
 #else

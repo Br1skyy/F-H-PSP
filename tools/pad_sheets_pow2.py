@@ -74,7 +74,7 @@ def pad_sheet(cat: str, name: str) -> None:
     old_w: int = meta['tex_w']
     old_h: int = meta['tex_h']
     new_w: int = next_pow2(old_w)
-    new_h: int = next_pow2(old_h)   # height is usually already pow2, but be safe
+    new_h: int = next_pow2(old_h)
 
     if new_w == old_w and new_h == old_h:
         print(f'{name}: already {old_w}x{old_h} (power-of-2), skipping')
@@ -86,21 +86,20 @@ def pad_sheet(cat: str, name: str) -> None:
     assert len(raw) == old_w * old_h, \
         f'{name}: expected {old_w*old_h} bytes, got {len(raw)}'
 
-    # 1. Deswizzle at old stride.
+
     linear_old = deswizzle8(raw, old_w, old_h)
 
-    # 2. Copy each row into a wider (new_w) buffer; extra columns stay 0
-    #    (index 0 = transparent in our CLUT convention).
-    linear_new = bytearray(new_w * new_h)  # zero-init → transparent
+
+    linear_new = bytearray(new_w * new_h)
     for y in range(old_h):
         src_row = y * old_w
         dst_row = y * new_w
         linear_new[dst_row:dst_row + old_w] = linear_old[src_row:src_row + old_w]
 
-    # 3. Re-swizzle at new stride.
+
     swizzled_new = swizzle8(bytes(linear_new), new_w, new_h)
 
-    # 4. Write back.
+
     t8_path.write_bytes(bytes(swizzled_new))
     meta['tex_w'] = new_w
     meta['tex_h'] = new_h

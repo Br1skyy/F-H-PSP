@@ -18,7 +18,7 @@ def load_json(p):
 def main():
     root = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path('Fear & Hunger_WIN/www')
     outdir = pathlib.Path(sys.argv[3] if len(sys.argv) > 3 and sys.argv[2] == '--out' else 'audit_out')
-    # allow: audit.py GAME [--out DIR]
+
     if '--out' in sys.argv:
         outdir = pathlib.Path(sys.argv[sys.argv.index('--out') + 1])
     outdir.mkdir(parents=True, exist_ok=True)
@@ -27,7 +27,7 @@ def main():
     cmds = collections.Counter()
     plug = collections.Counter()
     notes = collections.Counter()
-    snippets = collections.Counter()   # damage formulas + script lines + script conds
+    snippets = collections.Counter()
 
     def walk(lst):
         for c in lst or []:
@@ -76,7 +76,7 @@ def main():
             for t in re.findall(r'<([^:>\s]+)', o.get('note', '') or ''):
                 notes[t] += 1
 
-    # map sizes + event counts (worst-case maps for benchmarks)
+
     maps = []
     for f in sorted(data.glob('Map[0-9]*.json')):
         d = load(f.name)
@@ -87,7 +87,7 @@ def main():
                      'name': d.get('displayName', '')})
     maps.sort(key=lambda m: m['tiles'], reverse=True)
 
-    # switches / variables of interest (hunger, switch 3520)
+
     sysj = load('System.json')
     switches = sysj.get('switches', [])
     variables = sysj.get('variables', [])
@@ -97,7 +97,7 @@ def main():
     sw3520 = switches[3520] if len(switches) > 3520 else None
     filter_sw = named(switches, lambda s: 'filter' in s.lower())
 
-    # encryption + asset sizes (Q6)
+
     enc = {'hasEncryptedImages': sysj.get('hasEncryptedImages'),
            'hasEncryptedAudio': sysj.get('hasEncryptedAudio'),
            'hasKey': bool(sysj.get('encryptionKey'))}
@@ -108,7 +108,7 @@ def main():
         return sum(f.stat().st_size for f in p.rglob('*') if f.is_file())
     asset_sizes = {k: dir_size(k) for k in ('img', 'audio', 'movies', 'data', 'js')}
 
-    # plugin list (enabled set)
+
     try:
         txt = (root / 'js/plugins.js').read_text(encoding='utf-8')
         plugins = json.loads(txt[txt.index('['): txt.rindex(']') + 1])
@@ -136,7 +136,7 @@ def main():
     }
     (outdir / 'audit.json').write_text(json.dumps(result, indent=1), encoding='utf-8')
 
-    # human report
+
     L = []
     L.append(f'Phase 0 audit — {root}')
     L.append(f'Map files: {n_maps}, event-command occurrences total: {sum(cmds.values())}')

@@ -1,60 +1,63 @@
-# Asset pipeline & build
+# Pipeline and build
 
-All paths relative to repo root. Requires an owned copy at
-`Fear & Hunger_WIN/www` (git-ignored, never committed).
+All paths relative to repo root. You need an owned copy at
+`Fear & Hunger_WIN/www` (gitignored, never committed).
 
-## 1. Convert (first time only)
+## 1. Convert art (first time only)
 
 ```bash
 python3 tools/convert_assets.py "Fear & Hunger_WIN/www" --out converted --tile 24
-python3 tools/pad_sheets_pow2.py            # tilesets: deswizzle, pad, reswizzle
-python3 tools/pad_chars_pow2.py             # character sheets (same, 512x512)
-python3 tools/bake_higher.py --map Map030   # star-flag mask for z-order
-# + extract_layers / bake steps for layers.bin, passability, jumps, anims
+python3 tools/pad_sheets_pow2.py
+python3 tools/pad_chars_pow2.py
+python3 tools/bake_higher.py --map Map030
+python3 tools/bake_battlers.py --out psp/gu_demo/data
+python3 tools/bake_anims.py --out psp/gu_demo/data
+python3 tools/bake_font.py --out psp/gu_demo/data
+python3 tools/bake_window.py --out psp/gu_demo/data
 ```
+
+What the converter does per image: decrypt, downscale (tiles 24 px,
+everything else half scale), palettise to 255 colors with index 0 as
+transparent, swizzle to GU T8. Output is `.t8` + `.clut` + `.meta.json`.
 
 Rules that have bitten us:
-- Converted `.t8` files are **already swizzled**. Never pad them as linear
-  bytes — always deswizzle → pad → re-swizzle (the deleted
-  `pad_char_*.py` scripts did it wrong and scrambled every row).
-- PSP GE needs power-of-2 strides (tilesets 192→256, 384→512; chars →512).
-- CLUT entry 0 = transparent; keep palettes 16-byte aligned for `ClutLoad`.
 
-## 2. Stage demo data
+- Converted `.t8` files are already swizzled. To pad one, deswizzle it
+  first, pad, then re-swizzle. Padding swizzled bytes scrambles rows.
+- The GE needs power-of-2 strides. CLUTs must be 16 byte aligned.
+- Side-view battlers bake at 112 px cells in two sheets per fighter
+  (cols 0-2 and 3-5, rows 1-4). A full 9x6 grid at 112 px would break
+  the 512 px texture limit. See `tools/bake_battlers.py`.
 
-```bash
-# tilesets + map
-cp converted/tilesets/{Mines_A1,Mines_B,Mines_E,Inside_B,Mines_D}.{t8,clut} \
-   psp/gu_demo/data/map030/
-# characters (plain defaults; _torch variants are situational, see engine-notes.md)
-cp converted/characters/{mercenary,outlander,dark_priest,knight}.{t8,clut} \
-   psp/gu_demo/data/
-```
+## 2. Stage data
 
-## 3. Build & package
+Copy the baked outputs into `psp/gu_demo/data/` (tile sheets, map
+layers, passability, characters, enemies, fonts, window skin, battlers,
+anims, formulas). Staged data is gitignored. The `data/` rules in
+`psp/gu_demo/Makefile` list every file the build expects.
+
+## 3. Build and package
 
 ```bash
-export PSPDEV=~/pspdev PSPDEV_BIN=$PSPDEV/bin PATH=$PSPDEV/bin:$PATH
-cd psp/gu_demo && make        # zero warnings expected
+export PATH=$HOME/pspdev/bin:$PATH
+cd psp/gu_demo && make
 cd ../.. && rm -f FHDEMO.zip && (cd psp/gu_demo && zip ../../FHDEMO.zip EBOOT.PBP)
 ```
 
-Link rules (learned on real hardware — a PSP-2000 hard-freezes otherwise):
-- `LIBS` = graphics/ctrl/display/ge/rtc/debug only; filter the SDK's
-  default `-lpspnet -lpspnet_apctl`; do **not** link `-lpspkernel`
-  (its kernel stubs shadow the user-mode ones).
-- Result must show **zero `ForKernel` imports** and **zero fixup warnings**.
-  Check with `psp-strings -a fh_demo.elf | grep ForKernel` (expect empty).
-- Keep `PSP_HEAP_SIZE_KB` small (1 MB; everything is static).
+Link rules (learned on real hardware, a PSP-2000 hard-freezes otherwise):
+
+- Link graphics/ctrl/display/ge/rtc/debug only. Filter out the SDK
+  defaults `-lpspnet -lpspnet_apctl`, and never link `-lpspkernel`.
+- The ELF must show zero `ForKernel` imports: check with
+  `psp-strings -a fh_demo.elf | grep ForKernel` (expect empty).
+- Keep the heap small (1 MB). Everything is static, nothing mallocs.
 
 ## 4. Install
 
-Copy `EBOOT.PBP` to `PSP/GAME/<NAME>/EBOOT.PBP`. Folder name is free.
+Copy `EBOOT.PBP` to `PSP/GAME/<NAME>/EBOOT.PBP`.
 
-## Performance budget (§7 refresher)
+## Budget
 
-VRAM (2 MB) is the real limit: framebuffers ~0.55 MB, ~1.4 MB left for
-textures (stream 1–2 sheets). A 20×12 view ≈ 1,000 batched quads —
-trivial. Fill rate (fog layers + light multiply) and chase pathfinding
-are the flagged risks; interpreter/battle math is negligible. Audio:
-hardware MP3/AT3, SE as short PCM.
+2 MB VRAM is the real limit. Framebuffers take about 0.55 MB, leaving
+roughly 1.4 MB for textures. A 20x12 view is around 1,000 batched
+quads, which is trivial. Audio is hardware MP3/AT3 when we get there.

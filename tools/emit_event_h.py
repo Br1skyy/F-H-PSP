@@ -66,7 +66,7 @@ def emit_one(game, baked_jumps, map_name, ev_id, pg, sym):
         if code == 401 and p:
             s = cstr(str(p[0]))
         elif code == 101 and p:
-            # params: [faceName, faceIndex, background, position]
+
             pp = [num(1), num(2), num(3)] + [0] * 7
             s = cstr(str(p[0]))
         elif code == 102 and p:
@@ -111,7 +111,7 @@ def main():
     if '--ev' in sys.argv:
         evs = []
         args = sys.argv[sys.argv.index('--ev') + 1:]
-        # consumed in groups of 4 until next flag/--out
+
         while args and not args[0].startswith('--'):
             m, e, pg, sym = args[:4]
             args = args[4:]
@@ -120,7 +120,6 @@ def main():
          ' * Do not hand-edit. Jumps from converted/baked/jumps.json. */']
     for (m, e, pg, sym) in evs:
         lines, n = emit_one(game, baked, m, e, pg, sym)
-        L.append(f'/* {m} ev{e} pg{pg} ({n} cmds) */')
         L += lines
     out.write_text('\n'.join(L) + '\n')
     print(f'wrote {out} ({len(evs)} events)')

@@ -1,6 +1,7 @@
-/* Rendering implementation */
+
 #include "render.h"
 #include "map_runtime.h"
+#include "anim_data.h"
 #include <pspge.h>
 #include <pspdisplay.h>
 #include <pspdebug.h>
@@ -16,9 +17,7 @@ unsigned int window_cl[256] __attribute__((aligned(16)));
 unsigned char *floor_px = 0;
 unsigned int floor_cl[256] __attribute__((aligned(16)));
 
-/* Text colors sampled from the game's own Window.png palette grid
- * (rpg_windows.js Window_Base.textColor: px = 96+(n%8)*12+6, and py row).
- * Only 0 (white) and 2 (item orange) appear in baked dialogue so far. */
+
 static const unsigned int MSG_PAL[32] = {
     0xffffffff, 0xffd6a020, 0xff4c78ff, 0xff40cc66,
     0xffffcc99, 0xffffc0cc, 0xffa0ffff, 0xff808080,
@@ -33,38 +32,29 @@ static const unsigned int MSG_PAL[32] = {
 #define NX (SCR_W / TILE + 2)
 #define NY (SCR_H / TILE + 2)
 
-/* Texture definitions */
+
 const SheetDef SHEETS[9] = {
     {0, 0, 0}, {0, 0, 0}, {0, 0, 0}, {0, 0, 0},
-    {256, 512, 256},  /* Mines_A1: padded from 192x384 */
-    {512, 512, 512},  /* Mines_B: padded from 384x384 */
-    {512, 512, 512},  /* Mines_E */
-    {512, 512, 512},  /* Inside_B */
-    {512, 512, 512},  /* Mines_D */
+    {256, 512, 256},
+    {512, 512, 512},
+    {512, 512, 512},
+    {512, 512, 512},
+    {512, 512, 512},
 };
 
 unsigned char *sheet_px[9] = {0};
 unsigned int sheet_cl[9][256] __attribute__((aligned(16)));
 
-/* Lighting (Terrax replacement): the OG mask math, no render target.
- * Terrax fills the light mask black, then punches a radial gradient
- * (white core r<20, LINEAR ramp white→black out to r=300, full-res px)
- * applied as multiply: center shows the scene at full brightness, edges
- * fall to pure black. A vertex-interpolated mesh faceted visibly along
- * triangle diagonals, so instead the mask is ONE fullscreen sprite sampling
- * a baked radial texture (bilinear = pixel-smooth): texel alpha holds
- * 1 - mask, blended normally over black RGB, i.e. out = dst × mask.
- * Half-scale: core r<10, ramp to R=150. UV window recenters on the player
- * every frame (CLAMP gives black outside the radius). */
-#define LIGHT_R 150     /* player radius, screen px (Terrax 300 @ full scale) */
-#define LIGHT_CORE 10   /* white core radius (Terrax 20 @ full scale) */
-#define LIGHT_TEX 256   /* baked gradient texture size (radius = half) */
+
+#define LIGHT_R 150
+#define LIGHT_CORE 10
+#define LIGHT_TEX 256
 
 static unsigned char light_px[LIGHT_TEX * LIGHT_TEX];
 static unsigned int light_cl[256] __attribute__((aligned(16)));
 
 static void light_bake(void) {
-    /* Texel alpha = 1 - mask sampled on the exact Terrax curve. */
+
     static unsigned char lin[LIGHT_TEX * LIGHT_TEX];
     for (int y = 0; y < LIGHT_TEX; y++) {
         for (int x = 0; x < LIGHT_TEX; x++) {
@@ -80,8 +70,8 @@ static void light_bake(void) {
         }
     }
     for (int i = 0; i < 256; i++)
-        light_cl[i] = ((unsigned int)i << 24);  /* black, alpha = 1 - mask */
-    /* 16×8 swizzle (same layout as convert_assets.py). */
+        light_cl[i] = ((unsigned int)i << 24);
+
     int dst = 0;
     for (int by = 0; by < LIGHT_TEX; by += 8) {
         for (int bx = 0; bx < LIGHT_TEX; bx += 16) {
@@ -95,11 +85,12 @@ static void light_bake(void) {
     }
 }
 
-/* Vertex type for textured quads */
+
 typedef struct { float u, v; unsigned int color; float x, y, z; } TVert;
 #define TVERT_FMT (GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D)
 
 static unsigned int *gu_list_ptr;
+static int render_ticks;
 
 void render_init(void *fbp0, void *fbp1, void *zbp, unsigned int *gu_list) {
     gu_list_ptr = gu_list;
@@ -142,7 +133,7 @@ void render_map_layers(int cam_x, int cam_y, const uint16_t *map_layers, int map
                        const uint8_t *higher, int higher_len, int upper_pass) {
     int x0 = cam_x / TILE, y0 = cam_y / TILE;
     int ox = cam_x % TILE, oy = cam_y % TILE;
-    
+
     sceGuEnable(GU_TEXTURE_2D);
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
@@ -151,32 +142,31 @@ void render_map_layers(int cam_x, int cam_y, const uint16_t *map_layers, int map
     sceGuTexScale(1.0f, 1.0f);
     sceGuTexOffset(0.0f, 0.0f);
     sceGuAmbientColor(0xffffffff);
-    
-    /* Render layers 0-3 bottom to top */
+
+
     for (int layer = 0; layer < 4; layer++) {
         for (int s = 4; s < 9; s++) {
-            /* Bind texture for this sheet */
+
             sceGuClutLoad(32, sheet_cl[s]);
-            sceGuTexMode(GU_PSM_T8, 0, 0, 1);  /* swizzled */
+            sceGuTexMode(GU_PSM_T8, 0, 0, 1);
             sceGuTexImage(0, SHEETS[s].tw, SHEETS[s].th, SHEETS[s].stride, sheet_px[s]);
             sceGuTexFlush();
             sceGuTexSync();
-            
-            /* Collect tiles for this layer+sheet */
+
+
             static FhDraw collected[NX * NY];
             int n = fh_collect(x0, y0, NX, NY, TILE, ox, oy, layer, s,
                              map_layers, map_w, map_h, collected, NX * NY);
-            
+
             if (n == 0) continue;
-            
-            /* Enable alpha test and blending */
+
+
             sceGuEnable(GU_ALPHA_TEST);
             sceGuAlphaFunc(GU_GREATER, 0, 0xff);
             sceGuEnable(GU_BLEND);
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-            
-            /* Draw matching tiles in one batch (OG z-split: higher ★ tiles
-             * go to the upper bitmap, everything else to the lower). */
+
+
             TVert *v = (TVert *)sceGuGetMemory(n * 2 * sizeof(TVert));
             TVert *vp = v;
             int m = 0;
@@ -195,16 +185,13 @@ void render_map_layers(int cam_x, int cam_y, const uint16_t *map_layers, int map
             if (m > 0) sceGuDrawArray(GU_SPRITES, TVERT_FMT, m * 2, 0, v);
         }
     }
-    
+
     sceGuDisable(GU_ALPHA_TEST);
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);
 }
 
-/* OG Sprite_Character addressing (rpg_sprites.js): $ sheets hold one
- * character (3 cols × 4 rows); others hold 8 (12 cols × 8 rows, block from
- * characterIndex). pattern = sheet column (NPC pages state it directly),
- * dir_mv = RPG Maker direction (2,4,6,8) -> row 0-3. */
+
 static void char_cell(int img_w, int img_h, int is_big, int index, int pattern,
                       int dir_mv, int *fx, int *fy, int *cw, int *ch) {
     int row = (dir_mv - 2) / 2;
@@ -222,24 +209,27 @@ static void char_cell(int img_w, int img_h, int is_big, int index, int pattern,
     }
 }
 
-/* Draw one character cell. Same texture state as the map path (proven):
- * CLUT first, then TexMode/TexImage, alpha-test + blend. */
+
 static void render_character_cell(unsigned char *sprite_data,
-                                  unsigned int *clut_data,
-                                  int tex_w, int tex_h, int stride,
-                                  int frame_x, int frame_y,
-                                  int frame_w, int frame_h,
-                                  int screen_x, int screen_y) {
+                                   unsigned int *clut_data,
+                                   int tex_w, int tex_h, int stride,
+                                   int frame_x, int frame_y,
+                                   int frame_w, int frame_h,
+                                   int screen_x, int screen_y,
+                                   int dst_w, int dst_h, int linear) {
     if (!sprite_data || !clut_data) return;
     sceGuEnable(GU_TEXTURE_2D);
     sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
-    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    if (linear)
+        sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    else
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
     sceGuTexWrap(GU_CLAMP, GU_CLAMP);
     sceGuTexScale(1.0f, 1.0f);
     sceGuTexOffset(0.0f, 0.0f);
     sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
     sceGuClutLoad(32, clut_data);
-    sceGuTexMode(GU_PSM_T8, 0, 0, 1);  /* T8, swizzled=1 */
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
     sceGuTexImage(0, tex_w, tex_h, stride, sprite_data);
     sceGuTexFlush();
     sceGuTexSync();
@@ -248,15 +238,15 @@ static void render_character_cell(unsigned char *sprite_data,
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
 
-    /* Draw single frame using GU_SPRITES */
+
     TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
     v[0].u = (float)frame_x; v[0].v = (float)frame_y;
     v[0].color = 0xffffffff;
     v[0].x = (float)screen_x; v[0].y = (float)screen_y; v[0].z = 0.0f;
     v[1].u = (float)(frame_x + frame_w); v[1].v = (float)(frame_y + frame_h);
     v[1].color = 0xffffffff;
-    v[1].x = (float)(screen_x + frame_w);
-    v[1].y = (float)(screen_y + frame_h); v[1].z = 0.0f;
+    v[1].x = (float)(screen_x + dst_w);
+    v[1].y = (float)(screen_y + dst_h); v[1].z = 0.0f;
 
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
 
@@ -268,10 +258,8 @@ static void render_character_cell(unsigned char *sprite_data,
 void render_player_sprite(const Player *player, int cam_x, int cam_y,
                          unsigned char *sprite_data, unsigned int *clut_data) {
     if (!sprite_data || !clut_data) return;
-    
-    /* Player sheets: non-$ 480×440, walking = characterIndex 0 block.
-     * player->step_frame 0=center(idle),1=left,2=right -> sheet col 1,0,2;
-     * player->dir 0-3 -> row 0-3. */
+
+
     int pat_col = (player->step_frame == 0) ? 1
                 : (player->step_frame == 1) ? 0 : 2;
     int dir = player->dir;
@@ -285,20 +273,17 @@ void render_player_sprite(const Player *player, int cam_x, int cam_y,
     char_cell(480, 440, 0, block, pat_col, dir * 2 + 2,
               &fx, &fy, &fw, &fh);
 
-    /* Bottom-align the cell on the 24px tile */
+
     int screen_x = player->x - cam_x - (fw - TILE) / 2;
     int screen_y = player->y - cam_y - (fh - TILE);
 
     render_character_cell(sprite_data, clut_data, 512, 512, 512,
-                          fx, fy, fw, fh, screen_x, screen_y);
+                          fx, fy, fw, fh, screen_x, screen_y, fw, fh, 0);
 }
 
-/* Lighting composite: ONE fullscreen sprite sampling the baked radial
- * mask, recentered every frame. out = dst × mask. Shared by map and
- * battle (Terrax darkness continues in battle, above the scene but
- * below all UI text). */
+
 static void light_mask_blt(float px, float py, float r) {
-    /* Texture px per screen px: texture radius (128) covers world r. */
+
     float k = ((float)LIGHT_TEX / 2.0f) / r;
     float u0 = (float)LIGHT_TEX / 2.0f - (float)px * k;
     float u1 = u0 + (float)SCR_W * k;
@@ -327,9 +312,7 @@ static void light_mask_blt(float px, float py, float r) {
     sceGuDisable(GU_TEXTURE_2D);
 }
 
-/* Map light: globe follows the player sprite.
- * torch_on restores the Fire flicker (radius ±7, the Terrax default);
- * the plain player globe stays steady (playerflicker = false). */
+
 static void render_light_pass(const Player *player, int cam_x, int cam_y,
                               int frames, int torch_on) {
     float px = (float)(player->x - cam_x) + (float)TILE / 2.0f;
@@ -340,7 +323,7 @@ static void render_light_pass(const Player *player, int cam_x, int cam_y,
     light_mask_blt(px, py, r);
 }
 
-/* Draw one NPC's paged cell (pattern/dir taken straight from the page). */
+
 static void render_npc_sprite(const NpcSprite *npc, int cam_x, int cam_y) {
     int fx, fy, fw, fh;
     char_cell(npc->img_w, npc->img_h, npc->is_big, npc->char_index,
@@ -348,11 +331,10 @@ static void render_npc_sprite(const NpcSprite *npc, int cam_x, int cam_y) {
     int sx = npc->tile_x * TILE - cam_x - (fw - TILE) / 2;
     int sy = npc->tile_y * TILE - cam_y - (fh - TILE);
     render_character_cell(npc->t8, npc->clut, npc->tex_w, npc->tex_h,
-                          npc->stride, fx, fy, fw, fh, sx, sy);
+                          npc->stride, fx, fy, fw, fh, sx, sy, fw, fh, 0);
 }
 
-/* Same-priority characters Y-sort by feet (screen bottom of sprite).
- * Feet sit one tile below the entity origin in screen space. */
+
 static int char_feet_y(int ent_y_px, int cam_y) {
     return ent_y_px - cam_y + TILE;
 }
@@ -367,14 +349,12 @@ void render_frame(int cam_x, int cam_y,
     sceGuStart(GU_DIRECT, gu_list_ptr);
     sceGuClearColor(0xff000000);
     sceGuClear(GU_COLOR_BUFFER_BIT);
-    
-    /* OG order: z=0 tiles, below-chars (z=1, priority 0 like corpses),
-     * same-priority characters Y-sorted (z=3), z=4 higher ★ tiles
-     * (rpg_core.js Tilemap z=0/4, screenZ = priorityType*2+1). */
+
+
     render_map_layers(cam_x, cam_y, map_layers, map_w, map_h,
                       higher, higher_len, 0);
 
-    /* Below-level NPCs first (all under every same-level character). */
+
     if (npcs) {
         for (int i = 0; i < n_npcs; i++) {
             if (npcs[i].prio != 0) continue;
@@ -386,28 +366,26 @@ void render_frame(int cam_x, int cam_y,
         }
     }
 
-    /* Collect visible characters (player + on-screen NPCs), sort by feet
-     * Y so lower on screen draws later (in front). Upper tiles (z=4)
-     * still cover every same-priority character. */
+
     static int order[1 + 32];
     static int feet[1 + 32];
     int n = 0;
-    order[n] = -1;  /* -1 = player */
+    order[n] = -1;
     feet[n] = char_feet_y(player->y, cam_y);
     n++;
     if (npcs) {
         for (int i = 0; i < n_npcs && n < 33; i++) {
-            if (npcs[i].prio != 1) continue;  /* prio 0 drawn earlier */
+            if (npcs[i].prio != 1) continue;
             int sx = npcs[i].tile_x * TILE - cam_x;
             int sy = npcs[i].tile_y * TILE - cam_y;
             if (sx < -64 || sx > SCR_W + 64 || sy < -96 || sy > SCR_H + 64)
-                continue;  /* culled */
+                continue;
             order[n] = i;
             feet[n] = char_feet_y(npcs[i].tile_y * TILE, cam_y);
             n++;
         }
     }
-    /* Insertion sort by feet Y (n is tiny). */
+
     for (int i = 1; i < n; i++) {
         int o = order[i], f = feet[i], j = i - 1;
         while (j >= 0 && feet[j] > f) {
@@ -427,19 +405,18 @@ void render_frame(int cam_x, int cam_y,
             render_npc_sprite(&npcs[order[i]], cam_x, cam_y);
     }
 
-    /* Higher tiles draw over the player (canopies, rafters, tall walls) */
+
     render_map_layers(cam_x, cam_y, map_layers, map_w, map_h,
                       higher, higher_len, 1);
 
-    /* Darkness + player glow. */
+
     render_light_pass(player, cam_x, cam_y, frames, torch_on);
 
     sceGuFinish();
     sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
 }
 
-/* Skin box helper (fill + 9-slice frame). Caller enables blend;
- * texture/alpha-test state is managed here. Used by message + battle. */
+
 static void skin_box(int x0, int y0, int x1, int y1, unsigned int fill,
                      int frame) {
     sceGuDisable(GU_TEXTURE_2D);
@@ -503,20 +480,20 @@ static void skin_box(int x0, int y0, int x1, int y1, unsigned int fill,
     sceGuDisable(GU_TEXTURE_2D);
 }
 
-/* ---- Message window ---- */
+
 #define FONT_LINE 26
-#define MSG_COLS 96   /* chars per row cap (wrap is pixel-based, not column) */
+#define MSG_COLS 96
 #define MSG_ROWS 7
-#define MSG_TEXT_W 440.0f  /* usable text width inside the box */
+#define MSG_TEXT_W 440.0f
 
 static char msg_rows[MSG_ROWS][MSG_COLS + 1];
 static unsigned char msg_cols[MSG_ROWS][MSG_COLS];
-static float msg_row_w[MSG_ROWS];  /* rendered width per row (px) */
+static float msg_row_w[MSG_ROWS];
 static int msg_nrows, msg_cx, msg_ccol;
-static float msg_px;  /* pixel cursor in current row */
-static int msg_reveal, msg_body_total;  /* typewriter: shown / total glyphs */
-static char msg_name[32];  /* Yanfly \n<Name> namebox (empty = none) */
-static int msg_expect_name = 0;  /* set by bare \N, consumed by next text */
+static float msg_px;
+static int msg_reveal, msg_body_total;
+static char msg_name[32];
+static int msg_expect_name = 0;
 
 static void msg_newrow(void) {
     if (msg_nrows < MSG_ROWS) {
@@ -529,8 +506,7 @@ static void msg_newrow(void) {
     }
 }
 
-/* A layout row is body text (typewriter-revealed) unless it was produced
- * for choices/END (drawn whole). */
+
 static int msg_body_rows = 0;
 
 int msg_text_revealed(void) {
@@ -541,7 +517,7 @@ void msg_reveal_all(void) {
     msg_reveal = msg_body_total;
 }
 
-/* Call when the event advances: new content types from zero. */
+
 void msg_content_changed(void) {
     msg_reveal = 0;
     msg_body_total = 0;
@@ -552,14 +528,13 @@ static float msg_adv(unsigned int cp) {
     return (float)font_adv[cp] / 2.0f;
 }
 
-/* UTF-8 -> Latin-1 codepoint (atlas is Latin-1 1:1); controls, DEL and
- * C1 (128-159, tofu in the font) become '?'. */
+
 static void msg_put(unsigned int cp) {
     if (cp >= 256 || cp < 32 || (cp >= 127 && cp < 160)) cp = '?';
     if (msg_nrows == 0) msg_newrow();
     if (msg_nrows > MSG_ROWS) return;
     int r = msg_nrows - 1;
-    /* Word wrap by pixel width: break before a word that overflows. */
+
     if (msg_cx < MSG_COLS) {
         msg_rows[r][msg_cx] = (char)cp;
         msg_cols[r][msg_cx] = (unsigned char)msg_ccol;
@@ -570,8 +545,7 @@ static void msg_put(unsigned int cp) {
     }
 }
 
-/* Word-wrap driver: splits runs on spaces, breaking rows between words
- * like Window_Base wordwrap (rpg_windows.js) instead of mid-word. */
+
 static void msg_emit_word(const unsigned int *w, int n) {
     float ww = 0.0f;
     for (int k = 0; k < n; k++) {
@@ -580,7 +554,7 @@ static void msg_emit_word(const unsigned int *w, int n) {
         ww += msg_adv(cp);
     }
     if (ww > MSG_TEXT_W) {
-        /* Longer than a row: break mid-word (OG does the same). */
+
         msg_newrow();
         for (int k = 0; k < n; k++) {
             unsigned int cp = w[k];
@@ -597,10 +571,10 @@ static void msg_emit_word(const unsigned int *w, int n) {
 
 static void msg_text_cb(const char *ptr, int len, void *ud) {
     (void)ud;
-    /* Decode UTF-8 to codepoints, then wrap word by word. */
+
     static unsigned int tmp[256];
     int n = 0, i = 0;
-    /* Yanfly namebox: a run starting with '<' right after bare \N. */
+
     if (msg_expect_name && len > 0 && ptr[0] == '<') {
         int k = 1, o = 0;
         while (k < len && ptr[k] != '>' && o < 31) {
@@ -608,7 +582,7 @@ static void msg_text_cb(const char *ptr, int len, void *ud) {
         }
         msg_name[o] = 0;
         msg_expect_name = 0;
-        if (k < len && ptr[k] == '>') k++;  /* consume '>' */
+        if (k < len && ptr[k] == '>') k++;
         i = k;
         if (i >= len) return;
     }
@@ -630,7 +604,7 @@ static void msg_text_cb(const char *ptr, int len, void *ud) {
             i++;
         }
     }
-    /* Emit word by word (spaces are separators, kept as prefix gaps). */
+
     int k = 0;
     while (k < n) {
         while (k < n && tmp[k] == ' ') {
@@ -649,39 +623,40 @@ static void msg_code_cb(const char *code, int param, void *ud) {
         msg_ccol = param;
         return;
     }
-    /* Bare \N (no [digits]) arms Yanfly namebox capture: the next text
-     * run starting with '<' donates through '>' as the speaker name. */
+
+
     if (code[0] == 'N' && code[1] == 0 && param < 0)
         msg_expect_name = 1;
 }
 
 void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
                            int page_wait) {
-    /* 1. Layout the decoded text into colored rows. */
+
     msg_nrows = 0;
     msg_cx = 0;
     msg_ccol = 0;
     msg_name[0] = 0;
     msg_newrow();
     {
-        FhEscCtx ctx = {NULL, 0, NULL, 0, NULL, 0, NULL};
+        FhEscCtx ctx = {NULL, 0, mit->actor_names, mit->nactors, NULL, 0,
+                        NULL};
         FhEscCb cb;
         cb.on_text = &msg_text_cb;
         cb.on_code = &msg_code_cb;
         cb.ud = NULL;
         fh_decode_escapes(mit->text, &ctx, &cb);
     }
-    /* Body rows (typewriter-revealed) end where choices/END begin. */
+
     msg_body_rows = msg_nrows;
     msg_body_total = 0;
     for (int r = 0; r < msg_body_rows && r < MSG_ROWS; r++)
         msg_body_total += (int)strlen(msg_rows[r]);
     if (msg_reveal > msg_body_total) msg_reveal = msg_body_total;
-    /* 2. Append the choice list. Each option is decoded like body text
-     * (options can carry raw escapes, e.g. \c[2]Torch); the selected row
-     * prints bright, others white, with an orange marker. */
+
+
     if (mit->await_choice && mit->choice_text) {
-        FhEscCtx cctx = {NULL, 0, NULL, 0, NULL, 0, NULL};
+        FhEscCtx cctx = {NULL, 0, mit->actor_names, mit->nactors, NULL, 0,
+                         NULL};
         FhEscCb ccb;
         ccb.on_text = &msg_text_cb;
         ccb.on_code = &msg_code_cb;
@@ -691,8 +666,8 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
         while (*p && msg_nrows < MSG_ROWS && idx < 8) {
             const char *nl = strchr(p, '\n');
             int n = nl ? (int)(nl - p) : (int)strlen(p);
-            /* Decode escapes into a temp run first (color spans), then
-             * re-emit as one row with marker. Simpler: marker row first. */
+
+
             msg_newrow();
             if (msg_nrows > MSG_ROWS) break;
             int r = msg_nrows - 1;
@@ -727,10 +702,8 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
             msg_rows[r][k] = 0;
         }
     }
-    /* 3. Window box. Background/position come from the 101 params
-     * (rpg_windows.js Window_Message): bg 0 = skin, 1 = dim translucent,
-     * 2 = transparent; pos 0 = top, 1 = middle, 2 = bottom.
-     * Typewriter: 2 more glyphs per frame until the body is complete. */
+
+
     if (!msg_text_revealed()) msg_reveal += 2;
     int rows = msg_nrows;
     if (rows < 1) rows = 1;
@@ -756,8 +729,8 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     if (bg != 2)
         skin_box(x0, y0, x1, y1, (bg == 1) ? 0xa0000000 : 0xc8343c42,
                  bg == 0);
-    /* Namebox (Yanfly \n<Name>): mini skin box overlapping the top
-     * edge, name in palette 6 per the added-text convention. */
+
+
     if (bg == 0 && msg_name[0]) {
         float nw = 20.0f;
         for (int k = 0; msg_name[k]; k++)
@@ -766,7 +739,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
         skin_box(nx0, ny0, nx1, ny1, 0xc8343c42, 1);
     }
 
-    /* 4. Glyphs, one batched draw, vertex colors carry \C spans. */
+
     if (!font_px) {
         sceGuDisable(GU_BLEND);
         return;
@@ -786,11 +759,11 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     int total = 0;
     for (int r = 0; r < rows; r++)
         total += (int)strlen(msg_rows[r]);
-    /* + room for the namebox text. Over-allocation is harmless. */
+
     TVert *v = (TVert *)sceGuGetMemory((total + 40) * 2 * sizeof(TVert));
     TVert *vp = v;
-    /* Body rows reveal progressively (typewriter); choice/END rows draw
-     * whole once the body is complete (choices need full context). */
+
+
     int shown = 0;
     for (int r = 0; r < rows; r++) {
         int gy = y0 + 10 + r * FONT_LINE;
@@ -811,7 +784,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
             if (is_body) shown++;
         }
     }
-    /* Namebox text (palette 6 per YEP added-text), if a \n<Name> fired. */
+
     if (msg_name[0] && msg_text_revealed()) {
         float nx = (float)(x0 + 10);
         int ny = y0 + 6 - 32 + 8;
@@ -838,26 +811,292 @@ void render_debug_text(const char *text) {
     pspDebugScreenPrintf("%s", text);
 }
 
-/* ---- Battle scene ---- */
 
-/* One font-textured text line (proportional advances, vertex colors). */
+#define BT_ANIM_MAX 4
+#define ANIM_CELL 96
+#define ANIM_RATE 4
+
+typedef struct {
+    int active, row;
+    int foe_idx, mirror;
+    int duration;
+    int frame;
+} BtAnimLive;
+
+static BtAnimLive bt_anims[BT_ANIM_MAX];
+static int anim_flash_ticks;
+static float anim_flash_a;
+static int anim_flash_rgb;
+
+static int anim_row_of(int id) {
+    for (int r = 0; ANIM_IDX[r].id; r++)
+        if (ANIM_IDX[r].id == id) return r;
+    return -1;
+}
+
+static int anim_sheet_idx(const char *name) {
+    static const char *names[8] = {
+        "coin_flip", "pinecone_pig", "bloodsplurt",
+        "blood_shot", "bugs1", "bugs2",
+        "slash1", "needle_worm",
+    };
+    if (!name) return -1;
+    for (int i = 0; i < 8; i++)
+        if (!strcmp(name, names[i])) return i;
+    return -1;
+}
+
+
+void battle_anim_reset(void) {
+    for (int i = 0; i < BT_ANIM_MAX; i++) bt_anims[i].active = 0;
+    anim_flash_ticks = 0;
+    anim_flash_a = 0.0f;
+}
+
+void battle_anim_start(int anim_id, int foe_idx, int mirror) {    int r = anim_row_of(anim_id);
+    if (r < 0) return;
+    for (int i = 0; i < BT_ANIM_MAX; i++) {
+        if (bt_anims[i].active) continue;
+        bt_anims[i].active = 1;
+        bt_anims[i].row = r;
+        bt_anims[i].foe_idx = foe_idx;
+        bt_anims[i].mirror = mirror ? 1 : 0;
+        bt_anims[i].duration = ANIM_IDX[r].nframes * ANIM_RATE + 1;
+        bt_anims[i].frame = -1;
+        return;
+    }
+
+}
+
+void battle_anim_tick(void) {
+    for (int i = 0; i < BT_ANIM_MAX; i++) {
+        if (!bt_anims[i].active) continue;
+        if (bt_anims[i].duration <= 0) {
+            bt_anims[i].active = 0;
+            continue;
+        }
+        bt_anims[i].duration--;
+        if (bt_anims[i].duration <= 0) {
+            bt_anims[i].active = 0;
+            continue;
+        }
+
+        if (bt_anims[i].duration % ANIM_RATE == 0) {
+            int nf = ANIM_IDX[bt_anims[i].row].nframes;
+            int fi = nf - (bt_anims[i].duration + ANIM_RATE - 1) / ANIM_RATE;
+            if (fi >= 0 && fi < nf) {
+                bt_anims[i].frame = fi;
+                const FhAnimTiming *tm = ANIM_IDX[bt_anims[i].row].tim;
+                for (int k = 0; k < ANIM_IDX[bt_anims[i].row].ntim; k++) {
+                    if (tm[k].frame != fi || tm[k].scope != 2) continue;
+
+                    anim_flash_rgb = (tm[k].col[0] & 255) |
+                                     ((tm[k].col[1] & 255) << 8) |
+                                     ((tm[k].col[2] & 255) << 16);
+                    anim_flash_a = (float)(tm[k].col[3] & 255);
+                    anim_flash_ticks = tm[k].dur * ANIM_RATE;
+                }
+            }
+        }
+    }
+
+    if (anim_flash_ticks > 0) {
+        float d = (float)anim_flash_ticks;
+        anim_flash_ticks--;
+        if (d >= 1.0f) anim_flash_a *= (d - 1.0f) / d;
+        if (anim_flash_ticks <= 0) anim_flash_a = 0.0f;
+    }
+}
+
+
+static void anim_cell_quad(float cx, float cy, float hx, float hy, float rot,
+                           float u0, float v0, unsigned int color) {
+    float c = cosf(rot), s = sinf(rot);
+    TVert *v = (TVert *)sceGuGetMemory(4 * sizeof(TVert));
+    static const float px[4] = {-1.0f, 1.0f, 1.0f, -1.0f};
+    static const float py[4] = {-1.0f, -1.0f, 1.0f, 1.0f};
+    static const float pu[4] = {0.0f, 1.0f, 1.0f, 0.0f};
+    static const float pv[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+    for (int k = 0; k < 4; k++) {
+        float dx = px[k] * hx, dy = py[k] * hy;
+        v[k].u = u0 + pu[k] * (float)ANIM_CELL;
+        v[k].v = v0 + pv[k] * (float)ANIM_CELL;
+        v[k].color = color;
+        v[k].x = cx + dx * c - dy * s;
+        v[k].y = cy + dx * s + dy * c;
+        v[k].z = 0.0f;
+    }
+    sceGuDrawArray(GU_TRIANGLE_FAN, TVERT_FMT, 4, 0, v);
+}
+
+static const int anim_tex_tw[8] = {512, 512, 512, 512, 512, 512, 512, 512};
+static const int anim_tex_th[8] = {512, 512, 512, 512, 256, 256, 256, 512};
+
+void render_battle_anims(const BtFoeDraw *foes, int nfoes) {
+    int any = 0;
+    for (int i = 0; i < BT_ANIM_MAX; i++)
+        if (bt_anims[i].active) { any = 1; break; }
+    if (!any && anim_flash_ticks <= 0) return;
+
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+    sceGuEnable(GU_BLEND);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+
+    for (int i = 0; i < BT_ANIM_MAX; i++) {
+        if (!bt_anims[i].active || bt_anims[i].frame < 0) continue;
+        int fi = bt_anims[i].frame;
+        int nf = ANIM_IDX[bt_anims[i].row].nframes;
+        if (fi < 0 || fi >= nf) continue;
+
+
+        float ox = (float)SCR_W / 2.0f, oy = (float)SCR_H / 2.0f;
+        int pos = ANIM_IDX[bt_anims[i].row].pos;
+        if (pos != 3) {
+            int f = bt_anims[i].foe_idx;
+            if (f == -2) {
+                ox = 156.0f;
+                oy = 158.0f;
+            } else {
+                if (f < 0 || f >= nfoes) continue;
+                ox = foes[f].x;
+                oy = foes[f].y;
+                if (pos == 0) oy -= (float)foes[f].h;
+                else if (pos == 1) oy -= (float)foes[f].h / 2.0f;
+            }
+        }
+        int mirror = bt_anims[i].mirror;
+        int c0 = ANIM_IDX[bt_anims[i].row].foff[fi];
+        int c1 = ANIM_IDX[bt_anims[i].row].foff[fi + 1];
+        for (int c = c0; c < c1; c++) {
+            const FhAnimCell *cell = &ANIM_IDX[bt_anims[i].row].cells[c];
+            if (cell->pat < 0) continue;
+            int si = (cell->pat < 100)
+                         ? anim_sheet_idx(ANIM_IDX[bt_anims[i].row].sheet1)
+                         : anim_sheet_idx(ANIM_IDX[bt_anims[i].row].sheet2);
+            if (si < 0 || !anim_t8[si]) continue;
+            int col = cell->pat % 5, rr = (cell->pat % 100) / 5;
+            float u0 = (float)(col * ANIM_CELL), v0 = (float)(rr * ANIM_CELL);
+            if (u0 + ANIM_CELL > anim_tex_tw[si] ||
+                v0 + ANIM_CELL > anim_tex_th[si])
+                continue;
+            sceGuClutLoad(32, anim_cl[si]);
+            sceGuTexImage(0, anim_tex_tw[si], anim_tex_th[si],
+                          anim_tex_tw[si], anim_t8[si]);
+            sceGuTexFlush();
+            sceGuTexSync();
+
+
+            float cx = ox + (float)(mirror ? -cell->x : cell->x);
+            float cy = oy + (float)cell->y;
+            float sc = (float)cell->scale / 100.0f;
+            float sx = sc * ((cell->mir || mirror) ? -1.0f : 1.0f);
+            float rot = (float)(mirror ? -cell->rot : cell->rot) *
+                        3.14159265f / 180.0f;
+            unsigned int colr = (((unsigned int)(cell->opa & 255)) << 24) |
+                                0x00ffffff;
+            if (cell->blend == 1)
+                sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0x00ffffff);
+            else
+                sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA,
+                               GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+            anim_cell_quad(cx, cy, 48.0f * sx, 48.0f * sc, rot, u0, v0, colr);
+        }
+    }
+
+    if (anim_flash_ticks > 0 && anim_flash_a > 0.5f) {
+        sceGuDisable(GU_TEXTURE_2D);
+        sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+        TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        unsigned int c = (((unsigned int)anim_flash_a) << 24) |
+                         (unsigned int)anim_flash_rgb;
+        v[0].u = 0; v[0].v = 0; v[0].color = c;
+        v[0].x = 0; v[0].y = 0; v[0].z = 0.0f;
+        v[1].u = 0; v[1].v = 0; v[1].color = c;
+        v[1].x = (float)SCR_W; v[1].y = (float)SCR_H; v[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
+        sceGuEnable(GU_TEXTURE_2D);
+    }
+    sceGuDisable(GU_BLEND);
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuDisable(GU_ALPHA_TEST);
+}
+
+
 static void battle_text(const char *s, float x, float y, unsigned int col,
                         TVert **vpp) {
     TVert *vp = *vpp;
+    unsigned int sh = col & 0xff000000;
     float gx = x;
     for (; *s; s++) {
         unsigned int cp = (unsigned char)*s;
         if (cp < 32 || cp >= 256) cp = '?';
         float u0 = (float)((cp % 32) * 16);
         float v0 = (float)((cp / 32) * 32);
-        vp[0].u = u0; vp[0].v = v0; vp[0].color = col;
-        vp[0].x = gx; vp[0].y = y; vp[0].z = 0.0f;
-        vp[1].u = u0 + 16; vp[1].v = v0 + 32; vp[1].color = col;
-        vp[1].x = gx + 16; vp[1].y = y + 32; vp[1].z = 0.0f;
-        vp += 2;
+        vp[0].u = u0; vp[0].v = v0; vp[0].color = sh;
+        vp[0].x = gx + 1.0f; vp[0].y = y + 1.0f; vp[0].z = 0.0f;
+        vp[1].u = u0 + 16; vp[1].v = v0 + 32; vp[1].color = sh;
+        vp[1].x = gx + 17.0f; vp[1].y = y + 33.0f; vp[1].z = 0.0f;
+        vp[2].u = u0; vp[2].v = v0; vp[2].color = col;
+        vp[2].x = gx; vp[2].y = y; vp[2].z = 0.0f;
+        vp[3].u = u0 + 16; vp[3].v = v0 + 32; vp[3].color = col;
+        vp[3].x = gx + 16; vp[3].y = y + 32; vp[3].z = 0.0f;
+        vp += 4;
         gx += msg_adv(cp);
     }
     *vpp = vp;
+}
+
+
+static float battle_text_w(const char *s) {
+    float w = 0.0f;
+    for (; s && *s; s++) {
+        unsigned int cp = (unsigned char)*s;
+        if (cp < 32 || cp >= 256) cp = '?';
+        w += msg_adv(cp);
+    }
+    return w;
+}
+
+
+static void bar_quad(TVert *q, float x0, float y0, float x1, float y1,
+                     unsigned int c) {
+    q[0].u = 0; q[0].v = 0; q[0].color = c;
+    q[0].x = x0; q[0].y = y0; q[0].z = 0.0f;
+    q[1].u = 0; q[1].v = 0; q[1].color = c;
+    q[1].x = x1; q[1].y = y1; q[1].z = 0.0f;
+}
+
+
+static TVert *gauge_grad(TVert *bp, float x, float y, float fillw,
+                         unsigned int c1, unsigned int c2) {
+    int r1 = (int)(c1 & 0xff), g1 = (int)((c1 >> 8) & 0xff),
+        b1 = (int)((c1 >> 16) & 0xff);
+    int r2 = (int)(c2 & 0xff), g2 = (int)((c2 >> 8) & 0xff),
+        b2 = (int)((c2 >> 16) & 0xff);
+    float fw = (float)((int)fillw);
+    if (fw < 0.0f) fw = 0.0f;
+    for (int s = 0; s < 8; s++) {
+        float sx0 = x + fw * (float)s / 8.0f;
+        float sx1 = x + fw * (float)(s + 1) / 8.0f;
+        float t = ((float)s + 0.5f) / 8.0f;
+        int r = r1 + (int)((float)(r2 - r1) * t);
+        int g = g1 + (int)((float)(g2 - g1) * t);
+        int b = b1 + (int)((float)(b2 - b1) * t);
+        unsigned int c =
+            0xff000000 | ((unsigned int)b << 16) | ((unsigned int)g << 8) |
+            (unsigned int)r;
+        bar_quad(bp, sx0, y, sx1, y + 6.0f, c);
+        bp += 2;
+    }
+    return bp;
 }
 
 void render_battle(const BtFoeDraw *foes, int nfoes,
@@ -865,12 +1104,16 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    const char *actor_name, int hp, int mhp, int mp, int mmp,
                    const char *cmds[], int ncmds, int cursor, int show_cmds,
                    const char *targets[], int ntargets, int tcursor,
-                   int show_targets, const char *banner,
-                   unsigned char *actor_t8, unsigned int *actor_cl,
-                   int actor_mcol, int actor_mrow,
-                   float tgt_x, float tgt_y) {
-    /* Backdrop: mines tunnel, centered native (scissor clips overflow).
-     * Falls back to flat maroon when the art is missing. */
+                   int show_targets, const char *log0, const char *log1,
+                   unsigned char *actor_t8a, unsigned int *actor_cla,
+                   unsigned char *actor_t8b, unsigned int *actor_clb,
+                   int actor_ccol, int actor_crow, int actor_sx,
+                   int actor_sy,
+                   int sel_foe, const int *flash, const int *collapse,
+                   const BtListRow *lrows, int nlrows, int lcursor,
+                   int show_list, const int *st_icons, int nst_icons) {
+
+
     sceGuDisable(GU_TEXTURE_2D);
     sceGuDisable(GU_ALPHA_TEST);
     sceGuEnable(GU_BLEND);
@@ -909,9 +1152,11 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         sceGuDisable(GU_TEXTURE_2D);
     }
 
-    /* Enemy limbs (skip the fallen; collapse anims are a later pass). */
+
+    render_ticks++;
+    int blink = ((render_ticks / 10) % 2) == 0;
     sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
     sceGuTexWrap(GU_CLAMP, GU_CLAMP);
     sceGuTexScale(1.0f, 1.0f);
@@ -919,55 +1164,129 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
     sceGuEnable(GU_ALPHA_TEST);
     sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     for (int i = 0; i < nfoes; i++) {
-        if (!foes[i].alive || !foes[i].t8 || !foes[i].clut) continue;
+        int col = collapse ? collapse[i] : 0;
+        if ((!foes[i].alive && col <= 0) || !foes[i].t8 || !foes[i].clut)
+            continue;
         sceGuClutLoad(32, foes[i].clut);
         sceGuTexMode(GU_PSM_T8, 0, 0, 1);
         sceGuTexImage(0, foes[i].tw, foes[i].th, foes[i].stride, foes[i].t8);
         sceGuTexFlush();
         sceGuTexSync();
+        unsigned int va = 0xffffffff;
+        float sink = 0.0f;
+        if (col > 0) {
+            if (col > 30) col = 30;
+            va = (((unsigned int)(255 * col / 30)) << 24) | 0x00ffffff;
+            sink = (float)(30 - col);
+        }
         TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-        v[0].u = 0; v[0].v = 0; v[0].color = 0xffffffff;
+        v[0].u = 0; v[0].v = 0; v[0].color = va;
         v[0].x = foes[i].x - (float)foes[i].w / 2.0f;
-        v[0].y = foes[i].y - (float)foes[i].h;
+        v[0].y = foes[i].y - (float)foes[i].h + sink;
         v[0].z = 0.0f;
         v[1].u = (float)foes[i].w; v[1].v = (float)foes[i].h;
-        v[1].color = 0xffffffff;
+        v[1].color = va;
         v[1].x = foes[i].x + (float)foes[i].w / 2.0f;
-        v[1].y = foes[i].y;
+        v[1].y = foes[i].y + sink;
         v[1].z = 0.0f;
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
+
+        int hot = (i == sel_foe && blink) ||
+                  (flash && flash[i] > 0);
+        if (hot) {
+            unsigned int wa = (col > 0)
+                                  ? (((unsigned int)(160 * col / 30)) << 24) |
+                                        0x00ffffff
+                                  : 0xa0ffffff;
+            sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0x00ffffff);
+            TVert *w = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+            w[0].u = 0; w[0].v = 0; w[0].color = wa;
+            w[0].x = v[0].x; w[0].y = v[0].y; w[0].z = 0.0f;
+            w[1].u = (float)foes[i].w; w[1].v = (float)foes[i].h;
+            w[1].color = wa;
+            w[1].x = v[1].x; w[1].y = v[1].y; w[1].z = 0.0f;
+            sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, w);
+            sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA,
+                           0, 0);
+        }
     }
     sceGuDisable(GU_TEXTURE_2D);
 
-    /* Actor battler: side-view motion cell (56px grid, middle pattern).
-     * Motions (rpg_sprites.js): col = motionIndex/6*3+1, row = index%6;
-     * wait=1 idle, guard=3, thrust=6, swing=7, missile=8. Textures must
-     * stay within the 512px GE limit (1024-wide uploads vanish). */
-    if (actor_t8 && actor_cl) {
-        render_character_cell(actor_t8, actor_cl, 512, 512, 512,
-                              actor_mcol * 56, actor_mrow * 56, 56, 56,
-                              110 - 28, (SCR_H - 100) - 56);
+
+    {
+        int cc = actor_ccol, cr = actor_crow;
+        if (cc < 0) cc = 0;
+        if (cc > 5) cc = 5;
+        if (cr < 1) cr = 1;
+        if (cr > 4) cr = 4;
+        unsigned char *at8 = (cc < 3) ? actor_t8a : actor_t8b;
+        unsigned int *acl = (cc < 3) ? actor_cla : actor_clb;
+        if (at8 && acl) {
+            render_character_cell(at8, acl, 512, 512, 512,
+                                  (cc % 3) * 112, (cr - 1) * 112, 112, 112,
+                                  actor_sx, actor_sy, 112, 112, 0);
+        }
     }
 
-    /* Actor status: Body/Mind labels like the OG status rows, with bars. */
+
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    skin_box(150, 216, 472, 268, 0xc8343c42, 1);
+    if (show_cmds || show_list) {
+        int nn = show_cmds ? ncmds : nlrows;
+        if (nn < 1) nn = 1;
+        if (nn > 5) nn = 5;
+        skin_box(8, 156, 142, 162 + (nn - 1) * 18 + 38, 0xc8343c42, 1);
+    }
+    int en_rows = 0;
+    if (show_targets && ntargets > 0) {
+        en_rows = ntargets > 7 ? 7 : ntargets;
+        skin_box(296, 8, 472, 8 + en_rows * 22 + 28, 0xc8343c42, 1);
+    }
+
+
+    {
+        int pulse = (render_ticks / 12) % 2;
+        unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+        if (show_cmds && cursor >= 0 && cursor < ncmds)
+            skin_box(10, 162 + cursor * 20, 140, 162 + cursor * 20 + 22,
+                     hc, 0);
+        if (show_list && lrows && lcursor >= 0 && lcursor < nlrows)
+            skin_box(10, 162 + lcursor * 20, 140, 162 + lcursor * 20 + 22,
+                     hc, 0);
+        if (show_targets && tcursor >= 0 && tcursor < en_rows)
+            skin_box(298, 20 + tcursor * 22, 470, 20 + tcursor * 22 + 24,
+                     hc, 0);
+    }
+
+
     int cmdtotal = (int)strlen(actor_name) + 24;
     for (int i = 0; i < ncmds; i++) cmdtotal += (int)strlen(cmds[i]) + 2;
     int targtotal = 0;
     for (int i = 0; i < ntargets; i++) targtotal += (int)strlen(targets[i]) + 2;
     int poptotal = npops * 8;
-    int bannerlen = banner ? (int)strlen(banner) : 0;
+    int loglen = 0;
+    if (log0) loglen += (int)strlen(log0);
+    if (log1) loglen += (int)strlen(log1);
+    int listtotal = 0;
+    if (show_list && lrows) {
+        for (int i = 0; i < nlrows; i++)
+            listtotal += (int)strlen(lrows[i].text) + 2;
+    }
+
+
     TVert *v = (TVert *)sceGuGetMemory(
-        (cmdtotal + targtotal + poptotal + bannerlen + 3) * 2 * sizeof(TVert));
+        (cmdtotal + targtotal + poptotal + loglen + listtotal + 48) * 2 * 2 *
+        sizeof(TVert));
     TVert *vp = v;
-    /* Battle vignette: same Terrax darkness over the scene, below UI.
-     * Wide steady pool covers party and troop (targeting stays readable;
-     * edges fall to black like the map). */
+
+
     light_mask_blt(200.0f, 160.0f, 220.0f);
 
-    /* Text pass needs the font texture bound (blend + alpha test were
-     * left disabled by the actor draw above — without them every glyph
-     * cell renders as a solid box). */
+
     if (font_px) {
         sceGuEnable(GU_BLEND);
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
@@ -985,25 +1304,38 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         sceGuTexImage(0, 512, 512, 512, font_px);
         sceGuTexFlush();
         sceGuTexSync();
-        /* Actor status: Body/Mind values like the OG rows, bars beneath. */
+
+
         {
-            char hpbuf[32], mpbuf[32];
-            snprintf(hpbuf, sizeof(hpbuf), "Body %d", hp);
-            snprintf(mpbuf, sizeof(mpbuf), "Mind %d", mp);
-            battle_text(actor_name, 150.0f, 182.0f, 0xffffffff, &vp);
-            battle_text(hpbuf, 150.0f, 206.0f, 0xffffffff, &vp);
-            battle_text(mpbuf, 320.0f, 206.0f, 0xffffffff, &vp);
+            char hpb[32], mpb[32];
+            snprintf(hpb, sizeof(hpb), "%d/%d", hp, mhp);
+            snprintf(mpb, sizeof(mpb), "%d/%d", mp, mmp);
+            unsigned int hcol = 0xffffffff;
+            if (hp <= 0) hcol = 0xff808080;
+            else if (mhp > 0 && hp < (mhp + 3) / 4) hcol = 0xff2020ff;
+            battle_text(actor_name, 158.0f, 222.0f, 0xffffffff, &vp);
+            battle_text("Body", 158.0f, 240.0f, MSG_PAL[16], &vp);
+            battle_text(hpb, 298.0f - battle_text_w(hpb), 240.0f, hcol,
+                        &vp);
+            battle_text("Mind", 322.0f, 240.0f, MSG_PAL[16], &vp);
+            battle_text(mpb, 462.0f - battle_text_w(mpb), 240.0f,
+                        0xffffffff, &vp);
         }
         if (show_cmds) {
             for (int i = 0; i < ncmds; i++) {
-                float cy = 182.0f + (float)i * 24.0f;
-                if (i == cursor)
-                    battle_text(">", 12.0f, cy, 0xff4c78ff, &vp);
+                float cy = 162.0f + (float)i * 18.0f;
                 battle_text(cmds[i], 30.0f, cy, 0xffffffff, &vp);
             }
         }
+
+        if (show_list && lrows) {
+            for (int i = 0; i < nlrows; i++) {
+                float cy = 162.0f + (float)i * 18.0f;
+                battle_text(lrows[i].text, 50.0f, cy, lrows[i].color, &vp);
+            }
+        }
         for (int i = 0; i < npops; i++) {
-            /* Rise and fade over ttl. */
+
             float k = pops[i].max > 0 ? (float)pops[i].ttl / (float)pops[i].max : 0.0f;
             if (k < 0.0f) k = 0.0f;
             char buf[16];
@@ -1013,21 +1345,106 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                 col = 0xffffffff;
             } else {
                 snprintf(buf, sizeof(buf), "%d", pops[i].value);
-                col = pops[i].kind == 2 ? 0xff39f6fd : 0xffffffff;
+                col = pops[i].kind == 2 ? 0xff39f6fd
+                                        : pops[i].kind == 3 ? 0xff40cc66
+                                                            : 0xffffffff;
             }
             col = (col & 0x00ffffff) |
                   (((unsigned int)(255.0f * k)) << 24);
             float py = (float)pops[i].y - (1.0f - k) * 24.0f;
             battle_text(buf, (float)pops[i].x, py, col, &vp);
         }
-        if (banner)
-            battle_text(banner, 12.0f, 10.0f, 0xffffa0f0, &vp);
-        /* Target marker above the aimed limb (OG cursor feel). */
-        if (show_targets && tgt_x >= 0 && tgt_y >= 0)
-            battle_text("v", (float)(tgt_x - 4), (float)(tgt_y - 30),
-                        0xff4c78ff, &vp);
+
+
+        if (show_targets && ntargets > 0) {
+            for (int i = 0; i < en_rows && i < ntargets; i++) {
+                float cy = 22.0f + (float)i * 22.0f;
+                const char *nm = (targets[i] && targets[i][0]) ? targets[i]
+                                                               : "?";
+                battle_text(nm, 314.0f, cy, 0xffffffff, &vp);
+            }
+        }
+
+
+        if (log0 && log0[0])
+            battle_text(log0, 12.0f, 10.0f, 0xffffffff, &vp);
+        if (log1 && log1[0])
+            battle_text(log1, 12.0f, 32.0f, 0xffffffff, &vp);
+
+
+        if (vp > v)
+            sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
     }
-    /* HP/MP bars beneath the status rows. */
+
+    if (icon_t8) {
+        sceGuEnable(GU_TEXTURE_2D);
+        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+        sceGuTexScale(1.0f, 1.0f);
+        sceGuTexOffset(0.0f, 0.0f);
+        sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+        sceGuClutLoad(32, icon_cl);
+        sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+        sceGuTexImage(0, 256, 512, 256, icon_t8);
+        sceGuTexFlush();
+        sceGuTexSync();
+        sceGuEnable(GU_ALPHA_TEST);
+        sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+        sceGuEnable(GU_BLEND);
+        sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+
+        {
+            float nx = 158.0f;
+            for (const char *p = actor_name; *p; p++)
+                nx += msg_adv((unsigned char)*p);
+            nx += 6.0f;
+            for (int i = 0; i < nst_icons && i < 3; i++) {
+                int idx = st_icons[i];
+                if (idx < 0) continue;
+                TVert *q = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+                q[0].u = (float)((idx % 16) * 16);
+                q[0].v = (float)((idx / 16) * 16);
+                q[0].color = 0xffffffff;
+                q[0].x = nx + (float)(i * 18);
+                q[0].y = 230.0f;
+                q[0].z = 0.0f;
+                q[1].u = q[0].u + 16.0f;
+                q[1].v = q[0].v + 16.0f;
+                q[1].color = 0xffffffff;
+                q[1].x = q[0].x + 16.0f;
+                q[1].y = q[0].y + 16.0f;
+                q[1].z = 0.0f;
+                sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, q);
+            }
+        }
+
+        if (show_list && lrows) {
+            for (int i = 0; i < nlrows; i++) {
+                if (lrows[i].icon < 0) continue;
+                float cy = 162.0f + (float)i * 18.0f + 1.0f;
+                TVert *q = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+                q[0].u = (float)((lrows[i].icon % 16) * 16);
+                q[0].v = (float)((lrows[i].icon / 16) * 16);
+                q[0].color = 0xffffffff;
+                q[0].x = 30.0f;
+                q[0].y = cy;
+                q[0].z = 0.0f;
+                q[1].u = q[0].u + 16.0f;
+                q[1].v = q[0].v + 16.0f;
+                q[1].color = 0xffffffff;
+                q[1].x = 46.0f;
+                q[1].y = cy + 16.0f;
+                q[1].z = 0.0f;
+                sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, q);
+            }
+        }
+        sceGuDisable(GU_BLEND);
+        sceGuDisable(GU_TEXTURE_2D);
+        sceGuDisable(GU_ALPHA_TEST);
+    }
+
+
     {
         float hpf = mhp > 0 ? (float)hp / (float)mhp : 0.0f;
         float mpf = mmp > 0 ? (float)mp / (float)mmp : 0.0f;
@@ -1036,45 +1453,19 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         if (hpf > 1.0f) hpf = 1.0f;
         if (mpf > 1.0f) mpf = 1.0f;
         sceGuDisable(GU_TEXTURE_2D);
-        TVert *br = (TVert *)sceGuGetMemory(4 * 2 * sizeof(TVert));
+
+        TVert *br = (TVert *)sceGuGetMemory(18 * 2 * sizeof(TVert));
         TVert *bp = br;
-        float by = 230.0f;
-        bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff202020;
-        bp[0].x = 150; bp[0].y = by; bp[0].z = 0.0f;
-        bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff202020;
-        bp[1].x = 300; bp[1].y = by + 7; bp[1].z = 0.0f;
+        float by = 258.0f;
+        bar_quad(bp, 158.0f, by, 298.0f, by + 6.0f, 0xff402020);
         bp += 2;
-        bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff3030c0;
-        bp[0].x = 150; bp[0].y = by; bp[0].z = 0.0f;
-        bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff3030c0;
-        bp[1].x = 150 + 150.0f * hpf; bp[1].y = by + 7; bp[1].z = 0.0f;
+        bar_quad(bp, 322.0f, by, 462.0f, by + 6.0f, 0xff402020);
         bp += 2;
-        bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xff202020;
-        bp[0].x = 320; bp[0].y = by; bp[0].z = 0.0f;
-        bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xff202020;
-        bp[1].x = 460; bp[1].y = by + 7; bp[1].z = 0.0f;
-        bp += 2;
-        bp[0].u = 0; bp[0].v = 0; bp[0].color = 0xffc08030;
-        bp[0].x = 320; bp[0].y = by; bp[0].z = 0.0f;
-        bp[1].u = 0; bp[1].v = 0; bp[1].color = 0xffc08030;
-        bp[1].x = 320 + 140.0f * mpf; bp[1].y = by + 7; bp[1].z = 0.0f;
-        bp += 2;
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 4 * 2, 0, br);
-    }
-    if (vp > v)
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
-    /* TEMP TEXT DIAGNOSTIC (remove after white-box verdict): thumbnail of
-     * the raw font atlas (REPLACE) top-right. Glyphs visible here =>
-     * upload+CLUT+sampling fine, MODULATE path broken. White here too =>
-     * the texture itself arrives broken. */
-    {
-        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
-        TVert *t = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-        t[0].u = 0; t[0].v = 64; t[0].color = 0xffffffff;
-        t[0].x = 344; t[0].y = 8; t[0].z = 0.0f;
-        t[1].u = 256; t[1].v = 128; t[1].color = 0xffffffff;
-        t[1].x = 472; t[1].y = 40; t[1].z = 0.0f;
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, t);
+        bp = gauge_grad(bp, 158.0f, by, 140.0f * hpf, 0xff2a3050,
+                        0xff112589);
+        bp = gauge_grad(bp, 322.0f, by, 140.0f * mpf, 0xff2a3050,
+                        0xff112589);
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(bp - br), 0, br);
     }
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);

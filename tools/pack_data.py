@@ -107,13 +107,13 @@ def main():
         pk.enc(v)
         blobs[f.name] = bytes(pk.buf[start:])
 
-    # header + string table + index + blobs
+
     hdr = struct.pack('<4sIII', b'FHPK', 1, len(blobs), len(pk.strings))
     stb = bytearray()
     for s in pk.strings:
         e = s.encode('utf-8')
         stb += struct.pack('<I', len(e)) + e
-    # index with offsets relative to blob section start
+
     names = sorted(blobs)
     idx = bytearray()
     off = 0
@@ -124,10 +124,10 @@ def main():
         index.append((n, off, len(blobs[n])))
         off += len(blobs[n])
     pak = hdr + bytes(stb) + bytes(idx) + b''.join(blobs[n] for n in names)
-    (out / 'game.pak').write_text('', encoding='utf-8')  # placeholder guard
+    (out / 'game.pak').write_text('', encoding='utf-8')
     (out / 'game.pak').write_bytes(pak)
 
-    # roundtrip verify: decode every blob from the final pak and compare
+
     blob_base = len(hdr) + len(stb) + len(idx)
     assert pak[:4] == b'FHPK'
     bad = 0

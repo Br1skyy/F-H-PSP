@@ -1,4 +1,4 @@
-/* See text.h. No heap: substitution into a fixed buffer (texts are short). */
+
 #include "text.h"
 #include <string.h>
 #include <stdio.h>
@@ -10,7 +10,7 @@ static int is_letter(char c) {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 }
 
-/* Substitute one family (\V \N \P \G) over src into dst. Returns dst length. */
+
 static int sub_family(const char *src, int srclen, char *dst, char fam,
                       const FhEscCtx *ctx) {
     int si = 0, di = 0;
@@ -41,7 +41,7 @@ static int sub_family(const char *src, int srclen, char *dst, char fam,
             } else if (fam == 'G') {
                 tn = snprintf(tmp, sizeof(tmp), "%s", ctx->currency ? ctx->currency : "");
             } else {
-                /* no match: copy ESC + letter verbatim, let tokenizer decide */
+
                 if (di < FH_DEC_CAP - 2) { dst[di++] = src[si++]; dst[di++] = src[si++]; }
                 else break;
                 continue;
@@ -61,10 +61,10 @@ static int sub_family(const char *src, int srclen, char *dst, char fam,
 void fh_decode_escapes(const char *text, const FhEscCtx *ctx, const FhEscCb *cb) {
     static char b0[FH_DEC_CAP], b1[FH_DEC_CAP], b2[FH_DEC_CAP], b3[FH_DEC_CAP];
     int n = (int)strlen(text), i;
-    /* '\' -> ESC */
+
     if (n >= FH_DEC_CAP - 1) n = FH_DEC_CAP - 2;
     for (i = 0; i < n; i++) b0[i] = (text[i] == '\\') ? '\x1b' : text[i];
-    /* ESC ESC -> '\' */
+
     int w = 0;
     for (i = 0; i < n; i++) {
         if (b0[i] == '\x1b' && i + 1 < n && b0[i + 1] == '\x1b') {
@@ -72,7 +72,7 @@ void fh_decode_escapes(const char *text, const FhEscCtx *ctx, const FhEscCb *cb)
             i++;
         } else b1[w++] = b0[i];
     }
-    /* V twice (source quirk), then N, P, G */
+
     int n1 = sub_family(b1, w, b2, 'V', ctx);
     int n2 = sub_family(b2, n1, b3, 'V', ctx);
     int n3 = sub_family(b3, n2, b2, 'N', ctx);

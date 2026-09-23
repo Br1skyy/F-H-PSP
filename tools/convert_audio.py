@@ -76,7 +76,7 @@ def main():
         tmp.rmdir()
     except OSError:
         pass
-    # merge with existing manifest (runs are incremental via --only)
+
     merged = {(e['cat'], e['name']): e for e in entries}
     mpath = out / 'manifest.json'
     if mpath.exists():

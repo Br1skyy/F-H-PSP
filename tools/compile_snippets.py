@@ -48,7 +48,7 @@ def tokenize(src):
             toks.append(('OP', other))
         else:
             raise ValueError(f'char {other!r} in {src!r}')
-    # merge multi-char operators
+
     out = []
     i = 0
     while i < len(toks):
@@ -110,7 +110,7 @@ class Ctx:
         if t == 'OP' and v == '-':
             self.next()
             self.unary()
-            # negate: PUSH -1 MUL
+
             self.out.append((OPS['PUSH'], 0, -1.0))
             self.out.append((OPS['MUL'], 0, 0.0))
         elif t == 'OP' and v == '(':
@@ -134,7 +134,7 @@ class Ctx:
             tt, ww = self.next()
             if base in ('$gameVariables', '$gameSwitches') and tt == 'METH' and ww == 'value':
                 assert self.next() == ('OP', '(')
-                # argument: nested expr; for observed data it's a literal id
+
                 arg = self.collect_call_arg()
                 self.out.extend(arg)
                 self.out.append((OPS['VAR' if base == '$gameVariables' else 'SWITCH'], 0, 0.0))
@@ -161,7 +161,7 @@ class Ctx:
         save = len(self.out)
         self.expr(0)
         assert self.next() == ('OP', ')')
-        return []  # arg expr already emitted inline; VAR/SWITCH consumes TOS
+        return []
 
 def host_eval(insns, a, b, var=lambda i: 0.0, sw=lambda i: 0.0):
     import math
@@ -208,12 +208,12 @@ def main():
                 compiled.append((kind, o.get('id'), f, c.out))
             except Exception as e:
                 fallback.append({'kind': kind, 'id': o.get('id'), 'formula': f, 'reason': str(e)[:120]})
-    # verify each against Python-eval reference with sample stats
+
     a = [10.0, 8.0, 6.0, 6.0, 12.0, 9.0, 200.0, 50.0, 200.0, 50.0, 5.0]
     b = [8.0, 10.0, 5.0, 5.0, 8.0, 7.0, 150.0, 30.0, 150.0, 30.0, 3.0]
     bad = 0
     for kind, i, f, ins in compiled:
-        # reference: rewrite a.stat/b.stat to plain names (JS allows `.def`, Python syntax doesn't)
+
         ref_src = re.sub(r'([ab])\.(\w+)', lambda m: f"{m.group(1)}_{m.group(2)}", f)
         ns = {f'{who}_{st}': (a if who == 'a' else b)[STATS[st]]
               for who in 'ab' for st in STATS}
@@ -221,7 +221,7 @@ def main():
         got = host_eval(ins, a, b)
         if abs(got - ref) > 1e-6:
             print(f'EVAL-DIFF {kind}{i} {f!r}: ref={ref} got={got}'); bad += 1
-    # binary pack
+
     blob = bytearray(struct.pack('<I', len(compiled)))
     for kind, i, f, ins in compiled:
         blob += struct.pack('<BHH', {'skill': 0, 'item': 1, 'weapon': 2, 'armor': 3, 'state': 4, 'enemy': 5}[kind], i or 0, len(ins))

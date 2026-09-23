@@ -50,19 +50,19 @@ def convert_one(src_bytes: bytes, scale: float):
     if (nw, nh) != (ow, oh):
         im = im.resize((nw, nh), Image.LANCZOS)
     alpha = im.getchannel('A')
-    # mask: index 0 reserved for transparent (mode 'L' = 1 byte/px; mode '1' would pack bits)
+
     mask = alpha.point(lambda a: 0 if a < 128 else 255, mode='L')
     rgb = im.convert('RGB').quantize(colors=255, method=Image.MEDIANCUT)
     pal = rgb.getpalette()[:255 * 3]
-    idx = rgb.tobytes()  # values 0..254
-    # shift up by 1 so 0 stays transparent
+    idx = rgb.tobytes()
+
     idx = bytes(b + 1 if m else 0 for b, m in zip(idx, mask.tobytes()))
-    # CLUT: entry 0 = transparent black, 1..255 = palette
+
     clut = struct.pack('<I', 0x00000000)
     for i in range(255):
         r, g, b = pal[i * 3:(i + 1) * 3]
         clut += struct.pack('<I', 0xFF000000 | (b << 16) | (g << 8) | r)
-    # pad stride to swizzle block
+
     tex_w = ((nw + 15) // 16) * 16
     tex_h = ((nh + 7) // 8) * 8
     padded = bytearray(tex_w * tex_h)
@@ -72,7 +72,7 @@ def convert_one(src_bytes: bytes, scale: float):
     swizzle8(swiz, bytes(padded), tex_w, tex_h)
     return bytes(swiz), clut, nw, nh, tex_w, tex_h
 
-WORLD_CATS = {'tilesets', 'characters'}  # scaled by TILE/48
+WORLD_CATS = {'tilesets', 'characters'}
 
 def main():
     args = sys.argv[1:]
@@ -88,7 +88,7 @@ def main():
     key = sysj.get('encryptionKey', '')
     scale_world = tile / 48.0
 
-    # gather candidates
+
     jobs = []
     for cat in ('tilesets', 'characters', 'enemies', 'faces', 'sv_actors',
                 'battlebacks1', 'parallaxes', 'pictures'):
@@ -99,7 +99,7 @@ def main():
             rel = f'{cat}/{f.stem}'
             if only and not any(rel.startswith(o) for o in only):
                 continue
-            # skip .png if .rpgmvp twin exists (avoid double convert)
+
             if f.suffix == '.png' and (f.parent / (f.stem + '.rpgmvp')).exists():
                 continue
             jobs.append((cat, f))
@@ -128,7 +128,7 @@ def main():
         total_t8 += len(t8)
         print(f'OK {cat}/{f.stem} {w}x{h} (stride {tw}x{th}) {len(t8)//1024}KB')
 
-    vram_free = 2 * 1024 * 1024 - 550 * 1024  # plan §7: 2MB - ~0.55MB framebuffers
+    vram_free = 2 * 1024 * 1024 - 550 * 1024
     manifest = {'tile': tile, 'n': len(entries),
                 't8_total_bytes': total_t8,
                 'vram_texture_budget_bytes': vram_free,

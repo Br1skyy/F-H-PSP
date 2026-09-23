@@ -1,12 +1,5 @@
-/* PC harness: renders the boot view with the REAL fh_collect() + a tiny
- * software compositor, writing view.ppm. Pixel-diffed against the golden
- * PNG crop (render_map.py). No SDL/GL deps; PPM is trivially writable.
- *
- * Build: gcc -Wall -O2 -o draw_ppm draw_ppm.c ../runtime/map.c -lm
- * Usage: ./draw_ppm layers.bin sheetdir x0 y0 out.ppm
- * Sheets: Mines_A1(192x384) Mines_B/E/Inside_B/Mines_D(384x384) hardcoded
- *         (Map030-specific test driver).
- */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,9 +12,7 @@
 #define NX 22
 #define NY 13
 
-/* Swizzled file -> linear rows (INVERSE of the blit sample's swizzle_fast,
- * which goes linear -> swizzled for upload). The GE reads swizzled data
- * directly, so this direction exists only in PC tooling. */
+
 static void deswizzle8(unsigned char *out, const unsigned char *in, int w, int h) {
     int src = 0;
     for (int by = 0; by < h; by += 8)
@@ -32,7 +23,7 @@ static void deswizzle8(unsigned char *out, const unsigned char *in, int w, int h
             }
 }
 
-static unsigned char sheets[5][384 * 384 * 4];  /* RGBA, largest sheet */
+static unsigned char sheets[5][384 * 384 * 4];
 static int sheet_w[5] = {192, 384, 384, 384, 384};
 static int sheet_h[5] = {384, 384, 384, 384, 384};
 static const char *sheet_names[5] = {"Mines_A1", "Mines_B", "Mines_E", "Inside_B", "Mines_D"};
@@ -66,7 +57,7 @@ static int load_sheet(const char *dir, int i) {
     return 1;
 }
 
-/* straight-alpha over, float math (PIL-compatible within rounding) */
+
 static void over(unsigned char *d, const unsigned char *s) {
     double sa = s[3] / 255.0, da = d[3] / 255.0;
     double oa = sa + da * (1 - sa);
@@ -90,9 +81,9 @@ int main(int argc, char **argv) {
         if (!load_sheet(argv[2], i)) return 1;
     int x0 = atoi(argv[3]), y0 = atoi(argv[4]);
 
-    static unsigned char canvas[VW * VH * 4];  /* starts transparent black */
+    static unsigned char canvas[VW * VH * 4];
     memset(canvas, 0, sizeof(canvas));
-    /* opaque black base like the golden (RGBA new, (0,0,0,255)) */
+
     for (int i = 0; i < VW * VH; i++) canvas[i * 4 + 3] = 255;
 
     for (int z = 0; z < 4; z++) {

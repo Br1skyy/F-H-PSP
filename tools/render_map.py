@@ -19,7 +19,7 @@ import json, sys, pathlib, struct
 from PIL import Image
 
 A1, A2, A3, A4, A5, TMAX = 2048, 2816, 4352, 5888, 1536, 8192
-FULL = 48  # MV tile px
+FULL = 48
 
 def kind_of(t): return (t - A1) // 48
 def shape_of(t): return (t - A1) % 48
@@ -45,7 +45,7 @@ def auto_cell(t):
         return 0, bx + 6, by, 'WATERFALL'
     if is_a2(t): return 1, tx * 2, (ty - 2) * 3, 'FLOOR'
     if is_a3(t): return 2, tx * 2, (ty - 6) * 2, 'WALL'
-    # A4
+
     bx = tx * 2
     by = int((ty - 10) * 2.5 + (0.5 if ty % 2 == 1 else 0))
     table = 'WALL' if ty % 2 == 1 else 'FLOOR'
@@ -70,7 +70,7 @@ def load_sheet(conv_dir, name):
     px.putdata([((c) & 255, (c >> 8) & 255, (c >> 16) & 255, (c >> 24) & 255) for c in out])
     pal = Image.new('RGBA', (16, 16))
     pal.putdata([((c) & 255, (c >> 8) & 255, (c >> 16) & 255, (c >> 24) & 255) for c in clut])
-    # map index->color via palette image lookup
+
     lut = pal.tobytes()
     rgb = bytearray()
     for i in out:
@@ -96,7 +96,7 @@ def main():
     auto = json.loads(pathlib.Path('converted/baked/autotiles.json').read_text())
     tables = {'FLOOR': auto['FLOOR'], 'WALL': auto['WALL'], 'WATERFALL': auto['WATERFALL']}
 
-    # load the 9 sheets (skip empties)
+
     sheets = {}
     for slot, sname in enumerate(ts['tilesetNames']):
         if not sname:
@@ -110,10 +110,10 @@ def main():
     print(f'sheets loaded: {sorted(sheets)} of {[i for i, s in enumerate(ts["tilesetNames"]) if s]}')
 
     def blit(dst, sheet, sx, sy, sw, sh, dx, dy, dw, dh):
-        # source rect is in FULL-px units; sheet is downscaled: convert
+
         src = sheet.crop((round(sx * scale), round(sy * scale),
                           round((sx + sw) * scale), round((sy + sh) * scale)))
-        if src.size != (dw, dh):  # only resample on real scale change (keeps golden bit-exact)
+        if src.size != (dw, dh):
             src = src.resize((dw, dh), Image.LANCZOS)
         dst.alpha_composite(src, (dx, dy))
 
@@ -129,11 +129,11 @@ def main():
                     if t == 0: stats['empty'] += 1
                     continue
                 dx, dy = x * tile, y * tile
-                if t >= A1:  # autotile
+                if t >= A1:
                     stats['auto'] += 1
                     aset, bx, by, tname = auto_cell(t)
                     shape = shape_of(t)
-                    # engine skips out-of-range shapes (undefined table) — replicate
+
                     if (tname == 'WALL' and shape >= 16) or (tname == 'WATERFALL' and shape >= 4):
                         continue
                     table = tables[tname][shape]
@@ -148,7 +148,7 @@ def main():
                         blit(canvas, sheets[aset], sx, sy, HW, HW, qdx, qdy, tile // 2, tile // 2)
                         stats['quads'] += 1
                         if dump: dump.write(f'{z} {x} {y} {i} {aset} {sx} {sy} 24 24\n')
-                else:  # normal
+                else:
                     stats['normal'] += 1
                     aset = 4 if is_a5(t) else 5 + t // 256
                     if aset not in sheets:
@@ -162,7 +162,7 @@ def main():
     if dump: dump.close()
     canvas.save(out / f'{mname}.png')
     print(f'{mname} {w}x{h}: {stats} -> {out / (mname + ".png")}')
-    # nonzero check vs map data
+
     nz = sum(1 for z in range(4) for y in range(h) for x in range(w)
              if (raw[(z * h + y) * w + x] or 0) not in (0,) and raw[(z * h + y) * w + x] < TMAX)
     print(f'nonzero in-data tiles (layers 0-3, id<TMAX): {nz}')

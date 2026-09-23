@@ -1,7 +1,5 @@
-/* Golden-master test: C interp (runtime/interp.c) vs Python reference sim.
- * Vectors + expectations in test_vec.h (emitted from REAL event lists).
- * Build: gcc -Wall -O2 -o test_interp test_interp.c ../runtime/interp.c && ./test_interp
- */
+
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -14,7 +12,7 @@
 
 static int fails = 0;
 
-/* canonical escaping mirror of tools/emit_interp_test.py canon_esc */
+
 static void dec_put_esc(char *out, int *n, const char *p, int len) {
     for (int i = 0; i < len; i++) {
         unsigned char ch = (unsigned char)p[i];
@@ -56,7 +54,7 @@ static void run_one(const char *name, const FhCmd *list, int len,
                     const int (*xinv)[3], int xinvn,
                     const int (*xhp)[2], int xhpn,
                     const int (*xmp)[2], int xmpn,
-                    const int (*xanims)[2], int xanimsn,
+                    const int (*xanims)[3], int xanimsn,
                     const int (*xchpos)[4], int xchposn,
                     const int (*ihp)[2], int ihpn,
                     int xrefresh, const char *xchname,
@@ -161,9 +159,10 @@ static void run_one(const char *name, const FhCmd *list, int len,
               xmp[i][0], it.mp[xmp[i][0]], xmp[i][1]);
     CHECK(name, it.anim_n == xanimsn, "anim_n %d != %d", it.anim_n, xanimsn);
     for (int i = 0; i < xanimsn && i < it.anim_n; i++)
-        CHECK(name, it.anims[i].ch == xanims[i][0] && it.anims[i].anim == xanims[i][1],
-              "anim[%d] = (%d,%d), expected (%d,%d)", i,
-              it.anims[i].ch, it.anims[i].anim, xanims[i][0], xanims[i][1]);
+        CHECK(name, it.anims[i].ch == xanims[i][0] && it.anims[i].anim == xanims[i][1] &&
+                     it.anims[i].mirror == xanims[i][2], "anims[%d] = (%d,%d,%d), expected (%d,%d,%d)",
+              i,
+              it.anims[i].ch, it.anims[i].anim, it.anims[i].mirror, xanims[i][0], xanims[i][1], xanims[i][2]);
     for (int i = 0; i < xchposn; i++) {
         int c = xchpos[i][0];
         CHECK(name, it.chx[c] == xchpos[i][1] && it.chy[c] == xchpos[i][2] && it.chd[c] == xchpos[i][3],
@@ -171,7 +170,7 @@ static void run_one(const char *name, const FhCmd *list, int len,
               it.chx[c], it.chy[c], it.chd[c], xchpos[i][1], xchpos[i][2], xchpos[i][3]);
     }
     CHECK(name, it.refresh_n == xrefresh, "refresh_n %d != %d", it.refresh_n, xrefresh);
-    { /* appearance table: lines "actor:kind=name,idx" */
+    {
         char tmp[4096];
         strncpy(tmp, xchname, sizeof(tmp) - 1);
         tmp[sizeof(tmp) - 1] = '\0';
@@ -197,7 +196,7 @@ static void run_one(const char *name, const FhCmd *list, int len,
         }
         (void)seen;
     }
-    { /* plugin dispatch log: lines "name args" */
+    {
         char tmp[8192];
         strncpy(tmp, xplug, sizeof(tmp) - 1);
         tmp[sizeof(tmp) - 1] = '\0';
@@ -212,7 +211,7 @@ static void run_one(const char *name, const FhCmd *list, int len,
                       it.plug[i].name, it.plug[i].args, nm, ag);
         }
     }
-    { /* escape decode of the final text buffer */
+    {
         FhEscCtx ctx;
         ctx.vars = it.var; ctx.nvars = FH_MAX_VARS;
         ctx.actor_names = fh_actnames; ctx.nactors = fh_nactors;
@@ -262,7 +261,7 @@ static void run_one(const char *name, const FhCmd *list, int len,
     CHECK(name, it.flash_frames == xflash[4], "flash_frames %d != %d", it.flash_frames, xflash[4]);
     for (int i = 0; i < 3; i++)
         CHECK(name, it.shake[i] == xshake[i], "shake[%d] = %d, expected %d", i, it.shake[i], xshake[i]);
-    { /* pictures: lines id:used:origin:x:y:sx:sy:op:blend:rot:t0,t1,t2,t3:name */
+    {
         char tmp[8192];
         strncpy(tmp, xpics, sizeof(tmp) - 1);
         tmp[sizeof(tmp) - 1] = '\0';
@@ -302,7 +301,7 @@ static void run_one(const char *name, const FhCmd *list, int len,
         CHECK(name, it.askill[xskills[i][0]][xskills[i][1]] == xskills[i][2], "skill");
     for (int i = 0; i < xequipn; i++)
         CHECK(name, it.equip[xequip[i][0]][xequip[i][1]] == xequip[i][2], "equip");
-    { /* anames/anick/aprof: lines "actor=name" */
+    {
         char tmp[8192], *line;
         strncpy(tmp, xanames, sizeof(tmp) - 1); tmp[sizeof(tmp) - 1] = '\0';
         for (line = strtok(tmp, "\n"); line; line = strtok(NULL, "\n")) {
@@ -355,7 +354,7 @@ static void run_one(const char *name, const FhCmd *list, int len,
     CHECK(name, it.scene_req == xscene, "scene %d != %d", it.scene_req, xscene);
     CHECK(name, it.numinput[0] == xnuminput[0], "numinput");
     CHECK(name, it.itemchoice[0] == xitemchoice[0], "itemchoice");
-    { /* audiolog lines "code=name" */
+    {
         char tmp[2048], *line;
         strncpy(tmp, xaudio, sizeof(tmp) - 1); tmp[sizeof(tmp) - 1] = '\0';
         for (line = strtok(tmp, "\n"); line; line = strtok(NULL, "\n")) {
@@ -371,7 +370,7 @@ static void run_one(const char *name, const FhCmd *list, int len,
     }
     CHECK(name, it.bgm_fade == xaflag[0] && it.bgs_fade == xaflag[1] && it.se_stop == xaflag[2] &&
                it.bgm_saved == xaflag[3] && it.bgm_replayed == xaflag[4], "aflag");
-    { /* sysnames lines "key=name" */
+    {
         char tmp[512], *line;
         strncpy(tmp, xsysnames, sizeof(tmp) - 1); tmp[sizeof(tmp) - 1] = '\0';
         for (line = strtok(tmp, "\n"); line; line = strtok(NULL, "\n")) {
@@ -387,12 +386,12 @@ static void run_one(const char *name, const FhCmd *list, int len,
     CHECK(name, it.tileset == xsysflag[4], "tileset %d != %d", it.tileset, xsysflag[4]);
     for (int i = 0; i < 4; i++)
         CHECK(name, it.wtone[i] == xwtone[i], "wtone");
-    { /* vehbgm "veh=name" */
+    {
         int v = atoi(xvehbgm);
         const char *eq = strchr(xvehbgm, '=');
         CHECK(name, it.vehbgm.veh == v && eq && !strcmp(it.vehbgm.name, eq + 1), "vehbgm");
     }
-    { /* battlebacks lines */
+    {
         char tmp[256], *line;
         strncpy(tmp, xbattlebacks, sizeof(tmp) - 1); tmp[sizeof(tmp) - 1] = '\0';
         line = strtok(tmp, "\n");
@@ -488,6 +487,7 @@ int main(void) {
     T(T25c_appear);
     T(T26_rottenmeat);
     T(T26b_leaveit);
+    T(T27_golemrite);
     if (fails) { printf("%d FAILURES\n", fails); return 1; }
     printf("ALL PASS\n");
     return 0;

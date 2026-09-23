@@ -12,9 +12,7 @@ Output: coverage.json + coverage_report.txt
 """
 import json, re, sys, pathlib, collections
 
-# VM-subset expression grammar (mirrors §5.3 ops):
-#   numbers, a.<stat>, b.<stat>, $gameVariables.value(n), $gameSwitches.value(n),
-#   Math.max/min/floor/abs/ceil/random, + - * / % < <= > >= == === != !== && || ! ( ) ternary?
+
 TOKEN = re.compile(r"""
     (?P<num>\d+\.?\d*) |
     (?P<str>'[^']*'|"[^"]*") |
@@ -39,12 +37,12 @@ def try_compile_expr(src):
         for t in toks:
             bad = bad.replace(t, '', 1)
         return False, f'unsupported-chars:{bad[:40]!r}'
-    # statement markers -> not a pure expression
+
     if any(k in toks for k in (';', 'var', 'function', 'for', 'while', 'return', 'new')):
         return False, 'statement-style'
     if re.search(r'\b(if|else|for|while|function|new|this)\b', src):
         return False, 'keyword-blocked'
-    # identifiers must be a/b/Math/$game* or allowed call parts
+
     for m in re.finditer(r'\$?\w+', src):
         w = m.group(0)
         if w in ('a','b','Math','max','min','floor','ceil','abs','random',
@@ -55,7 +53,7 @@ def try_compile_expr(src):
         if w.isdigit():
             continue
         return False, f'ident:{w}'
-    # member access other than a./b./Math./$game*./value
+
     for m in re.finditer(r'(\$?\w+)\.(\w+)', src):
         obj, prop = m.group(1), m.group(2)
         if obj in ('a','b') and prop in ALLOWED_STATS:

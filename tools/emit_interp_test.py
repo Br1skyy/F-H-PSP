@@ -12,7 +12,7 @@ Usage:
 import json, sys, pathlib
 
 def cstr(s):
-    # UTF-8 bytes: C sees the same bytes the game ships (data is UTF-8)
+
     out = ['"']
     for b in s.encode('utf-8'):
         ch = chr(b)
@@ -130,10 +130,14 @@ def to_cmd(c, jump):
         op = int(p[0])
         if op == 0: pp = [int(p[1]), int(p[2]), 0, 0, 0, 0]
         elif op == 1: pp = [int(p[1]), int(p[2]), int(p[3] if len(p) < 5 else p[3]), int(p[4]) if len(p) > 4 else 0, 0, 0]
-        elif op == 8: pp = [int(p[1]), 0, 0, 0, 0, 0]  # party-has-item id
+        elif op == 4:
+            pp = [int(p[1]), int(p[2]), int(p[3]) if len(p) > 3 and isinstance(p[3], (int, float)) else 0, 0, 0, 0]
+            if int(p[2]) == 1 and len(p) > 3: s = str(p[3])
+        elif op == 5: pp = [int(p[1]), int(p[2]), int(p[3]) if len(p) > 3 else 0, 0, 0, 0]
+        elif op == 8: pp = [int(p[1]), 0, 0, 0, 0, 0]
     elif code == 121 and len(p) >= 3: pp = [int(p[0]), int(p[1]), int(p[2]), 0, 0, 0]
     elif code == 122 and len(p) >= 5:
-        op = int(p[2]); pp = [int(p[0]), int(p[1]), int(p[3]), int(p[4]) if not isinstance(p[4], str) else 0, 0, 0]
+        op = int(p[2]); pp = [int(p[0]), int(p[1]), int(p[3]), int(p[4]) if not isinstance(p[4], str) else 0, int(p[5]) if len(p) > 5 and not isinstance(p[5], str) else 0, 0, 0, 0, 0, 0]
     elif code == 230 and p: pp = [int(p[0]), 0, 0, 0, 0, 0]
     elif code == 402 and p: pp = [int(p[0]), 0, 0, 0, 0, 0]
     elif code == 102 and p and isinstance(p[0], list):
@@ -157,7 +161,7 @@ def to_cmd(c, jump):
     elif code == 212 and len(p) >= 2:
         pp = [int(p[0]), int(p[1]), 1 if (len(p) > 2 and p[2]) else 0, frames_of(int(p[1])), 0, 0]
     elif code == 203 and len(p) >= 4:
-        # p = [char, mode, a, x, y, dir]
+
         if p[1] == 0: pp = [int(p[0]), 0, 0, int(p[2]), int(p[3]), int(p[4]) if len(p) > 4 else 0]
         elif p[1] == 1: pp = [int(p[0]), 1, 0, int(p[2]), int(p[3]), int(p[4]) if len(p) > 4 else 0]
         else: pp = [int(p[0]), 2, int(p[2]), 0, 0, int(p[4]) if len(p) > 4 else 0]
@@ -213,7 +217,7 @@ def to_cmd(c, jump):
     elif code in (315, 316) and len(p) >= 6:
         pp = [int(p[0]), int(p[1]), int(p[2]), int(p[3]), int(p[4]) if not isinstance(p[4], str) else 0, int(p[5])] + [0] * 4
     elif code == 317 and len(p) >= 6:
-        # params [sel, id, paramId, op, type, operand] -> p [sel, id, op, type, operand, paramId]
+
         pp = [int(p[0]), int(p[1]), int(p[3]), int(p[4]), int(p[5]) if not isinstance(p[5], str) else 0, int(p[2])] + [0] * 4
     elif code == 326 and len(p) >= 5:
         pp = [int(p[0]), int(p[1]), int(p[2]), int(p[3]), int(p[4]) if not isinstance(p[4], str) else 0, 0] + [0] * 4
@@ -271,6 +275,7 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
     sw = dict(init_sw or {}); var = dict(init_var or {})
     bv = {}; text = []; trace = []; waits = 0; unknown = 0
     party = list(init_party); tint = [0, 0, 0, 0]; tint_f = 0
+    rng = [1]
     last_se = ''; se_n = 0; routes = []; astate = {}
     inv = {}; hp = dict(init_hp or {}); mp = {}
     anims = []; chpos = {}
@@ -313,6 +318,19 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
             r = False
             if c['op'] == 0: r = sw.get(c['p'][0], 0) == (c['p'][1] == 0)
             elif c['op'] == 8: r = inv.get((126, c['p'][0]), 0) > 0
+            elif c['op'] == 4:
+                a, sub, n = c['p'][0], c['p'][1], c['p'][2]
+                if sub == 0: r = a in party
+                elif sub == 1: r = c.get('s') is not None and anames.get(a, '') == c['s']
+                elif sub == 2: r = aclass.get(a, 0) == n
+                elif sub == 3: r = skills.get((a, n), 0) == 1
+                elif sub in (4, 5): r = any(k[0] == a and v == n for k, v in equip.items())
+                elif sub == 6: r = astate.get((a, n), 0) == 1
+            elif c['op'] == 5:
+                e, sub, n = c['p'][0], c['p'][1], c['p'][2]
+                if e < 0 or e >= troop_n: r = False
+                elif sub == 0: r = ehp.get(e, 0) > 0
+                elif sub == 1: r = estate.get((e, n), 0) == 1
             elif c['op'] == 1:
                 v1 = var.get(c['p'][0], 0); v2 = c['p'][2]
                 if c['p'][1] == 1: v2 = var.get(v2, 0)
@@ -328,10 +346,25 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
         elif code == 602: pc = pc + 1 if branch == 1 else c['jump']
         elif code == 603: pc = pc + 1 if branch == 2 else c['jump']
         elif code == 121:
-            for i in range(max(0, c['p'][0]), min(3601, c['p'][1] + 1)): sw[i] = 1 if c['p'][2] else 0
+            for i in range(max(0, c['p'][0]), min(3601, c['p'][1] + 1)): sw[i] = 1 if c['p'][2] == 0 else 0
             pc += 1
         elif code == 122:
             rhs = c['p'][3]
+            if c['p'][2] == 2:
+                lo, span = rhs, c['p'][4] - rhs + 1
+                if span < 1: span = 1
+                for i in range(max(0, c['p'][0]), min(451, c['p'][1] + 1)):
+                    rng[0] = (rng[0] * 1664525 + 1013904223) & 0xFFFFFFFF
+                    roll = lo + ((((rng[0] >> 16) * span) >> 16) % span)
+                    if c['op'] == 0: var[i] = roll
+                    elif c['op'] == 1: var[i] = var.get(i, 0) + roll
+                    elif c['op'] == 2: var[i] = var.get(i, 0) - roll
+                    elif c['op'] == 3: var[i] = var.get(i, 0) * roll
+                    elif c['op'] == 4 and roll: var[i] = int(var.get(i, 0) / roll)
+                    elif c['op'] == 5 and roll: var[i] = var.get(i, 0) % roll
+                    else: unknown += 1
+                pc += 1
+                continue
             if c['p'][2] == 1: rhs = var.get(rhs, 0)
             elif c['p'][2] != 0: unknown += 1; pc += 1; continue
             for i in range(max(0, c['p'][0]), min(451, c['p'][1] + 1)):
@@ -397,7 +430,7 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
                     mp[a] = max(0, mp.get(a, 0) + v)
             pc += 1
         elif code == 212:
-            anims.append((c['p'][0], c['p'][1]))
+            anims.append((c['p'][0], c['p'][1], 0))
             if c['p'][2]: wait += c['p'][3] * 4 + 1
             pc += 1
         elif code == 203:
@@ -438,7 +471,7 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
             parts = (c['s'] or '').split(' ')
             plug.append((parts[0], ' '.join(parts[1:])))
             pc += 1
-        elif code == 505: pc += 1  # route body: engine skips (no handler)
+        elif code == 505: pc += 1
         elif code == 211: transparent[0] = 1 if c['p'][0] == 0 else 0; pc += 1
         elif code == 216: followers[0] = 1 if c['p'][0] == 0 else 0; refresh[0] += 1; pc += 1
         elif code == 322:
@@ -462,7 +495,7 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
             if on_map and ev_id > 0: erased.append(ev_id)
             pc += 1
         elif code == 204: scrolls.append((c['p'][0], c['p'][1], c['p'][2])); pc += 1
-        elif code == 115: pc = len(cur)  # exit processing (child ends, parent resumes)
+        elif code == 115: pc = len(cur)
         elif code == 118: pc += 1
         elif code == 119: pc = c['jump']
         elif code == 123:
@@ -612,11 +645,11 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
                 etransform[e] = c['p'][1]
             pc += 1
         elif code == 337:
-            anims.append((-100 - c['p'][0], c['p'][1])); pc += 1
+            anims.append((-100 - c['p'][0], c['p'][1], 1 if c['p'][2] else 0)); pc += 1
         elif code == 339:
             force.update(side=c['p'][0], idx=c['p'][1], skill=c['p'][2], target=c['p'][3], pending=1)
             pc += 1
-        elif code == 340: battle['pending'] = 0; pc += 1
+        elif code == 340: battle['pending'] = 2; pc += 1
         elif code == 301:
             if c['p'][0] == 0: battle.update(troop=c['p'][1])
             elif c['p'][0] == 1: battle.update(troop=var.get(c['p'][1], 0))
@@ -661,7 +694,7 @@ def refsim(cmds, init_sw=None, init_var=None, branch=0, sel=0, ce=None, init_par
         elif code == 217: gather[0] = 1; pc += 1
         elif code == 261: movie[0] = c['s'] or ''; pc += 1
         else: unknown += 1; pc += 1
-    # flatten trace: child frames marked; C trace records raw pcs per frame — compare per-frame below
+
     return {'trace': trace, 'sw': sw, 'var': var, 'text': text,
             'waits': waits, 'unknown': unknown, 'party': party, 'tint': tint,
             'tint_f': tint_f, 'last_se': last_se, 'se_n': se_n,
@@ -691,7 +724,7 @@ def main():
     def load(n): return json.loads((data / n).read_text(encoding='utf-8'))
     jumps = json.loads(pathlib.Path('converted/baked/jumps.json').read_text())['jumps']
 
-    # collect candidate lists
+
     cands = []
     for f in sorted(data.glob('Map[0-9]*.json')):
         d = load(f.name)
@@ -706,16 +739,16 @@ def main():
 
     def codeset(lst): return {c.get('code') for c in lst if isinstance(c, dict)}
     bykey = dict(cands)
-    # T1: tiny switch-only list
+
     t1 = next(k for k, l in cands if 1 <= len(l) <= 8 and codeset(l) <= {121, 0})
-    # T2: small switch-conditional with else
+
     t2 = next(k for k, l in cands if 5 <= len(l) <= 14 and 111 in codeset(l) and 411 in codeset(l)
               and codeset(l) <= {111, 411, 412, 121, 0})
-    # T3: choices + break + nesting (soul-stone shaped), bounded size
+
     t3 = next(k for k, l in cands if 102 in codeset(l) and 113 in codeset(l) and len(l) < 120)
-    # T4: battle branches
+
     t4 = next(k for k, l in cands if 601 in codeset(l) and 604 in codeset(l) and len(l) < 60)
-    # T5: common-event call into a small, 117-free CE (v1: no nesting)
+
     ce_data = {ce.get('id'): ce.get('list', []) for ce in filter(None, load('CommonEvents.json') or [])}
     def ce_ok(cid):
         lst = ce_data.get(cid, [])
@@ -727,12 +760,12 @@ def main():
     t5 = next(k for k, l in cands if 117 in codeset(l) and len(l) < 40 and uses_small_ce(l))
     t5_ce = next(c.get('parameters', [0])[0] for c in bykey[t5]
                  if isinstance(c, dict) and c.get('code') == 117)
-    # T6: items + HP/MP changes
+
     t6 = next(k for k, l in cands if 126 in codeset(l) and (311 in codeset(l) or 312 in codeset(l))
               and len(l) < 60)
-    # T7: event locate + animation request
+
     t7 = next(k for k, l in cands if 203 in codeset(l) and 212 in codeset(l) and len(l) < 60)
-    # T8: message escapes (\c + \N) in shown text
+
     def has_esc(lst, *subs):
         for c in lst:
             if isinstance(c, dict) and c.get('code') in (401, 405) and c.get('parameters'):
@@ -741,11 +774,11 @@ def main():
                     return True
         return False
     t8 = next(k for k, l in cands if 101 in codeset(l) and has_esc(l, '\\c[', '\\N[') and len(l) < 60)
-    # T9: costume script lines
+
     t9 = next(k for k, l in cands
               if any(isinstance(c, dict) and c.get('code') == 355 and 'setCharacterImage' in str(c.get('parameters', [''])[0])
                      for c in l) and len(l) < 200)
-    # T10: Gab/Light plugin commands
+
     def has_plug(lst):
         for c in lst:
             if isinstance(c, dict) and c.get('code') == 356 and c.get('parameters'):
@@ -754,19 +787,19 @@ def main():
                     return True
         return False
     t10 = next(k for k, l in cands if has_plug(l) and len(l) < 60)
-    # T11: transparency + followers
+
     t11 = next(k for k, l in cands if 211 in codeset(l) and 216 in codeset(l) and len(l) < 40)
-    # T12: actor graphic change
+
     t12 = next(k for k, l in cands if 322 in codeset(l) and len(l) < 40)
-    # T13: transfer (direct). NOTE: 214 (erase) has 0 occurrences game-wide,
-    # so no real-list golden exists for it; the 3-line engine-exact impl stays.
+
+
     t13 = next(k for k, l in cands if 201 in codeset(l) and len(l) < 80)
     t13_ev = 0
-    # T14: scroll (204 has 17 uses; 213 balloon is game-wide dead like 214 —
-    # impl stays, no golden possible)
+
+
     t14 = next(k for k, l in cands if 204 in codeset(l) and len(l) < 60)
-    # T15: labels + jump (119). NOTE: many 119-lists are intentional infinite
-    # wait-loops; pick one that terminates (finite golden).
+
+
     def terminates(key):
         lst = bykey[key]
         n = len(lst)
@@ -776,19 +809,18 @@ def main():
         e = refsim(cmds, {}, {}, 0, 0, {}, ev_id=eid, on_map=1)
         return len(e['trace']) < 50000
     t15 = next(k for k, l in cands if 119 in codeset(l) and len(l) < 100 and terminates(k))
-    # T16: screen flash / shake / fade-out-in (221 occurs once: Map002 ev1 pg2)
+
     t16 = next(k for k, l in cands if 224 in codeset(l) and len(l) < 60)
     t16b = next(k for k, l in cands if 225 in codeset(l) and len(l) < 60)
     t16c = 'Map002.json/ev1/pg2'
-    # T17: pictures (+ weather tiny test: Map091 ev8, len 2)
+
     t17 = next(k for k, l in cands if 231 in codeset(l) and 235 in codeset(l) and len(l) < 120)
     t17b = next(k for k, l in cands if 236 in codeset(l) and len(l) < 10)
-    # T18: self switches (+ timer tiny test: Map166 ev307, len 7)
-    # NOTE: 125/103/104 are game-wide dead (0 occurrences); impls stay, no goldens.
-    # T18: self switches (+ timer tiny test)
+
+
     t18 = next(k for k, l in cands if 123 in codeset(l) and len(l) < 40)
     t18b = next(k for k, l in cands if 124 in codeset(l) and len(l) < 20)
-    # T19+: final round — everything with occurrences
+
     t19 = next(k for k, l in cands if 319 in codeset(l) and len(l) < 60)
     t20 = next(k for k, l in cands if 301 in codeset(l) and len(l) < 60)
     t21 = next(k for k, l in cands if 333 in codeset(l) and len(l) < 100)
@@ -852,6 +884,8 @@ def main():
          'branch': 0, 'sel': 0},
         {'name': 'T26b_leaveit', 'key': 'Map001.json/ev37/pg0', 'init_sw': {}, 'init_var': {},
          'branch': 0, 'sel': 1},
+        {'name': 'T27_golemrite', 'key': 'Troops/44/pg4', 'init_sw': {215: 1, 2766: 1}, 'init_var': {14: 31}, 'branch': 0, 'sel': 0,
+         'troop': 6},
     ]
     actors = load('Actors.json')
     actnames = [next((a['name'] for a in actors if a and a['id'] == i), '') for i in range(1, 41)]
@@ -864,7 +898,7 @@ def main():
         n = len(lst)
         jm = jumps.get(t['key'], {})
         cmds = [to_cmd(c, int(jm.get(str(i), n))) for i, c in enumerate(lst)]
-        # common-event table for this test (converted the same way)
+
         ce_vecs = {}
         for cid, celist in (t.get('ce') or {}).items():
             cjm = jumps.get(f'CommonEvents/{cid}', {})
@@ -872,14 +906,14 @@ def main():
                             for i, c in enumerate(celist)]
         init_sw = dict(t['init_sw']) if isinstance(t['init_sw'], dict) else {}
         if t['init_sw'] == 'AUTO_TRUE':
-            # flip the first tested switch true so the true-path executes
+
             c111 = next(c for c in cmds if c['code'] == 111 and c['op'] == 0)
             init_sw = {c111['p'][0]: 1 if c111['p'][1] == 0 else 0}
         init_hp = {}
         if isinstance(t.get('init_hp'), dict):
             init_hp = dict(t['init_hp'])
         elif t.get('init_hp') == 'AUTO':
-            # seed the first 311 target alive so changeHp acts
+
             c311 = next((c for c in cmds if c['code'] == 311), None)
             if c311 and c311['p'][0] == 0 and c311['p'][1] != 0:
                 init_hp = {c311['p'][1]: 50}
@@ -898,7 +932,6 @@ def main():
                    ev_id=t.get('ev_id', 0), on_map=t.get('on_map', 0),
                    troop_n=t.get('troop', 0), init_ehp=init_ehp)
         exp[t['name']] = e
-        H.append(f'/* {t["name"]} from {t["key"]} (len {n}) sel={t["sel"]} branch={t["branch"]} */')
         H.append(f'static const FhCmd {t["name"]}_list[] = {{')
         for c in cmds:
             s = 'NULL' if c['s'] is None else cstr(c['s'])
@@ -964,8 +997,8 @@ def main():
         H.append(f'static const int {t["name"]}_mp[][2] = '
                  f'{{{",".join(f"{{{k},{v}}}" for k, v in sorted(e["mp"].items())) or "{0,0}"}}};')
         H.append(f'static const int {t["name"]}_mpn = {len(e["mp"])};')
-        H.append(f'static const int {t["name"]}_anims[][2] = '
-                 f'{{{",".join(f"{{{a},{b}}}" for a, b in e["anims"]) or "{0,0}"}}};')
+        H.append(f'static const int {t["name"]}_anims[][3] = '
+                 f'{{{",".join(f"{{{a},{b},{m}}}" for a, b, m in e["anims"]) or "{0,0,0}"}}};')
         H.append(f'static const int {t["name"]}_animsn = {len(e["anims"])};')
         H.append(f'static const int {t["name"]}_chpos[][4] = '
                  f'{{{",".join(f"{{{c},{x},{y},{d}}}" for c, (x, y, d) in sorted(e["chpos"].items())) or "{0,0,0,0}"}}};')
@@ -974,7 +1007,7 @@ def main():
         H.append(f'static const char *{t["name"]}_chname = {cstr(chr(10).join(f"{a}:{k}={v[0]},{v[1]}" for (a, k), v in sorted(e["appearance"].items())))};')
         H.append(f'static const char *{t["name"]}_plug = {cstr(chr(10).join(f"{n} {a}".rstrip() for n, a in e["plug"]))};')
         H.append(f'static const int {t["name"]}_progn = {len(e["plug"])};')
-        # decode expectation from FINAL vars/party (decode happens at render)
+
         _vars = [0] * 451
         for k, v in e['var'].items():
             if 0 <= k < 451:
@@ -1093,7 +1126,7 @@ def main():
                  f'{{{fz.get("side", 0)},{fz.get("idx", 0)},{fz.get("skill", 0)},{fz.get("target", 0)},{fz.get("pending", 0)}}};')
         H.append('')
     (out / 'test_vec.h').write_text('\n'.join(H))
-    # append shared game tables used by decode checks
+
     with open(out / 'test_vec.h', 'a') as f:
         f.write('\nstatic const char *fh_actnames[] = {'
                 + ','.join(cstr(n) for n in actnames) + '};\n')

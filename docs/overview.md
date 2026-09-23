@@ -1,38 +1,27 @@
 # Overview
 
-Native C reimplementation of Fear & Hunger (RPG Maker MV game) for PSP.
-The repo holds **code only** — no game assets. You must own the game and run
-the converters (see `pipeline.md`).
+Fear & Hunger rebuilt in C for the PSP. The repo holds code only. The
+original `www/js/*.js` is the spec: read the JS, write the C, run the same
+scenario in both, diff, fix. Never port from memory.
 
-## Targets
+## What runs today
 
-| Item | Target | Status (2026-09-20) |
-|---|---|---|
-| Screen | 480×272 | done |
-| Framerate | floor 15, typical 20–30 | **60 (vsync-locked) on PSP-2000** |
-| Hardware | PSP-2000/3000 (64 MB), degrades to 1000-class 24 MB | boots, ~5 MB footprint |
-| Distribution | converter + runtime only, no game assets shipped | this repo |
+One slice: Map030 (Mines). Walk around, switch between 4 characters, talk
+to NPCs, and fight the prison guard (limbs, dismemberment, Talk, Run).
+Message windows, choices, and the status gauges all match the original
+data. It holds 60 fps on a PSP-2000 in about 5 MB.
 
-## Architecture
+## Layout
 
-**Converter (PC, Python)** reads the owned game folder and writes packed data:
-decrypt → downscale (24px tiles, 0.5×) → palettise (T8, index 0 =
-transparent) → swizzle (16×8 blocks) → `.t8` + `.clut` + `.meta.json`,
-plus baked tables (jumps, passability, autotiles, anims) and packed maps.
+- `runtime/` is plain C with no platform headers. It builds on PC so the
+  tests can drive it directly.
+- `psp/gu_demo/` is the PSP program: main loop, GU renderer, input,
+  battle flow, and staged data under `data/` (gitignored, built by tools).
+- `tools/` converts your game copy to PSP friendly art and tables.
+- `tests/` holds golden harnesses. If they are red, the port drifted.
 
-**Runtime (C, PSPSDK, GU)** reimplements the MV systems this game uses
-(interpreter 89/89 event codes, tile renderer, player, text). It does not
-run the original JS engine. The original `www/js/*.js` is the spec —
-port from source, never from memory.
+## Method
 
-## Method per system
-
-Read the JS → write the C → run the same scenario in both → diff → fix.
-Golden-master tests in `tests/` (`test_interp`, `test_map`, …) must stay
-green. Trial evidence and dead ends go to `progress.md` (append-only).
-
-## Legal
-
-Reimplement behavior; do not copy source or assets into redistributables.
-MV runtime and each plugin have their own terms. Game assets stay with the
-owner's copy. Keep pushes private.
+Every system is ported against the shipped scripts, then locked with a
+golden test (`tests/test_interp.c`, `test_battle.c`, `test_map.c`,
+`test_troopflow.c`). Keep them green.
