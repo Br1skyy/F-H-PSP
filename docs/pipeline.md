@@ -1,48 +1,53 @@
 # Pipeline and build
 
-All paths relative to repo root. You need an owned copy at
-`Fear & Hunger_WIN/www` (gitignored, never committed).
+All commands run from the repo root. You need an owned copy of the game
+at `Fear & Hunger_WIN/www` (gitignored, never committed).
 
-## 1. Convert art (first time only)
+## 0. Toolchain and Python
+
+- PSP toolchain: install pspdev (`~/pspdev` below) following
+  https://github.com/pspdev/pspdev, then put it on PATH:
+  `export PATH=$HOME/pspdev/bin:$PATH` (gives you `psp-gcc`,
+  `psp-config`, `bin2o`).
+- Python 3 with Pillow: `pip install Pillow`.
+
+## 1. Convert the game (first time only)
 
 ```bash
 python3 tools/convert_assets.py "Fear & Hunger_WIN/www" --out converted --tile 24
-python3 tools/pad_sheets_pow2.py
-python3 tools/pad_chars_pow2.py
+python3 tools/pad_sheets_pow2.py && python3 tools/pad_chars_pow2.py
+python3 tools/bake.py "Fear & Hunger_WIN/www" --out converted/baked
+python3 tools/compile_snippets.py "Fear & Hunger_WIN/www" --out converted/code
 python3 tools/bake_higher.py --map Map030
-python3 tools/bake_battlers.py --out psp/gu_demo/data
-python3 tools/bake_anims.py --out psp/gu_demo/data
-python3 tools/bake_font.py --out psp/gu_demo/data
-python3 tools/bake_window.py --out psp/gu_demo/data
 ```
 
-What the converter does per image: decrypt, downscale (tiles 24 px,
-everything else half scale), palettise to 255 colors with index 0 as
-transparent, swizzle to GU T8. Output is `.t8` + `.clut` + `.meta.json`.
+What this does per image: decrypt, downscale (tiles 24 px, everything
+else half scale), palettise to 255 colors with index 0 as transparent,
+swizzle to GU T8. Output is `.t8` + `.clut` + `.meta.json`.
 
 Rules that have bitten us:
 
 - Converted `.t8` files are already swizzled. To pad one, deswizzle it
   first, pad, then re-swizzle. Padding swizzled bytes scrambles rows.
 - The GE needs power-of-2 strides. CLUTs must be 16 byte aligned.
-- Side-view battlers bake at 112 px cells in two sheets per fighter
-  (cols 0-2 and 3-5, rows 1-4). A full 9x6 grid at 112 px would break
-  the 512 px texture limit. See `tools/bake_battlers.py`.
+- Character sheets are padded to 512x512 at stage time, never in
+  `converted/`. Re-running the converter silently un-pads the cache.
 
-## 2. Stage data
+## 2. Stage data and build
 
-Copy the baked outputs into `psp/gu_demo/data/` (tile sheets, map
-layers, passability, characters, enemies, fonts, window skin, battlers,
-anims, formulas). Staged data is gitignored. The `data/` rules in
-`psp/gu_demo/Makefile` list every file the build expects.
-
-## 3. Build and package
+One script stages all 106 files the Makefile embeds (copies, renames,
+pads, and the quick bakers that write into `data/` directly), then
+build as usual:
 
 ```bash
-export PATH=$HOME/pspdev/bin:$PATH
-cd psp/gu_demo && make
-cd ../.. && rm -f FHDEMO.zip && (cd psp/gu_demo && zip ../../FHDEMO.zip EBOOT.PBP)
+python3 tools/stage_data.py "Fear & Hunger_WIN/www"
+cd psp/gu_demo && make && cd ../.. && rm -f FHDEMO.zip && \
+  (cd psp/gu_demo && zip ../../FHDEMO.zip EBOOT.PBP)
 ```
+
+`stage_data.py` reads its file list from the Makefile itself, so it
+stays correct when the build gains files. It fails loudly naming
+whatever is still missing and which step produces it.
 
 Link rules (learned on real hardware, a PSP-2000 hard-freezes otherwise):
 
@@ -52,9 +57,23 @@ Link rules (learned on real hardware, a PSP-2000 hard-freezes otherwise):
   `psp-strings -a fh_demo.elf | grep ForKernel` (expect empty).
 - Keep the heap small (1 MB). Everything is static, nothing mallocs.
 
-## 4. Install
+## 3. Install
 
 Copy `EBOOT.PBP` to `PSP/GAME/<NAME>/EBOOT.PBP`.
+
+## 4. Tests
+
+Plain gcc, from the repo root. They must stay green.
+
+```bash
+gcc -Wall -O2 -I runtime -o /tmp/test_battle tests/test_battle.c runtime/battle.c -lm && /tmp/test_battle
+gcc -Wall -O2 -I runtime -I . -o /tmp/test_interp tests/test_interp.c runtime/interp.c runtime/text.c && /tmp/test_interp
+gcc -Wall -O2 -I runtime -o /tmp/test_map tests/test_map.c runtime/map.c && /tmp/test_map
+gcc -Wall -O2 -I runtime -I psp/gu_demo -o /tmp/test_troopflow tests/test_troopflow.c runtime/battle.c runtime/interp.c -lm && /tmp/test_troopflow
+```
+
+The battle and troop tests read `converted/code/formulas.bin`, so run
+the converters first.
 
 ## Budget
 

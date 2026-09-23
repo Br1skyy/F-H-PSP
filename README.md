@@ -44,21 +44,17 @@ What is missing:
 
 You need the PSP toolchain in `~/pspdev`, Python 3 with Pillow, and your
 game files at `Fear & Hunger_WIN/www` (both gitignored, never committed).
+Full steps, including data staging and the PC test commands, are in
+`docs/pipeline.md`. The short version:
 
 ```bash
 python3 tools/convert_assets.py "Fear & Hunger_WIN/www" --out converted --tile 24
-python3 tools/pad_sheets_pow2.py && python3 tools/pad_chars_pow2.py
-python3 tools/bake_higher.py --map Map030
-python3 tools/bake_battlers.py --out psp/gu_demo/data
-# stage data (see docs/pipeline.md), then:
+python3 tools/stage_data.py "Fear & Hunger_WIN/www"
 cd psp/gu_demo && make && cd ../.. && rm -f FHDEMO.zip && \
   (cd psp/gu_demo && zip ../../FHDEMO.zip EBOOT.PBP)
 ```
 
 Copy `EBOOT.PBP` to `PSP/GAME/<NAME>/` on your PSP. Folder name is free.
-
-Run the PC tests with plain gcc (see `tests/` headers for exact commands).
-They must stay green.
 
 ## Project Structure
 
@@ -70,6 +66,7 @@ F&H PSP/
   tools/         # converters and bakers (PC Python)
   tests/         # golden-master harnesses (must stay green)
   docs/          # project documentation
+  LICENSE        # MIT for our code
 ```
 
 `runtime/` has no PSP headers and builds on PC for tests. The PSP shell
