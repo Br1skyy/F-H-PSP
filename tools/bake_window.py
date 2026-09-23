@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Bake the message-window skin for the PSP dialog box.
-
-Source: Fear & Hunger/www/img/system/Window.png (192x192, plain PNG).
-Output: 256-stride T8 + CLUT, swizzled (frame parts live at skin offset
-96,96 with 24px margins per rpg_core.js Window._refreshFrame; padding is
-transparent index 0). Alpha is preserved (the skin is translucent).
-
-Usage (from repo root):
-    python3 tools/bake_window.py --out psp/gu_demo/data/window
-"""
+"""Bake the message-window skin to swizzled T8 + CLUT."""
 import argparse
 import pathlib
 import struct

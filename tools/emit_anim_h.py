@@ -1,19 +1,5 @@
 #!/usr/bin/env python3
-"""Bake battle-animation frames + timings for the PSP animation renderer.
-
-Source: Fear & Hunger/www/data/Animations.json (owned copy). Cell offsets
-are halved at bake time (world art is half-scale; scale%/rotation/opacity
-are unit-free). Emits one header with per-animation frame/timing tables.
-
-Cell (rpg_sprites.js Sprite_Animation.updateCellSprite):
-  [pattern, x, y, scale%, rotationDeg, mirror, opacity, blendMode]
-  pattern<0 hidden; <100 bitmap1 else bitmap2; 192px cells (96 baked).
-Timing: [frame, flashScope (1 target, 2 screen, 3 hide), flashColor[4],
-  flashDuration (x4 ticks), seName].
-
-Usage (from repo root):
-    python3 tools/emit_anim_h.py "Fear & Hunger_WIN/www" --out psp/gu_demo/anim_data.h
-"""
+"""Emit battle-animation frame and timing tables to a C header."""
 import json
 import sys
 import pathlib

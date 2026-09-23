@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Pad converted character sheets to power-of-2 for the PSP GE.
-
-convert_assets.py outputs SWIZZLED 480x440 textures. The PSP GE needs
-power-of-2 strides, so this deswizzles, pads rows to 512 (and height to
-512), then re-swizzles at 512x512. (Padding swizzled bytes directly, as
-the old pad_char_*.py scripts did, scrambles every row — do not do that.)
-
-Usage (from repo root):
-    python3 tools/pad_chars_pow2.py --only mercenary_torch
-    python3 tools/pad_chars_pow2.py   # all *_torch + plain sheets used by demo
-"""
+"""Pad converted character sheets to power-of-2 strides."""
 import argparse
 import json
 import pathlib

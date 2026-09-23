@@ -1,20 +1,8 @@
 #!/usr/bin/env python3.12
-"""Data packer — implements md §2 item 4 + §7 "one packed archive with an index".
-
-Reads data/*.json, pools ALL strings into one global table, encodes values
-with typed tags, and writes a single game.pak (header + index + blobs) for
-sequential reads on PSP. Verifies with an exact roundtrip check.
-
-Format (little-endian):
-  header: magic 'FHPK' u32 version u32 nfiles u32 strcount u32
-  strings: [u32 len + utf8 bytes] * strcount
-  index: per file [u16 namelen + name + u32 offset + u32 size] * nfiles
-  blobs: per file typed values:
-    tag u8: 0=null 1=false 2=true 3=i32 4=f64 5=strref(u32) 6=array(u32 n + items) 7=object(u32 n + keyref(u32)+value...)
+"""Pack data JSON files into one game.pak with an index.
 
 Usage:
-    python3.12 tools/pack_data.py "Fear & Hunger_WIN/www" --out converted/data
-"""
+    python3.12 tools/pack_data.py "Fear & Hunger_WIN/www" --out converted/data"""
 import json, sys, pathlib, struct
 
 TAG_NULL, TAG_FALSE, TAG_TRUE, TAG_I32, TAG_F64 = 0, 1, 2, 3, 4

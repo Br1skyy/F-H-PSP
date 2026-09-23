@@ -1,15 +1,10 @@
 #!/usr/bin/env python3.12
-"""Formula/JS-snippet coverage — implements §4.4 of the plan (Python port).
-
-The plan sketches a Node/acorn compiler. This tool answers the same question
-without Node: what fraction of snippets fits the §5.3 VM subset, and what
-lands in the fallback list (needs mujs/Duktape or hand-ported runtime ops)?
+"""Report what fraction of formulas and snippets fits the VM subset.
 
 Usage:
     python3.12 tools/formula_coverage.py "Fear & Hunger_WIN/www" [--out audit_out]
 
-Output: coverage.json + coverage_report.txt
-"""
+Output: coverage.json + coverage_report.txt"""
 import json, re, sys, pathlib, collections
 
 
@@ -26,7 +21,6 @@ ALLOWED_CALLS = {'Math.max','Math.min','Math.floor','Math.ceil','Math.abs',
                  '$gameVariables.value','$gameSwitches.value','Math.random'}
 
 def try_compile_expr(src):
-    """Return (ok, reason_or_bytecode)."""
     toks = [m.group(0) for m in TOKEN.finditer(src)]
     if not toks:
         return False, 'empty'
@@ -66,7 +60,6 @@ def try_compile_expr(src):
     return True, 'expr-ok'
 
 def classify_script(src):
-    """Script lines (code 355/655) are runtime ops, not VM exprs. Bucket them."""
     s = src.strip()
     if re.fullmatch(r'\$gamePlayer\.refresh\(\);?', s):
         return 'op:refresh-player'
@@ -116,7 +109,7 @@ def main():
 
     total_f = len(formulas)
     nok_f = sum(f_bad.values())
-    L = [f'Formula/JS coverage — {root}',
+    L = [f'Formula/JS coverage - {root}',
          f'Damage formulas: {total_f} occurrences, {len(set(formulas))} distinct',
          f'  compilable to VM subset: {total_f - nok_f} ({100*(total_f-nok_f)/max(1,total_f):.1f}%)',
          f'  fallback (needs full interpreter review): {nok_f}']
@@ -134,9 +127,9 @@ def main():
     for k in list(bad_c)[:10]: L.append(f'  FALLBACK cond: {k[:150]!r}')
     L.append('')
     L.append('Verdict: ' + ('formulas are trivially VM-safe (constants + a.atk/b.def); '
-             'script LINES are runtime API ops (refresh/setImage), not VM exprs — '
+             'script LINES are runtime API ops (refresh/setImage), not VM exprs - '
              'hand-port ~5 API ops, no ES5 interpreter needed for the observed set. '
-             if nok_f == 0 else 'some formulas need fallback — review list above.'))
+             if nok_f == 0 else 'some formulas need fallback - review list above.'))
 
     (outdir / 'coverage.json').write_text(json.dumps({
         'formulas_total': total_f, 'formulas_distinct': len(set(formulas)),

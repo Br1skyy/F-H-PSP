@@ -1,25 +1,5 @@
 #!/usr/bin/env python3
-"""Bake side-view battler sheets for the PSP battle scene.
-
-Source: Fear & Hunger/www/img/sv_actors/*.rpgmvp (decrypted with the
-System key). SV layout is 9 cols x 6 rows (source cells ~230px).
-
-Only the motions the battle ever plays are baked, at 112px cells
-(1:1 on screen — the old 56px cells upscaled 2x looked blocky):
-rows 1-4, cols 0-2 ("a" sheet) and cols 3-5 ("b" sheet). Each sheet is
-336x448 art padded to 512x512 (GE texture limit), palette 255 colors +
-transparent index 0 (same convention as convert_assets.py).
-
-Motion cells (rpg_sprites.js Sprite_Actor.updateFrame + main.c
-btl_motion): wait (0,1), guard (0,3), swing (3,1), missile (3,2),
-skill (3,3), damage (0,4); pattern adds 0-2 to the column. Render
-picks sheet A/B by column and rows are stored minus 1 (see render.c).
-If a new motion outside rows 1-4 / cols 0-5 is ever queued, extend
-WANT_ROWS/WANT_COLS here and in render_battle.
-
-Usage (from repo root):
-    python3 tools/bake_battlers.py --out psp/gu_demo/data
-"""
+"""Bake side-view battler sheets at 112px cells, rows 1-4, cols 0-2 ("a") and 3-5 ("b"). If a new motion outside rows 1-4 / cols 0-5 is ever queued, extend WANT_ROWS/WANT_COLS here and in render_battle."""
 import argparse
 import io
 import json
@@ -65,7 +45,6 @@ def next_pow2(n: int) -> int:
 
 
 def palettise(im: Image.Image) -> tuple:
-    """RGBA -> (indices with 0 = transparent, clut). Shared by sheets."""
     alpha = im.getchannel('A')
     mask = alpha.point(lambda a: 0 if a < 128 else 255, mode='L')
     rgb = im.convert('RGB').quantize(colors=255, method=Image.MEDIANCUT)

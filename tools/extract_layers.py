@@ -1,12 +1,8 @@
 #!/usr/bin/env python3.12
-"""Extract 4 layers from Map030.json for PSP rendering.
-
-Map030.json has 6 layers, but PSP code only uses 4 (z=0..3).
-This extracts just the first 4 layers as u16 LE binary.
+"""Extract the usable map layers as u16 LE binary.
 
 Usage:
-    python3.12 tools/extract_layers.py "Fear & Hunger_WIN/www" --out psp/gu_demo/data/map030
-"""
+    python3.12 tools/extract_layers.py "Fear & Hunger_WIN/www" --out psp/gu_demo/data/map030"""
 import json, sys, pathlib, struct
 
 def main():

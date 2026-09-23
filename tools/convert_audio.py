@@ -1,18 +1,11 @@
 #!/usr/bin/env python3.12
-"""Audio converter — implements md §2 item 3.
-
-BGM/BGS/ME (`.rpgmvo` = encrypted ogg) -> MP3 (hardware-decodable on PSP,
-per plan §7: no software Vorbis on the main CPU).
-SE (`.rpgmvo`, short) -> 16-bit mono PCM WAV at 22050 Hz (small, RAM-resident).
-
-Requires ffmpeg on PATH (present on this machine).
+"""Convert BGM to MP3 and sound effects to PCM WAV. Requires ffmpeg on PATH.
 
 Usage:
     python3.12 tools/convert_audio.py "Fear & Hunger_WIN/www" --out converted/audio [--only bgm/...]
     --only takes repeatable prefixes like bgm/fear, se/door. Default converts all.
 
-Output: converted/audio/<cat>/<name>.mp3|.wav + manifest.json with sizes.
-"""
+Output: converted/audio/<cat>/<name>.mp3|.wav + manifest.json with sizes."""
 import json, sys, pathlib, subprocess, shutil
 
 def decrypt_blob(blob: bytes, key_hex: str) -> bytes:

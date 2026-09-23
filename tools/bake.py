@@ -1,30 +1,15 @@
 #!/usr/bin/env python3.12
-"""Static baker — implements md §2 item 6.
-
-Bakes, from source-as-spec (rpg_objects.js:5911 checkPassage,
-rpg_core.js:5271 TILE_IDs, 5386+ autotile tables):
-  1. jumps.json        — event jump targets: every branch opener/else/when
-                         maps to its matching else/end index, so the runtime
-                         never scans (§5.2 `Cmd.jump`).
-  2. passability/<Map>.bin — per-tile 4-bit LEAVE mask (bit0=down,1=left,2=right,3=up)
-                         from static layers only (event tiles stay runtime).
-                         Layout: data[(z*h+y)*w+x], z=0..3 tiles; z4=shadow, z5=region.
-  3. autotiles.json    — TILE_ID constants + FLOOR(48)/WALL(16)/WATERFALL(4)
-                         quadrant tables copied from rpg_core.js.
-  4. anims.json        — animation frame cell lists + timings.
+"""Bake jump targets, passability masks, autotile tables, and animation frames.
 
 Usage:
     python3.12 tools/bake.py "Fear & Hunger_WIN/www" --out converted/baked
-Verifies: unmatched branches == 0; table sizes; passability spot checks.
-"""
+Verifies: unmatched branches == 0; table sizes; passability spot checks."""
 import json, sys, pathlib, struct
 
 
 SKIP_CMDS = (111, 411, 402, 403, 601, 602, 603)
 
 def resolve_jumps(lst):
-    """Return (jumps, problems). jumps: {cmd_index: jump_index} — the §5.2 Cmd.jump.
-    problems: structural surprises for the fallback list (never crashes)."""
     jumps, problems = {}, []
     n = len(lst or [])
     codes = [c.get('code', -1) if isinstance(c, dict) else -1 for c in lst or []]
@@ -82,7 +67,6 @@ def resolve_jumps(lst):
     return jumps, problems
 
 def check_passage(flags, tiles, bit):
-    """Port of Game_Map.checkPassage (rpg_objects.js:5911)."""
     for t in tiles:
         flag = flags[t] if t < len(flags) else 0
         if flag & 0x10:

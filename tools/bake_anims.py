@@ -1,14 +1,5 @@
 #!/usr/bin/env python3
-"""Bake battle-animation sheets for the PSP animation renderer.
-
-Source: Fear & Hunger/www/img/animations/*.rpgmvp (decrypted with the
-System key). Sheets hold 192px cells (5 cols); baked at half scale like
-enemy art (96px cells) into pow2-padded swizzled T8 + RGBA8888 CLUT
-(index 0 = transparent, same convention as convert_assets.py).
-
-Usage (from repo root):
-    python3 tools/bake_anims.py --out psp/gu_demo/data
-"""
+"""Bake battle-animation sheets to half-scale swizzled T8."""
 import argparse
 import io
 import json

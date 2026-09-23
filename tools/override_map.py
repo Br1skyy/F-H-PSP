@@ -1,13 +1,12 @@
 #!/usr/bin/env python3.12
-"""Plugin override map — implements §3.2 of the plan.
+"""List every prototyped method per plugin, in load order.
 
 Usage:
     python3.12 tools/override_map.py "Fear & Hunger_WIN/www" [--out audit_out]
 
 Lists every `Class.prototype.method` definition per enabled plugin, in load
 order, so methods touched by 2+ plugins (effective-behavior risk) stand out.
-Also flags unreadable/minified (possibly obfuscated) plugins — Q8.
-"""
+Also flags unreadable/minified (possibly obfuscated) plugins - Q8."""
 import re, json, sys, pathlib, collections
 
 pat = re.compile(r'(\w+)\.prototype\.(\w+)\s*=\s*function')
@@ -40,10 +39,10 @@ def main():
             obfuscated.append(p['name'])
 
     multi = {k: v for k, v in touch.items() if len(v) >= 2}
-    L = [f'Plugin override map — {root}',
+    L = [f'Plugin override map - {root}',
          f'Enabled plugins: {sum(1 for p in plugins if p.get("status"))}',
          '',
-         f'Methods touched by 2+ plugins ({len(multi)} — read these first):']
+         f'Methods touched by 2+ plugins ({len(multi)} - read these first):']
     for k in sorted(multi):
         L.append(f"  {k:55s} {' -> '.join(multi[k])}")
     L.append('')

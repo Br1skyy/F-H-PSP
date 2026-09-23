@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Bake the game's own message font into a PSP-ready atlas.
-
-Source: Fear & Hunger/www/fonts/Eczar-Regular.ttf (ships with the game,
-selected by fonts/gamefont.css as GameFont — NOT mplus). Proportional
-font: advances baked alongside (half-px units) into font_adv.bin.
-Output: 512x512 T8 (Latin-1 codepoints 1:1 into 32x16 cells of 16x32px)
-+ white-ramp CLUT, swizzled. Glyph coverage = palette index.
-
-Usage (from repo root):
-    python3 tools/bake_font.py --out psp/gu_demo/data/font
-"""
+"""Bake the game Eczar message font into a T8 atlas plus advances."""
 import argparse
 import pathlib
 import struct

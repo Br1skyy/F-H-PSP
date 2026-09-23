@@ -1,16 +1,5 @@
 #!/usr/bin/env python3
-"""Bake the higher-tile (star) mask for a map's tileset.
-
-The original engine draws tiles with flags[tid] & 0x10 set on the UPPER
-bitmap (z=4, above same-priority characters); everything else goes to the
-LOWER bitmap (z=0, below). See rpg_core.js Tilemap._isHigherTile.
-
-Usage (from repo root):
-    python3 tools/bake_higher.py --map Map030 --out psp/gu_demo/data/map030/higher.bin
-
-Output: one byte per tile id (1 = higher), length = len(tileset flags).
-Requires an owned copy of the game (reads Fear & Hunger_WIN/www/data).
-"""
+"""Bake the higher-tile mask for a map."""
 import argparse
 import json
 import pathlib

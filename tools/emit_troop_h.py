@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""Bake troop event pages + referenced common events for the PSP battle.
-
-Source: Fear & Hunger/www/data/Troops.json (pages: span/conditions/list)
-+ CommonEvents.json (117 call targets). Jumps from converted/baked/jumps.json
-(keys 'Troops/<id>/pg<i>', 'CommonEvents/<id>').
-Encoding matches runtime/interp.c exactly (see header comment there per code).
-
-Usage (from repo root):
-    python3 tools/emit_troop_h.py "Fear & Hunger_WIN/www" --troop 1 \
-        --out psp/gu_demo/troop1.h
-"""
+"""Bake troop pages and referenced common events to a C header."""
 import json
 import sys
 import pathlib

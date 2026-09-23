@@ -1,24 +1,5 @@
 #!/usr/bin/env python3.12
-"""Pad converted tileset .t8 files to power-of-2 row strides.
-
-The PSP GE requires texture strides to be powers of 2.  The original
-convert_assets.py output uses the exact image width (192 for Mines_A1,
-384 for the four 384-wide tilesets) — both are non-power-of-2, so the
-GE mis-addresses every row past the first.
-
-This tool:
-  1. Deswizzles the existing .t8 (16x8 blocks at the old width).
-  2. Re-pads each row to the next power of 2 (192→256, 384→512).
-  3. Re-swizzles at the new stride.
-  4. Overwrites the .t8 in place and updates the meta.json tex_w field.
-
-The UV coordinates (su, sv from fh_normal_quad) are unchanged; they still
-address within the original image columns, which are now at the correct
-offset within the wider padded row.
-
-Usage (run from the F&H PSP root):
-    python3.12 tools/pad_sheets_pow2.py
-"""
+"""Pad converted tileset .t8 files to power-of-2 strides."""
 import json, pathlib, struct
 
 SHEETS = [
@@ -39,7 +20,6 @@ def next_pow2(n: int) -> int:
 
 
 def deswizzle8(inp: bytes, w: int, h: int) -> bytearray:
-    """Undo PSP 16x8 swizzle: swizzled -> linear rows."""
     out = bytearray(w * h)
     src = 0
     for by in range(0, h, 8):
@@ -52,7 +32,6 @@ def deswizzle8(inp: bytes, w: int, h: int) -> bytearray:
 
 
 def swizzle8(inp: bytes, w: int, h: int) -> bytearray:
-    """PSP 16x8 swizzle: linear rows -> swizzled."""
     assert w % 16 == 0 and h % 8 == 0, f'dim {w}x{h} not 16x8 aligned'
     out = bytearray(w * h)
     dst = 0

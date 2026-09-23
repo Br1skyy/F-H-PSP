@@ -1,10 +1,5 @@
 #!/usr/bin/env python3.12
-"""Emit runtime/autotile_tables.h from converted/baked/autotiles.json.
-
-The quadrant tables are engine data (rpg_core.js FLOOR/WALL/WATERFALL);
-baking them into a C header keeps runtime/map.c data-free.
-Layouts: FLOOR[48][4][2], WALL[16][4][2], WATERFALL[4][4][2] (values 0-6).
-"""
+"""Emit runtime/autotile_tables.h from converted/baked/autotiles.json."""
 import json, pathlib
 
 def main():

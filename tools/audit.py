@@ -1,15 +1,14 @@
 #!/usr/bin/env python3.12
-"""Phase 0 data audit — implements §4.2 of the plan (extended).
+"""Audit the owned game copy and write counters plus a readable report.
 
 Usage:
     python3.12 tools/audit.py "Fear & Hunger_WIN/www" [--out audit_out]
 
 Reads the game folder and writes:
-    audit.json        — raw counters (commands, plugin cmds, note tags, snippets, maps, switches/vars)
-    audit_report.txt  — human-readable summary answering open questions Q1,Q3,Q5,Q6,Q7
+    audit.json        - raw counters (commands, plugin cmds, note tags, snippets, maps, switches/vars)
+    audit_report.txt  - human-readable summary answering open questions Q1,Q3,Q5,Q6,Q7
 
-Only reads the user's own copy. Never ships assets.
-"""
+Only reads the user's own copy. Never ships assets."""
 import json, re, sys, pathlib, collections
 
 def load_json(p):
@@ -138,7 +137,7 @@ def main():
 
 
     L = []
-    L.append(f'Phase 0 audit — {root}')
+    L.append(f'Phase 0 audit - {root}')
     L.append(f'Map files: {n_maps}, event-command occurrences total: {sum(cmds.values())}')
     L.append('')
     L.append('Top event codes (code: count):')

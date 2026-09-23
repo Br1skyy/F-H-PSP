@@ -1,24 +1,9 @@
 #!/usr/bin/env python3.12
-"""Snippet compiler — implements md §2 item 5 + §4.4/§5.3.
-
-Compiles every damage formula (Skills/Items/Weapons/Armors/States/Enemies)
-to the §5.3 VM bytecode (double-width immediates, matching the C `Ins`):
-  Ins = u8 op, u8 arg, f64 imm  (10 bytes)
-
-Op numbers (must match runtime vm_eval):
+"""Compile damage formulas to VM bytecode. Op numbers must match the VM in runtime/battle.c:
+  Ins = u8 op, u8 arg, f64 imm (10 bytes)
   0 PUSH 1 ADD 2 SUB 3 MUL 4 DIV 5 MOD 6 LT 7 LE 8 GT 9 GE 10 EQ 11 NE
   12 AND 13 OR 14 A_STAT 15 B_STAT 16 VAR 17 SWITCH 18 MAX 19 MIN 20 FLOOR 21 RET
-Stat arg ids: atk0 def1 mat2 mdf3 agi4 luk5 hp6 mp7 mhp8 mmp9 level10
-
-Script lines (355/655) are NOT compiled here — coverage proved they are 4
-runtime API ops; they are emitted as an op table (op_table.json) for the
-interpreter to hand-port. Anything uncompilable lands in fallback.json
-(decides mujs/Duktape vs hand-port — currently expected empty).
-
-Output: converted/code/formulas.bin + formulas.json + op_table.json + fallback.json
-Verifies by evaluating each bytecode program on the host and comparing
-against Python eval of the source formula.
-"""
+  Stat arg ids: atk0 def1 mat2 mdf3 agi4 luk5 hp6 mp7 mhp8 mmp9 level10"""
 import json, sys, pathlib, struct, re
 
 OPS = {n: i for i, n in enumerate(

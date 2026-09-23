@@ -1,18 +1,10 @@
 #!/usr/bin/env python3
 """Embed real event lists as C arrays for the EBOOT.
 
-Generalized from the Map001-ev37 original: takes --map/--ev/--pg/--symbol
-quadruples (repeatable) plus the legacy single-event form. Covers the codes
-the runtime implements for these lists:
-  0/101/401/102/402/404/411/111(types 0,1,8)/121/123/126/127/230/356.
-Jumps from converted/baked/jumps.json (key 'Map.json/ev{id}/pg{pg}').
-Other codes are refused (keeps the demo honest).
-
 Usage:
     python3 tools/emit_event_h.py "Fear & Hunger_WIN/www" --out psp/gu_demo/event_demo.h
     # optional: --ev Map001 37 0 DEMO_EV --ev Map030 213 0 M30_EV213 ...
-    # (defaults embed the historical set below)
-"""
+    # (defaults embed the historical set below)"""
 import json
 import sys
 import pathlib

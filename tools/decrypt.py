@@ -1,14 +1,9 @@
 #!/usr/bin/env python3.12
-"""MV asset decryption helper — implements §4.3 of the plan.
-
-Encrypted MV assets = 16-byte fake header, then body whose first 16 bytes
-are XORed with the key in System.json (`encryptionKey`).
-.rpgmvp -> png, .rpgmvo -> ogg, .rpgmvm -> m4a (after decrypt).
+"""Decrypt RPG Maker MV assets with the System.json key.
 
 Usage:
     python3.12 tools/decrypt.py "Fear & Hunger_WIN/www" --check
-    python3.12 tools/decrypt.py "Fear & Hunger_WIN/www" --file img/foo.rpgmvp -o /tmp/foo.png
-"""
+    python3.12 tools/decrypt.py "Fear & Hunger_WIN/www" --file img/foo.rpgmvp -o /tmp/foo.png"""
 import sys, pathlib, json
 
 def decrypt_bytes(blob: bytes, key_hex: str) -> bytes:

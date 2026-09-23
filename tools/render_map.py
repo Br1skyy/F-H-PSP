@@ -1,20 +1,8 @@
 #!/usr/bin/env python3.12
-"""Reference map renderer — md build order: map renderer (after interpreter).
-
-Ports Tilemap._drawNormalTile/_drawAutotile (rpg_core.js:5010/5038) to resolve
-every map tile into source rects on the CONVERTED sheets, then blits a PNG.
-This render is the golden master for the later C port (§3.5 loop):
-C must produce identical quad lists.
-
-Autotile recap (shapes are pre-baked in data, kind*48+shape):
-  normal: set = A5->4 else 5+tid//256; sx=(tid//128%2*8+tid%8)*48; sy=(tid%256//8%16)*48
-  auto: kind=(tid-2048)//48, shape=(tid-2048)%48; (set,bx,by) per A1-A4 rules
-        (anim frame 0 = static golden); 4 quadrants from FLOOR/WALL/WATERFALL
-        tables: src=((bx*2+qsx)*24,(by*2+qsy)*24,24x24) at 48px scale.
+"""Render a map to PNG as the golden reference for the C port.
 
 Usage:
-    python3.12 tools/render_map.py "Fear & Hunger_WIN/www" --map Map030 --tile 24 --out render_out
-"""
+    python3.12 tools/render_map.py "Fear & Hunger_WIN/www" --map Map030 --tile 24 --out render_out"""
 import json, sys, pathlib, struct
 from PIL import Image
 
@@ -30,7 +18,6 @@ def is_a4(t): return A4 <= t < TMAX
 def is_a5(t): return A5 <= t < A1
 
 def auto_cell(t):
-    """Return (setNumber, bx, by, tableName) at animation frame 0."""
     kind = kind_of(t)
     tx, ty = kind % 8, kind // 8
     if is_a1(t):
@@ -52,7 +39,6 @@ def auto_cell(t):
     return 3, bx, by, table
 
 def load_sheet(conv_dir, name):
-    """Deswizzle .t8 + apply .clut -> PIL RGBA (cropped to meta w/h)."""
     base = pathlib.Path(conv_dir) / name
     meta = json.loads((pathlib.Path(str(base) + '.meta.json')).read_text())
     tw, th, w, h = meta['tex_w'], meta['tex_h'], meta['w'], meta['h']
@@ -104,7 +90,7 @@ def main():
         cat = 'tilesets'
         p = conv / cat / sname
         if not pathlib.Path(str(p) + '.meta.json').exists():
-            print(f'MISSING converted sheet {sname} — convert it first')
+            print(f'MISSING converted sheet {sname} - convert it first')
             continue
         sheets[slot], _ = load_sheet(conv / cat, sname)
     print(f'sheets loaded: {sorted(sheets)} of {[i for i, s in enumerate(ts["tilesetNames"]) if s]}')

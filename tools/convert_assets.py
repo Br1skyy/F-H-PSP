@@ -1,12 +1,8 @@
 #!/usr/bin/env python3.12
-"""Asset converter step 1 (images) — implements md §2 items 1-2.
-
-Pipeline per input image: decrypt (.rpgmvp) -> downscale (TILE/48 for world
-art) -> 8-bit palettise (index 0 = transparent) -> swizzle (GU T8) -> write
-.t8 + .clut + .meta.json, plus a pack manifest.
+"""Convert game images to swizzled T8 + CLUT + meta.
 
 Usage:
-    python3.12 tools/convert_assets.py "Fear & Hunger_WIN/www" --out converted \\
+    python3.12 tools/convert_assets.py "Fear & Hunger_WIN/www" --out converted \
         --tile 24 --only tilesets/Ancient_A --only characters/mercenary
     python3.12 tools/convert_assets.py "Fear & Hunger_WIN/www" --out converted --tile 24
 
@@ -14,8 +10,7 @@ Output layout:
     converted/<category>/<name>.t8        swizzled 8-bit indices
     converted/<category>/<name>.clut      256 x RGBA8888 (little-endian u32)
     converted/<category>/<name>.meta.json {w,h,tex_w,tex_h,scale,palette_size}
-    converted/manifest.json               all entries + totals + VRAM estimate
-"""
+    converted/manifest.json               all entries + totals + VRAM estimate"""
 import json, sys, pathlib, struct, math
 from PIL import Image
 
@@ -26,7 +21,6 @@ def next_pow2(n):
     return p
 
 def swizzle8(out: bytearray, inp: bytes, w: int, h: int):
-    """PSP 8-bit texture swizzle: 16x8 blocks, byte linear within block."""
     assert w % 16 == 0 and h % 8 == 0, f'stride {w}x{h} not 16x8 aligned'
     dst = 0
     for by in range(0, h, 8):

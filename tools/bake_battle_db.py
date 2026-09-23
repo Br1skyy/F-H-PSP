@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""Bake battle database slice: classes, enemies, skills, troops.
-
-Source: Fear & Hunger/www/data/{Classes,Enemies,Skills,Troops}.json
-(owned copy). Trait math follows rpg_objects.js exactly:
-  xparam (hit/eva/...) = traitsSum (additive, base 0)
-  sparam/param-rate (pdr/mdr/grd/elements) = traitsPi (base 1.0)
-Attack element defaults to 1 when no TRAIT_ATTACK_ELEMENT (31) exists.
-Skill bytecode comes from converted/code/formulas.bin at runtime
-(only metadata is baked here).
-
-Usage (from repo root):
-    python3 tools/bake_battle_db.py --out psp/gu_demo/battle_db.h
-"""
+"""Bake the battle database (classes, enemies, skills, items, troops, actors) to a C header."""
 import argparse
 import json
 import pathlib
