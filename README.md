@@ -21,20 +21,20 @@ All docs live in `docs/`.
 ## Status
 
 Honest status: it boots on real hardware and holds 60 fps. Map030 (Mines)
-is walkable with 4 playable characters, NPC talk, and full guard battles
-with limbs, dismemberment, Talk/Run, and troop events. There is no title
-screen, menu, save system, or audio yet.
+is walkable with 4 playable characters, NPC talk, and guard battles.
+The battle system is still in progress: commands, limbs, Talk/Run, and
+troop events run, but expect rough edges. There is no title screen,
+menu, save system, or audio yet.
 
 What works:
 
 - Map030 tilemap, scrolling, collision, z-order, NPCs, talk and choices
 - Guard battles (troop 1 debug fight, troop 44 ballista guard): Attack,
   Skills, Guard, Item, limb targeting, dismemberment, escape, Talk pages
-- OG status gauges sampled from the game's own Window.png
-- PC golden tests for interp, battle, maps, and troop flow (all green)
 
 What is missing:
 
+- Battle polish (it works but is not finished)
 - Title, menus, items/equipment screens, saves, shops
 - Audio (music and sound effects)
 - Maps other than Map030, more troops, hunger and darkness systems
@@ -59,12 +59,12 @@ Copy `EBOOT.PBP` to `PSP/GAME/<NAME>/` on your PSP. Folder name is free.
 ## Project Structure
 
 ```
-F&H PSP/
+fh-psp/
   runtime/       # portable engine: interp, battle, map, player, text
   psp/gu_demo/   # PSP shell: main loop, renderer, input + staged data
   psp/hw_hello/  # hardware sanity EBOOT (black-screen triage)
   tools/         # converters and bakers (PC Python)
-  tests/         # golden-master harnesses (must stay green)
+  tests/         # test harnesses for interp, battle, maps
   docs/          # project documentation
   LICENSE        # MIT for our code
 ```
@@ -81,8 +81,8 @@ cancels. SQUARE starts the debug guard fight. START exits.
 ## Credit
 
 - Miro Haverinen made Fear & Hunger
-- Kadokawa made RPG Maker MV; battle plugins by Yanfly and Olivia
-- The PS1/PSP decomp community for tools and knowledge (splat, m2c)
+- Kadokawa made RPG Maker MV
+- Yanfly and Olivia made the battle plugins this uses
 
 ## License and legal
 

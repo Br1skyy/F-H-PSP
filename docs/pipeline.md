@@ -63,7 +63,7 @@ Copy `EBOOT.PBP` to `PSP/GAME/<NAME>/EBOOT.PBP`.
 
 ## 4. Tests
 
-Plain gcc, from the repo root. They must stay green.
+Plain gcc, from the repo root. Run them before changing engine code.
 
 ```bash
 gcc -Wall -O2 -I runtime -o /tmp/test_battle tests/test_battle.c runtime/battle.c -lm && /tmp/test_battle

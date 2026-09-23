@@ -22,6 +22,6 @@ data. It holds 60 fps on a PSP-2000 in about 5 MB.
 
 ## Method
 
-Every system is ported against the shipped scripts, then locked with a
-golden test (`tests/test_interp.c`, `test_battle.c`, `test_map.c`,
-`test_troopflow.c`). Keep them green.
+Every system is ported against the shipped scripts, then checked with
+the harnesses in `tests/` (`test_interp.c`, `test_battle.c`,
+`test_map.c`, `test_troopflow.c`).
