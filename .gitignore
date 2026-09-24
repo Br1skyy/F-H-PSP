@@ -23,6 +23,7 @@ audit_out/
 *.o
 *.elf
 *.PBP
+/Build/
 PARAM.SFO
 *.SFO
 *.zip

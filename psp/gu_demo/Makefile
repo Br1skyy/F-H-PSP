@@ -285,3 +285,18 @@ map_runtime.c: ../../runtime/map.c
 	sed '1s/.*/\/\* COPY of runtime\/map.c - see runtime\/. Refresh with cp. \*\//; s/#include "map.h"/#include "map_runtime.h"/' ../../runtime/map.c > map_runtime.c
 map_runtime.h: ../../runtime/map.h
 	sed 's/FH_MAP_H/FH_MAP_RUNTIME_H/g' ../../runtime/map.h > map_runtime.h
+
+# Install-ready drop folder at the repo root. Build/ mirrors exactly
+# what goes on the stick under PSP/GAME/<NAME>/: the EBOOT plus any
+# streamed data/ the build needs (nothing right now, everything is
+# embedded). Copy the whole folder to the stick.
+DISTDIR = ../../Build
+.PHONY: dist
+dist: EBOOT.PBP
+	mkdir -p $(DISTDIR)
+	cp -f EBOOT.PBP $(DISTDIR)/EBOOT.PBP
+	if [ -f data/troops.blob ]; then \
+		mkdir -p $(DISTDIR)/data; \
+		cp -f data/troops.blob data/skillce.blob $(DISTDIR)/data/ 2>/dev/null; \
+		cp -rf data/enemies $(DISTDIR)/data/ 2>/dev/null; \
+	fi

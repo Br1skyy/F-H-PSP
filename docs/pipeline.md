@@ -45,9 +45,14 @@ build as usual:
 
 ```bash
 python3 tools/stage_data.py "Fear & Hunger_WIN/www"
-cd psp/gu_demo && make && cd ../.. && rm -f FHDEMO.zip && \
-  (cd psp/gu_demo && zip ../../FHDEMO.zip EBOOT.PBP)
+cd psp/gu_demo && make dist && cd ../.. && rm -f FHDEMO.zip && \
+  (cd Build && zip -q ../FHDEMO.zip -r .)
 ```
+
+`make dist` builds the EBOOT and copies it plus any streamed
+`data/` it needs into `Build/` at the repo root. `Build/` mirrors
+exactly what goes on the stick: copy the whole folder to
+`PSP/GAME/<NAME>/`.
 
 `stage_data.py` reads its file list from the Makefile itself, so it
 stays correct when the build gains files. It fails loudly naming
@@ -63,7 +68,7 @@ Link rules (learned on real hardware, a PSP-2000 hard-freezes otherwise):
 
 ## 3. Install
 
-Copy `EBOOT.PBP` to `PSP/GAME/<NAME>/EBOOT.PBP`.
+Copy everything in `Build/` to `PSP/GAME/<NAME>/` on the stick.
 
 ## 4. Tests
 
