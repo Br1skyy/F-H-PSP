@@ -14,9 +14,7 @@ unsigned int font_cl[256] __attribute__((aligned(16)));
 unsigned char *font_adv = 0;
 unsigned char *window_px = 0;
 unsigned int window_cl[256] __attribute__((aligned(16)));
-unsigned char *floor_px = 0;
-int battle_live_bg = 0;
-unsigned int floor_cl[256] __attribute__((aligned(16)));
+BackLayer back_layer[2];
 
 
 static const unsigned int MSG_PAL[32] = {
@@ -1178,7 +1176,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     sceGuDisable(GU_ALPHA_TEST);
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    if (!battle_live_bg) {
+    {
         TVert *bd = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
         bd[0].u = 0; bd[0].v = 0; bd[0].color = 0xff180a0c;
         bd[0].x = 0; bd[0].y = 0; bd[0].z = 0.0f;
@@ -1186,7 +1184,8 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         bd[1].x = (float)SCR_W; bd[1].y = (float)SCR_H; bd[1].z = 0.0f;
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bd);
     }
-    if (floor_px) {
+    if ((back_layer[0].t8 && back_layer[0].cl) ||
+        (back_layer[1].t8 && back_layer[1].cl)) {
         sceGuEnable(GU_TEXTURE_2D);
         sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
         sceGuTexFilter(GU_NEAREST, GU_NEAREST);
@@ -1194,23 +1193,26 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         sceGuTexScale(1.0f, 1.0f);
         sceGuTexOffset(0.0f, 0.0f);
         sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
-        sceGuClutLoad(32, floor_cl);
         sceGuTexMode(GU_PSM_T8, 0, 0, 1);
-        sceGuTexImage(0, 512, 512, 512, floor_px);
-        sceGuTexFlush();
-        sceGuTexSync();
         sceGuEnable(GU_ALPHA_TEST);
         sceGuAlphaFunc(GU_GREATER, 0, 0xff);
-        TVert *bb = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-        bb[0].u = 0; bb[0].v = 0; bb[0].color = 0xffffffff;
-        bb[0].x = (float)((SCR_W - 500) / 2);
-        bb[0].y = (float)((SCR_H - 370) / 2);
-        bb[0].z = 0.0f;
-        bb[1].u = 500; bb[1].v = 370; bb[1].color = 0xffffffff;
-        bb[1].x = (float)((SCR_W + 500) / 2);
-        bb[1].y = (float)((SCR_H + 370) / 2);
-        bb[1].z = 0.0f;
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bb);
+        for (int bi = 1; bi >= 0; bi--) {
+            BackLayer *bl = &back_layer[bi];
+            TVert *bb;
+            if (!bl->t8 || !bl->cl || bl->w <= 0 || bl->h <= 0)
+                continue;
+            sceGuClutLoad(32, bl->cl);
+            sceGuTexImage(0, bl->tw, bl->th, bl->stride, bl->t8);
+            sceGuTexFlush();
+            sceGuTexSync();
+            bb = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+            bb[0].u = 0; bb[0].v = 0; bb[0].color = 0xffffffff;
+            bb[0].x = 0; bb[0].y = 0; bb[0].z = 0.0f;
+            bb[1].u = (float)bl->w; bb[1].v = (float)bl->h;
+            bb[1].color = 0xffffffff;
+            bb[1].x = (float)SCR_W; bb[1].y = (float)SCR_H; bb[1].z = 0.0f;
+            sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bb);
+        }
         sceGuDisable(GU_TEXTURE_2D);
     }
 

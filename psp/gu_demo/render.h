@@ -82,9 +82,12 @@ extern unsigned char *window_px;
 extern unsigned int window_cl[256];
 
 
-extern unsigned char *floor_px;
-extern int battle_live_bg;
-extern unsigned int floor_cl[256];
+typedef struct {
+    unsigned char *t8;
+    unsigned int *cl;
+    int w, h, tw, th, stride;
+} BackLayer;
+extern BackLayer back_layer[2];
 
 
 extern unsigned char *anim_t8[8];

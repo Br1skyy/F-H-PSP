@@ -252,6 +252,22 @@ def main() -> None:
         L.append(f'    {{{x["id"]},"{x.get("name", "")[:31]}"}},')
     L.append('    {0,""},');
     L.append('};')
+    L.append('static const struct { const char *name; int w, h, tw, th,'
+             ' stride; } BACK_DB[] = {')
+    for cat in ('battlebacks1', 'battlebacks2'):
+        cdir = pathlib.Path(f'converted/{cat}')
+        if not cdir.exists():
+            continue
+        for mp in sorted(cdir.glob('*.meta.json')):
+            try:
+                m = json.loads(mp.read_text())
+                base = mp.name[:-len('.meta.json')]
+                L.append(f'    {{"{base}",{m["w"]},{m["h"]},'
+                         f'{m["tex_w"]},{m["tex_h"]},{m["tex_w"]}}},')
+            except (KeyError, ValueError):
+                continue
+    L.append('    {0,0,0,0,0,0},');
+    L.append('};')
     out = pathlib.Path(args.out)
     out.write_text('\n'.join(L) + '\n')
     print(f'wrote {out}')

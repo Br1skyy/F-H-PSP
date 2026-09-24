@@ -877,8 +877,86 @@ static void btl_art_load(void) {
         btl_art_slot(i);
 }
 
-static void btl_start(u64 tick, int char_idx, int troop_id, void *shown) {
-    (void)shown;
+static unsigned char back_mem[2][512 * 512]
+    __attribute__((aligned(16)));
+static unsigned int back_clut[2][256] __attribute__((aligned(16)));
+static int cur_map = 30;
+
+
+static void battle_back_load(void) {
+    static const struct { int map; const char *b1, *b2; } rows[] = {
+        {30, "", "mines"},
+        {0, 0, 0},
+    };
+    const char *names[2] = {0, 0};
+    int i;
+    for (i = 0; rows[i].map; i++) {
+        if (rows[i].map == cur_map) {
+            names[0] = rows[i].b1;
+            names[1] = rows[i].b2;
+            break;
+        }
+    }
+    for (i = 0; i < 2; i++) {
+        BackLayer *bl = &back_layer[i];
+        char pb[96], cb[96];
+        SceUID f1, f2;
+        unsigned tsz, csz;
+        int r = 0;
+        bl->t8 = 0;
+        bl->cl = 0;
+        bl->w = bl->h = bl->tw = bl->th = bl->stride = 0;
+        if (!names[i] || !names[i][0])
+            continue;
+        while (BACK_DB[r].name && strcmp(BACK_DB[r].name, names[i]))
+            r++;
+        if (!BACK_DB[r].name)
+            continue;
+        snprintf(pb, sizeof(pb), "data/battlebacks/%s.t8", names[i]);
+        snprintf(cb, sizeof(cb), "data/battlebacks/%s.clut", names[i]);
+        f1 = sceIoOpen(pb, PSP_O_RDONLY, 0777);
+        if (f1 < 0)
+            continue;
+        tsz = (unsigned)sceIoLseek(f1, 0, PSP_SEEK_END);
+        sceIoLseek(f1, 0, PSP_SEEK_SET);
+        f2 = sceIoOpen(cb, PSP_O_RDONLY, 0777);
+        if (f2 < 0) {
+            sceIoClose(f1);
+            continue;
+        }
+        csz = (unsigned)sceIoLseek(f2, 0, PSP_SEEK_END);
+        sceIoLseek(f2, 0, PSP_SEEK_SET);
+        if (tsz == 0 || tsz > sizeof(back_mem[i]) || csz != 1024) {
+            sceIoClose(f1);
+            sceIoClose(f2);
+            continue;
+        }
+        if (sceIoRead(f1, back_mem[i], tsz) != (int)tsz) {
+            sceIoClose(f1);
+            sceIoClose(f2);
+            continue;
+        }
+        if (sceIoRead(f2, back_clut[i], 1024) != 1024) {
+            sceIoClose(f1);
+            sceIoClose(f2);
+            continue;
+        }
+        sceIoClose(f1);
+        sceIoClose(f2);
+        sceKernelDcacheWritebackInvalidateRange(back_mem[i], tsz);
+        sceKernelDcacheWritebackInvalidateRange(back_clut[i], 1024);
+        bl->t8 = back_mem[i];
+        bl->cl = back_clut[i];
+        bl->w = BACK_DB[r].w;
+        bl->h = BACK_DB[r].h;
+        bl->tw = BACK_DB[r].tw;
+        bl->th = BACK_DB[r].th;
+        bl->stride = BACK_DB[r].stride;
+    }
+}
+
+
+static void btl_start(u64 tick, int char_idx, int troop_id) {
 
     static const int char_actor[4] = {1, 5, 4, 3};
     int want = char_actor[char_idx];
@@ -997,11 +1075,8 @@ static void btl_start(u64 tick, int char_idx, int troop_id, void *shown) {
     btl_known_rebuild();
     btl_build_merged();
     btl_art_load();
-    /* Map030 names no battleback1 and every battleback2 file is absent
-       from the game, so the original shows the map snapshot. The
-       battle frame re-renders the frozen map underneath. */
-    floor_px = 0;
-    battle_live_bg = 1;
+    /* The battle frame re-renders the frozen map underneath. */
+    battle_back_load();
     {
         SceUID fd = sceIoOpen("ms0:/fh_battle.txt",
                               PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
@@ -1519,7 +1594,6 @@ extern unsigned char d_ghost_start[], d_ghostc_start[];
 extern unsigned char d_guard1_start[], d_guard1c_start[];
 extern unsigned char d_font_start[], d_fontc_start[], d_fontadv_start[];
 extern unsigned char d_win_start[], d_winc_start[];
-extern unsigned char d_floor_start[], d_floorc_start[];
 extern unsigned char d_tmerc_start[], d_tmercc_start[];
 extern unsigned char d_toutl_start[], d_toutlc_start[];
 extern unsigned char d_tpriest_start[], d_tpriestc_start[];
@@ -1744,10 +1818,6 @@ static void load_map030(void) {
     window_px = d_win_start;
     memcpy(window_cl, d_winc_start, sizeof(window_cl));
 
-
-    floor_px = d_floor_start;
-    memcpy(floor_cl, d_floorc_start, sizeof(floor_cl));
-
     sceKernelDcacheWritebackAll();
 }
 
@@ -1947,7 +2017,7 @@ int main(int argc, char *argv[]) {
                     snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                              characters[current_character].name);
                     btl_start(btick, current_character,
-                              npcs[found].battle_troop, fbp0);
+                              npcs[found].battle_troop);
                     continue;
                 }
                 if (npcs[found].talk && npcs[found].talk_len > 1) {
@@ -2024,7 +2094,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                                  characters[current_character].name);
-                        btl_start(btick, current_character, tr, fbp0);
+                        btl_start(btick, current_character, tr);
                     }
                 }
 
@@ -2067,7 +2137,7 @@ int main(int argc, char *argv[]) {
             sceRtcGetCurrentTick(&btick);
             snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                      characters[current_character].name);
-            btl_start(btick, current_character, 1, fbp0);
+            btl_start(btick, current_character, 1);
         }
 
 
@@ -2089,7 +2159,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name),
                                  "%s", characters[current_character].name);
-                        btl_start(btick, current_character, tr, fbp0);
+                        btl_start(btick, current_character, tr);
                     }
                 }
             }
@@ -2506,25 +2576,9 @@ int main(int argc, char *argv[]) {
                 if (i == btl_tgt) tcursor = seen;
                 seen++;
             }
-            {
-                unsigned char *csp[4] = {
-                    characters[0].sprite_data, characters[1].sprite_data,
-                    characters[2].sprite_data, characters[3].sprite_data
-                };
-                unsigned int *ccl[4] = {
-                    (unsigned int *)characters[0].clut_data,
-                    (unsigned int *)characters[1].clut_data,
-                    (unsigned int *)characters[2].clut_data,
-                    (unsigned int *)characters[3].clut_data
-                };
-                FhLight fhl_b[24];
-                int nfhl_b = build_lights(fhl_b, 24, cam_x, cam_y);
-                render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W,
-                             MAP_H, &player, current_character, csp, ccl,
-                             map_higher, sizeof(map_higher), total_frames,
-                             npc_draw, 15, fhl_b, nfhl_b);
-            }
             sceGuStart(GU_DIRECT, gu_list);
+            sceGuClearColor(0xff000000);
+            sceGuClear(GU_COLOR_BUFFER_BIT);
 
             BtListRow lrows[4];
             int nlrows = 0, lcur = 0, show_list = 0;
@@ -2660,7 +2714,7 @@ int main(int argc, char *argv[]) {
                         snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                                  characters[current_character].name);
                         btl_start(btick, current_character,
-                                  npcs[i].battle_troop, fbp0);
+                                  npcs[i].battle_troop);
                         break;
                     }
                 }

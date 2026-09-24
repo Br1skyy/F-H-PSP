@@ -202,6 +202,28 @@ def stage_enemies(converted, data, force):
     print(f'staged {n} new enemy sheets into psp/gu_demo/data/enemies/')
 
 
+def stage_battlebacks(converted, data, force):
+    """Stream per-area battlebacks as files (battle loads both layers)."""
+    dst = data / 'battlebacks'
+    dst.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for cat in ('battlebacks1', 'battlebacks2'):
+        src = converted / cat
+        if not src.exists():
+            continue
+        for t8 in sorted(src.glob('*.t8')):
+            d = dst / t8.name
+            c = dst / (t8.stem + '.clut')
+            if d.exists() and c.exists() and not force:
+                continue
+            stage_t8(t8, d)
+            cs = src / (t8.stem + '.clut')
+            if cs.exists():
+                c.write_bytes(cs.read_bytes())
+            n += 1
+    print(f'staged {n} new battlebacks into psp/gu_demo/data/battlebacks/')
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('game')
@@ -223,6 +245,7 @@ def main() -> None:
     run_bakers(game, args.map, data)
     run_emitters(game, args.map)
     stage_enemies(converted, data, args.force)
+    stage_battlebacks(converted, data, args.force)
 
     missing = []
     for name in needed_data():

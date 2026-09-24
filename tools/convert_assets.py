@@ -85,7 +85,7 @@ def main():
 
     jobs = []
     for cat in ('tilesets', 'characters', 'enemies', 'faces', 'sv_actors',
-                'battlebacks1', 'parallaxes', 'pictures'):
+                'battlebacks1', 'battlebacks2', 'parallaxes', 'pictures'):
         d = game / 'img' / cat
         if not d.exists():
             continue
