@@ -44,3 +44,12 @@ __pycache__/
 *.480wide
 *~
 .DS_Store
+
+# --- Generated game-text headers (bake from your copy via stage_data.py) ---
+psp/gu_demo/battle_db.h
+psp/gu_demo/troop1.h
+psp/gu_demo/troop44.h
+psp/gu_demo/itemce.h
+psp/gu_demo/anim_data.h
+psp/gu_demo/event_demo.h
+tests/test_vec.h

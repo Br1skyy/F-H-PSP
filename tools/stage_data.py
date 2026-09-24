@@ -2,9 +2,11 @@
 """Stage battle and map data for the PSP build.
 
 Copies everything psp/gu_demo/Makefile embeds from converted/ into
-psp/gu_demo/data/, runs the quick bakers that write there directly,
-and fails loudly listing anything still missing. Run after the heavy
-converters (see docs/pipeline.md). Must run from the repo root.
+psp/gu_demo/data/, regenerates the game-text headers (battle DB, troop
+pages, animations, events, test vectors) from the owned copy, runs the
+quick bakers that write into data/ directly, and fails loudly listing
+anything still missing. Run after the heavy converters (see
+docs/pipeline.md). Must run from the repo root.
 
 Usage:
     python3 tools/stage_data.py "Fear & Hunger_WIN/www" [--map Map030]
@@ -125,9 +127,36 @@ def needed_data():
     return sorted(names)
 
 
-def run_bakers(game, map_name, data):
+def run_emitters(game):
     jobs = [
-        (['tools/bake_battlers.py', '--out', 'psp/gu_demo/data'],
+        ['tools/bake_battle_db.py', '--out', 'psp/gu_demo/battle_db.h'],
+        ['tools/emit_troop_h.py', str(game), '--troop', '1', '--out',
+         'psp/gu_demo/troop1.h'],
+        ['tools/emit_troop_h.py', str(game), '--troop', '44', '--out',
+         'psp/gu_demo/troop44.h'],
+        ['tools/emit_troop_h.py', str(game), '--out',
+         'psp/gu_demo/itemce.h', '--ces-only', '4', '14', '15', '18',
+         '27', '32', '36', '46', '56', '64', '76', '92', '138', '145',
+         '147', '150', '153', '185', '189', '190', '216', '234', '235',
+         '240', '241', '244'],
+        ['tools/emit_anim_h.py', str(game), '--out',
+         'psp/gu_demo/anim_data.h'],
+        ['tools/emit_event_h.py', str(game), '--out',
+         'psp/gu_demo/event_demo.h'],
+        ['tools/emit_interp_test.py', str(game), '--out', 'tests'],
+    ]
+    for cmd in jobs:
+        print('running:', ' '.join(cmd))
+        r = subprocess.run([sys.executable] + cmd,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            print(r.stdout[-2000:] if r.stdout else '')
+            print(r.stderr[-2000:] if r.stderr else '')
+            sys.exit(f'emitter failed: {cmd[0]}')
+
+
+def run_bakers(game, map_name, data):
+    jobs = [        (['tools/bake_battlers.py', '--out', 'psp/gu_demo/data'],
          [f'bv_{b}{s}.{e}' for b in BATTLERS for s in 'ab'
           for e in ('t8', 'clut')]),
         (['tools/bake_anims.py', '--out', 'psp/gu_demo/data'],
@@ -171,6 +200,7 @@ def main() -> None:
     (data / 'map030').mkdir(parents=True, exist_ok=True)
 
     run_bakers(game, args.map, data)
+    run_emitters(game)
 
     missing = []
     for name in needed_data():

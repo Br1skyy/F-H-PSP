@@ -15,7 +15,7 @@ at `Fear & Hunger_WIN/www` (gitignored, never committed).
 
 ```bash
 python3 tools/convert_assets.py "Fear & Hunger_WIN/www" --out converted --tile 24
-python3 tools/pad_sheets_pow2.py && python3 tools/pad_chars_pow2.py
+python3 tools/pad_pow2.py
 python3 tools/bake.py "Fear & Hunger_WIN/www" --out converted/baked
 python3 tools/compile_snippets.py "Fear & Hunger_WIN/www" --out converted/code
 python3 tools/bake_higher.py --map Map030
@@ -27,10 +27,14 @@ swizzle to GU T8. Output is `.t8` + `.clut` + `.meta.json`.
 
 Rules that have bitten us:
 
-- Converted `.t8` files are already swizzled. To pad one, deswizzle it
-  first, pad, then re-swizzle. Padding swizzled bytes scrambles rows.
-- The GE needs power-of-2 strides. CLUTs must be 16 byte aligned.
-- Character sheets are padded to 512x512 at stage time, never in
+- The GE only accepts power-of-2 textures. The converter aligns to
+  16x8 blocks, which is not enough, so `pad_pow2.py` pads every staged
+  category (tilesets, characters, enemies) in place. Skipping it bands
+  sprites across the screen.
+- Converted `.t8` files are swizzled. To pad one, deswizzle it first,
+  pad, then re-swizzle. Padding swizzled bytes scrambles rows.
+- CLUTs must be 16 byte aligned.
+- Character sheets end up padded to 512x512 at stage time, never in
   `converted/`. Re-running the converter silently un-pads the cache.
 
 ## 2. Stage data and build
