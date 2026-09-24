@@ -2667,10 +2667,22 @@ int main(int argc, char *argv[]) {
             render_debug_text(dbg_err);
             dbg_err_t--;
         } else {
+            static int data_probed = 0, data_n = -1;
+            if (!data_probed) {
+                data_probed = 1;
+                if (tblob_open("data/troops.blob") == 0)
+                    data_n = tblob_count();
+            }
             if (frames == 0 || frames - last_debug_update >= 30) {
-                snprintf(debug_text, sizeof(debug_text),
-                         "F&H: %s | L/R:switch | fps:%d",
-                         characters[current_character].name, fps);
+                if (data_n >= 0)
+                    snprintf(debug_text, sizeof(debug_text),
+                             "F&H: %s | fps:%d | data:ok(%d)",
+                             characters[current_character].name, fps,
+                             data_n);
+                else
+                    snprintf(debug_text, sizeof(debug_text),
+                             "F&H: %s | fps:%d | data:MISSING",
+                             characters[current_character].name, fps);
                 last_debug_update = frames;
             }
             render_debug_text(debug_text);
