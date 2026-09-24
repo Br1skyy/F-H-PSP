@@ -3,13 +3,26 @@
 All commands run from the repo root. You need an owned copy of the game
 at `Fear & Hunger_WIN/www` (gitignored, never committed).
 
-## 0. Toolchain and Python
+## 0. Tools
 
-- PSP toolchain: install pspdev (`~/pspdev` below) following
-  https://github.com/pspdev/pspdev, then put it on PATH:
-  `export PATH=$HOME/pspdev/bin:$PATH` (gives you `psp-gcc`,
-  `psp-config`, `bin2o`).
+You need three things on PATH:
+
+- PSP toolchain: `psp-gcc`, `psp-config`, `bin2o`,
+  `psp-fixup-imports`, `mksfoex`, `psp-strip`, `pack-pbp`.
 - Python 3 with Pillow: `pip install Pillow`.
+- Your owned game copy at `Fear & Hunger_WIN/www` (gitignored,
+  never committed).
+
+Per platform:
+
+- Linux: get the pspdev release tarball for your distro
+  (https://github.com/pspdev/pspdev/releases), extract to
+  `~/pspdev`, then `export PATH=$HOME/pspdev/bin:$PATH`.
+  Building `psptoolchain` from source also works.
+- macOS: same pspdev releases, macOS asset.
+- Windows: use Ubuntu under WSL2, then follow the Linux steps.
+  Native alternative: the `pspdev-win` MSYS2 prebuilt zip, which
+  ships the same binaries as `.exe` files.
 
 ## 1. Convert the game (first time only)
 
@@ -41,8 +54,15 @@ Rules that have bitten us:
 
 ```bash
 python3 tools/stage_data.py "Fear & Hunger_WIN/www"
-cd psp/gu_demo && make dist
+python3 tools/build.py
 ```
+
+`tools/build.py` is the cross platform builder: it parses the
+object list and data embeds from `psp/gu_demo/Makefile`, so the two
+drivers cannot drift, and needs only Python plus the toolchain
+binaries (no make, no sh). `make -C psp/gu_demo dist` does the same
+thing on Unix. Either way the result lands in `Build/`,
+overwriting what is there.
 
 `make dist` builds the EBOOT into `Build/`, overwriting what is
 there. `Build/` is the whole install: EBOOT plus streamed `data/`
