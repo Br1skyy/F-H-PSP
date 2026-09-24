@@ -1192,7 +1192,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         sceGuTexScale(1.0f, 1.0f);
         sceGuTexOffset(0.0f, 0.0f);
         sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-        sceGuTexImage(0, 512, 272, 512, battle_bg);
+        sceGuTexImage(0, 512, 512, 512, battle_bg);
         sceGuTexFlush();
         sceGuTexSync();
         TVert *bg = (TVert *)sceGuGetMemory(2 * sizeof(TVert));

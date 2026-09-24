@@ -877,7 +877,7 @@ static void btl_art_load(void) {
         btl_art_slot(i);
 }
 
-static unsigned int btl_bg[512 * 272] __attribute__((aligned(16)));
+static unsigned int btl_bg[512 * 512] __attribute__((aligned(16)));
 
 
 static void btl_snap_bg(void *shown) {
