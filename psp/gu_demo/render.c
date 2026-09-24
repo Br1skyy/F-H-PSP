@@ -1202,7 +1202,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             if (!bl->t8 || !bl->cl || bl->w <= 0 || bl->h <= 0)
                 continue;
             sceGuClutLoad(32, bl->cl);
-            sceGuTexImage(0, bl->tw, bl->th, bl->stride, bl->t8);
+            sceGuTexImage(0, bl->tw, 512, bl->stride, bl->t8);
             sceGuTexFlush();
             sceGuTexSync();
             bb = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
