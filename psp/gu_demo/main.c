@@ -743,7 +743,8 @@ static void btl_known_rebuild(void) {
 }
 
 
-static unsigned char btl_art_mem[1152 * 1024];
+static unsigned char btl_art_mem[1152 * 1024]
+    __attribute__((aligned(16)));
 static unsigned char *btl_art_t8[BT_MAX_FOES];
 static unsigned int *btl_art_cl[BT_MAX_FOES];
 static int btl_art_tw[BT_MAX_FOES], btl_art_th[BT_MAX_FOES];
@@ -824,11 +825,14 @@ static void btl_art_slot(int m) {
     }
     csz = (unsigned)sceIoLseek(f2, 0, PSP_SEEK_END);
     sceIoLseek(f2, 0, PSP_SEEK_SET);
-    if (tsz == 0 || tsz > btl_art_left || csz != 1024 ||
-        1024 > btl_art_left - tsz) {
-        sceIoClose(f1);
-        sceIoClose(f2);
-        return;
+    {
+        unsigned need = (tsz + 1024 + 15u) & ~15u;
+        if (tsz == 0 || csz != 1024 || need > btl_art_left ||
+            need < tsz + 1024) {
+            sceIoClose(f1);
+            sceIoClose(f2);
+            return;
+        }
     }
     if (sceIoRead(f1, btl_art_end, tsz) != (int)tsz) {
         sceIoClose(f1);
@@ -849,8 +853,11 @@ static void btl_art_slot(int m) {
     btl_art_stride[m] = FOE_DB[r].stride;
     btl_art_w[m] = FOE_DB[r].w;
     btl_art_h[m] = FOE_DB[r].h;
-    btl_art_end += tsz + 1024;
-    btl_art_left -= tsz + 1024;
+    {
+        unsigned need = (tsz + 1024 + 15u) & ~15u;
+        btl_art_end += need;
+        btl_art_left -= need;
+    }
     sceKernelDcacheWritebackInvalidateRange(btl_art_t8[m],
                                            tsz + 1024);
 }
