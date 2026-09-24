@@ -1230,7 +1230,21 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     sceGuAlphaFunc(GU_GREATER, 0, 0xff);
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    for (int i = 0; i < nfoes; i++) {
+    /* OG depth: foes paint back to front by screen feet (OctoBattle
+       battleFieldDepthCompare: z, then y). Stable so ties keep troop
+       order. nfoes never exceeds 8 (Bt layout). */
+    int o[8];
+    for (int i = 0; i < nfoes; i++) o[i] = i;
+    for (int i = 1; i < nfoes; i++) {
+        int t = o[i], j = i - 1;
+        while (j >= 0 && foes[o[j]].y > foes[t].y) {
+            o[j + 1] = o[j];
+            j--;
+        }
+        o[j + 1] = t;
+    }
+    for (int k = 0; k < nfoes; k++) {
+        int i = o[k];
         int col = collapse ? collapse[i] : 0;
         if ((!foes[i].alive && col <= 0) || !foes[i].t8 || !foes[i].clut)
             continue;
