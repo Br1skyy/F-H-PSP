@@ -24,8 +24,21 @@ typedef struct {
     int tile_x, tile_y;
     int char_index, pattern, dir_mv;
     int prio;
-    int sheet;
 } NpcSprite;
+
+typedef struct {
+    int tx, ty, r;
+    unsigned int color;
+    float brightness;
+    int flicker, id;
+} MapLight;
+
+typedef struct {
+    float x, y, r, r1;
+    unsigned int color;
+    float brightness;
+    int flicker;
+} FhLight;
 
 extern const SheetDef SHEETS[9];
 extern unsigned char *sheet_px[9];
@@ -40,8 +53,9 @@ void render_frame(int cam_x, int cam_y,
                   const Player *player, int current_char,
                   unsigned char *char_sprites[4],
                   unsigned int *char_cluts[4],
-                  const uint8_t *higher, int higher_len, int frames,
-                  const NpcSprite *npcs, int n_npcs, int torch_on);
+                   const uint8_t *higher, int higher_len, int frames,
+                   const NpcSprite *npcs, int n_npcs,
+                   const FhLight *lights, int nlights);
 
 
 void render_map_layers(int cam_x, int cam_y, const uint16_t *map_layers, int map_w, int map_h,

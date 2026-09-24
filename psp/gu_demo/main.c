@@ -19,6 +19,7 @@
 #include "event_demo.h"
 #include "battle_db.h"
 #include "troop1.h"
+#include "map030_lights.h"
 #include "troop44.h"
 #include "itemce.h"
 
@@ -28,6 +29,8 @@ PSP_HEAP_SIZE_KB(1024);
 
 
 static FhInterp mit;
+static unsigned char light_st[1024];
+static int map_plug_i;
 static int msg_mode = 0, msg_ended = 0, msg_cursor = 0;
 static const FhCmd *msg_list = NULL;
 static int msg_len = 0;
@@ -71,6 +74,7 @@ static void msg_open(const FhCmd *list, int len, const char *title) {
     msg_ended = 0;
     msg_cursor = 0;
     page_wait = 0;
+    map_plug_i = 0;
 }
 
 
@@ -1298,6 +1302,54 @@ static uint8_t npc_solid[MAP_W * MAP_H];
 static Player player;
 static int current_character = 0;
 
+
+static void map_lights_drain(void) {
+    while (map_plug_i < mit.plug_n) {
+        if (!strcmp(mit.plug[map_plug_i].name, "Light")) {
+            char verb[8];
+            int id = 0;
+            if (sscanf(mit.plug[map_plug_i].args, "%7s %d", verb,
+                       &id) == 2 &&
+                id >= 0 && id < 1024) {
+                if (!strcmp(verb, "on"))
+                    light_st[id] = 1;
+                else if (!strcmp(verb, "off"))
+                    light_st[id] = 0;
+            }
+        }
+        map_plug_i++;
+    }
+}
+
+
+static int build_lights(FhLight *out, int cap, int cam_x, int cam_y) {
+    int n = 0;
+    if (n < cap) {
+        out[n].x = (float)(player.x - cam_x) + 12.0f;
+        out[n].y = (float)(player.y - cam_y) - 8.0f;
+        out[n].r = 150.0f;
+        out[n].r1 = 10.0f;
+        out[n].color = 0xffffff;
+        out[n].brightness = 0.0f;
+        out[n].flicker = 0;
+        n++;
+    }
+    for (int i = 0; i < MAP030_NLIGHTS && n < cap; i++) {
+        int id = MAP030_LIGHTS[i].id;
+        if (id != 0 && (id < 0 || id >= 1024 || !light_st[id]))
+            continue;
+        out[n].x = (float)(MAP030_LIGHTS[i].tx * 24 - cam_x) + 12.0f;
+        out[n].y = (float)(MAP030_LIGHTS[i].ty * 24 - cam_y) + 12.0f;
+        out[n].r = (float)MAP030_LIGHTS[i].r * 0.5f;
+        out[n].r1 = 0.0f;
+        out[n].color = MAP030_LIGHTS[i].color;
+        out[n].brightness = MAP030_LIGHTS[i].brightness;
+        out[n].flicker = MAP030_LIGHTS[i].flicker;
+        n++;
+    }
+    return n;
+}
+
 typedef struct {
     const char *name;
     unsigned char *sprite_data;
@@ -1571,7 +1623,6 @@ static void load_map030(void) {
         npc_draw[i].pattern = baked[i].pattern;
         npc_draw[i].dir_mv = baked[i].dir_mv;
         npc_draw[i].prio = baked[i].prio;
-        npc_draw[i].sheet = baked[i].sheet;
     }
 
 
@@ -1853,10 +1904,13 @@ int main(int argc, char *argv[]) {
             }
 
 
+            map_lights_drain();
+            FhLight fhl_msg[24];
+            int nfhl_msg = build_lights(fhl_msg, 24, cam_x, cam_y);
             render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
                         &player, current_character, char_sprites, char_cluts,
                         map_higher, sizeof(map_higher), total_frames,
-                        npc_draw, 15, torch_lit);
+                        npc_draw, 15, fhl_msg, nfhl_msg);
             sceGuStart(GU_DIRECT, gu_list);
             render_message_window(&mit, msg_ended, msg_cursor, page_wait);
             sceGuFinish();
@@ -2459,10 +2513,13 @@ int main(int argc, char *argv[]) {
         cam_y = cam_y + (target_y - cam_y) / 2;
 
 
+        map_lights_drain();
+        FhLight fhl[24];
+        int nfhl = build_lights(fhl, 24, cam_x, cam_y);
         render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W, MAP_H,
                     &player, current_character, char_sprites, char_cluts,
                     map_higher, sizeof(map_higher), total_frames,
-                    npc_draw, 15, torch_lit);
+                    npc_draw, 15, fhl, nfhl);
 
 
         if (frames == 0 || frames - last_debug_update >= 30) {

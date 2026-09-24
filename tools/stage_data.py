@@ -127,7 +127,7 @@ def needed_data():
     return sorted(names)
 
 
-def run_emitters(game):
+def run_emitters(game, map_name):
     jobs = [
         ['tools/bake_battle_db.py', '--out', 'psp/gu_demo/battle_db.h'],
         ['tools/emit_troop_h.py', str(game), '--troop', '1', '--out',
@@ -143,6 +143,8 @@ def run_emitters(game):
          'psp/gu_demo/anim_data.h'],
         ['tools/emit_event_h.py', str(game), '--out',
          'psp/gu_demo/event_demo.h'],
+        ['tools/emit_lights_h.py', str(game), '--map', map_name, '--out',
+         'psp/gu_demo/map030_lights.h'],
         ['tools/emit_interp_test.py', str(game), '--out', 'tests'],
     ]
     for cmd in jobs:
@@ -204,7 +206,7 @@ def main() -> None:
     if r.returncode != 0:
         sys.exit('pad_pow2.py failed')
     run_bakers(game, args.map, data)
-    run_emitters(game)
+    run_emitters(game, args.map)
 
     missing = []
     for name in needed_data():

@@ -53,3 +53,4 @@ psp/gu_demo/itemce.h
 psp/gu_demo/anim_data.h
 psp/gu_demo/event_demo.h
 tests/test_vec.h
+psp/gu_demo/map030_lights.h

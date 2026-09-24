@@ -52,7 +52,9 @@ unsigned int sheet_cl[9][256] __attribute__((aligned(16)));
 
 static unsigned char light_px[LIGHT_TEX * LIGHT_TEX];
 static unsigned int light_cl[256] __attribute__((aligned(16)));
-static unsigned int light_cl_sub[256] __attribute__((aligned(16)));
+static unsigned char light_mt8[128 * 128];
+static unsigned int light_cl_mul[256] __attribute__((aligned(16)));
+static unsigned int lrs = 1;
 
 static void light_bake(void) {
 
@@ -73,7 +75,7 @@ static void light_bake(void) {
     for (int i = 0; i < 256; i++)
         light_cl[i] = ((unsigned int)i << 24);
     for (int i = 0; i < 256; i++)
-        light_cl_sub[i] = (((unsigned int)(255 - i)) << 24) | 0x00ffffff;
+        light_cl_mul[i] = ((unsigned int)(255 - i) << 24);
 
     int dst = 0;
     for (int by = 0; by < LIGHT_TEX; by += 8) {
@@ -316,57 +318,100 @@ static void light_mask_blt(float px, float py, float r) {
 }
 
 
-static void light_add_blt(float lx, float ly, float r, unsigned int tint) {
-    float k = ((float)LIGHT_TEX / 2.0f) / r;
-
+static void render_light_pass(const FhLight *ls, int n) {
+    unsigned char *m = light_mt8;
+    for (int i = 0; i < 128 * 128; i++)
+        m[i] = 0;
+    for (int li = 0; li < n; li++) {
+        float cx = ls[li].x * 0.25f;
+        float cy = ls[li].y * 0.25f;
+        float rr = ls[li].r * 0.25f;
+        float r1 = ls[li].r1 * 0.25f;
+        float cr = (float)((ls[li].color >> 16) & 0xff);
+        float cg = (float)((ls[li].color >> 8) & 0xff);
+        float cb = (float)(ls[li].color & 0xff);
+        float bb = ls[li].brightness;
+        if (ls[li].flicker) {
+            lrs = lrs * 1664525u + 1013904223u;
+            if ((lrs >> 8) % 8 == 0) {
+                lrs = lrs * 1664525u + 1013904223u;
+                rr -= (float)(1 + (lrs >> 8) % 7);
+                lrs = lrs * 1664525u + 1013904223u;
+                cg += (float)((int)((lrs >> 8) % 10) - 5);
+                if (cg < 0.0f) cg = 0.0f;
+                if (cg > 255.0f) cg = 255.0f;
+            }
+        }
+        if (rr <= 0.0f)
+            continue;
+        int x0 = (int)(cx - rr), x1 = (int)(cx + rr);
+        int y0 = (int)(cy - rr), y1 = (int)(cy + rr);
+        if (x0 < 0) x0 = 0;
+        if (y0 < 0) y0 = 0;
+        if (x1 > 120) x1 = 120;
+        if (y1 > 68) y1 = 68;
+        for (int y = y0; y < y1; y++) {
+            for (int x = x0; x < x1; x++) {
+                float dx = (float)x + 0.5f - cx;
+                float dy = (float)y + 0.5f - cy;
+                float d = sqrtf(dx * dx + dy * dy);
+                float f;
+                float wr, wg, wb;
+                if (d <= r1) {
+                    f = 0.0f;
+                    wr = cr;
+                    wg = cg;
+                    wb = cb;
+                } else {
+                    f = (d - r1) / (rr - r1);
+                    if (bb <= 0.0f || f >= 1.0f) {
+                        wr = cr * (1.0f - f);
+                        wg = cg * (1.0f - f);
+                        wb = cb * (1.0f - f);
+                    } else if (f <= bb) {
+                        float k = f / bb;
+                        wr = 1.0f + (cr - 1.0f) * k;
+                        wg = 1.0f + (cg - 1.0f) * k;
+                        wb = 1.0f + (cb - 1.0f) * k;
+                    } else {
+                        float k = (f - bb) / (1.0f - bb);
+                        wr = cr * (1.0f - k);
+                        wg = cg * (1.0f - k);
+                        wb = cb * (1.0f - k);
+                    }
+                }
+                if (f >= 1.0f)
+                    continue;
+                int lum = (int)wr;
+                if ((int)wg > lum) lum = (int)wg;
+                if ((int)wb > lum) lum = (int)wb;
+                if (lum < 0) lum = 0;
+                if (lum > 255) lum = 255;
+                int at = (int)m[y * 128 + x] + lum;
+                m[y * 128 + x] = (unsigned char)(at > 255 ? 255 : at);
+            }
+        }
+    }
     sceGuEnable(GU_TEXTURE_2D);
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_LINEAR, GU_LINEAR);
     sceGuTexWrap(GU_CLAMP, GU_CLAMP);
     sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
-    sceGuClutLoad(32, light_cl_sub);
-    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
-    sceGuTexImage(0, LIGHT_TEX, LIGHT_TEX, LIGHT_TEX, light_px);
+    sceGuClutLoad(32, light_cl_mul);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 0);
+    sceGuTexImage(0, 128, 128, 128, light_mt8);
     sceGuTexFlush();
     sceGuTexSync();
     sceGuEnable(GU_BLEND);
-    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0x00ffffff);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-    v[0].u = 0; v[0].v = 0; v[0].color = tint;
-    v[0].x = lx - r; v[0].y = ly - r; v[0].z = 0.0f;
-    v[1].u = (float)LIGHT_TEX; v[1].v = (float)LIGHT_TEX;
-    v[1].color = tint;
-    v[1].x = lx + r; v[1].y = ly + r; v[1].z = 0.0f;
+    v[0].u = 0; v[0].v = 0; v[0].color = 0xffffffff;
+    v[0].x = 0; v[0].y = 0; v[0].z = 0.0f;
+    v[1].u = 120.0f; v[1].v = 68.0f; v[1].color = 0xffffffff;
+    v[1].x = (float)SCR_W; v[1].y = (float)SCR_H; v[1].z = 0.0f;
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);
-    (void)k;
-}
-
-
-static void render_light_pass(const Player *player, int cam_x, int cam_y,
-                              int frames, int torch_on,
-                              const NpcSprite *npcs, int n_npcs) {
-    float px = (float)(player->x - cam_x) + (float)TILE / 2.0f;
-    float py = (float)(player->y - cam_y) - 8.0f;
-    float r = (float)LIGHT_R;
-    if (torch_on)
-        r += (float)(((frames * 13) % 15) - 7);
-    light_mask_blt(px, py, r);
-    if (npcs) {
-        for (int i = 0; i < n_npcs; i++) {
-            if (npcs[i].sheet != 3)
-                continue;
-            float sx = (float)(npcs[i].tile_x * TILE - cam_x) + 12.0f;
-            float sy = (float)(npcs[i].tile_y * TILE - cam_y) + 6.0f;
-            if (sx < -140.0f || sx > (float)(SCR_W + 140) ||
-                sy < -140.0f || sy > (float)(SCR_H + 140))
-                continue;
-            float fr = 110.0f +
-                       (float)(((frames + i * 7) * 13) % 15) - 7.0f;
-            light_add_blt(sx, sy, fr, 0xff2878ff);
-        }
-    }
 }
 
 
@@ -391,7 +436,8 @@ void render_frame(int cam_x, int cam_y,
                   unsigned char *char_sprites[4],
                   unsigned int *char_cluts[4],
                   const uint8_t *higher, int higher_len, int frames,
-                  const NpcSprite *npcs, int n_npcs, int torch_on) {
+                  const NpcSprite *npcs, int n_npcs,
+                  const FhLight *lights, int nlights) {
     sceGuStart(GU_DIRECT, gu_list_ptr);
     sceGuClearColor(0xff000000);
     sceGuClear(GU_COLOR_BUFFER_BIT);
@@ -456,8 +502,7 @@ void render_frame(int cam_x, int cam_y,
                       higher, higher_len, 1);
 
 
-    render_light_pass(player, cam_x, cam_y, frames, torch_on, npcs,
-                      n_npcs);
+    render_light_pass(lights, nlights);
 
     sceGuFinish();
     sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
