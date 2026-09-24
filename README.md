@@ -42,8 +42,8 @@ What is missing:
 
 ## Build
 
-You need the PSP toolchain in `~/pspdev`, Python 3 with Pillow, and your
-game files at `Fear & Hunger_WIN/www` (both gitignored, never committed).
+You need the PSP toolchain in , Python 3 with Pillow, and your
+game files at.
 Full steps, including data staging and the PC test commands, are in
 `docs/pipeline.md`. The short version:
 
@@ -54,7 +54,6 @@ cd psp/gu_demo && make && cd ../.. && rm -f FHDEMO.zip && \
   (cd psp/gu_demo && zip ../../FHDEMO.zip EBOOT.PBP)
 ```
 
-Copy `EBOOT.PBP` to `PSP/GAME/<NAME>/` on your PSP. Folder name is free.
 
 ## Project Structure
 
