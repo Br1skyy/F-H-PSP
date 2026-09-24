@@ -18,10 +18,8 @@
 #include "../../runtime/battle.h"
 #include "event_demo.h"
 #include "battle_db.h"
-#include "troop1.h"
+#include "../../runtime/battle_blob.h"
 #include "map030_lights.h"
-#include "troop44.h"
-#include "itemce.h"
 
 PSP_MODULE_INFO("F&H port", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -131,6 +129,15 @@ static int btl_log_t[2];
 
 static char btl_actor_name[32];
 
+static char dbg_err[96];
+static int dbg_err_t;
+
+
+static void dbg_note(const char *s) {
+    snprintf(dbg_err, sizeof(dbg_err), "%s", s ? s : "");
+    dbg_err_t = 180;
+}
+
 static int btl_flash[8], btl_collapse[8];
 
 static void btl_log_push(const char *s) {
@@ -205,12 +212,12 @@ static void btl_resolve_skills(void) {
 }
 
 static void btl_foe_xy(int i, float *x, float *y);
-static void btl_foe_art(int enemy_id, unsigned char **t8, unsigned int **cl);
+static void btl_art_slot(int m);
 
 
 static FhInterp tit;
 static int btl_ev_active;
-static int btl_ev_flags[16];
+static int btl_ev_flags[24];
 static int btl_turn_count;
 static int btl_ev_cursor, btl_ev_ended, btl_ev_pagewait;
 static int btl_plug_i;
@@ -229,9 +236,11 @@ static const int *btl_ce_ids;
 static const FhCmd **btl_ce_lists;
 static const int *btl_ce_lens;
 static int btl_ce_n;
-typedef struct { int id, cls, eq[8]; } BtlActorSeed;
-
-static const BtlActorSeed *btl_seeds;
+static const TblobActor *btl_seeds;
+static int btl_mrg_ids[64];
+static const FhCmd *btl_mrg_lists[64];
+static int btl_mrg_lens[64];
+static int btl_mrg_n;
 
 
 static void btl_check_end(void) {
@@ -398,6 +407,7 @@ static void btl_ev_sync(void) {
                 for (int e = 0; e < BT_ERATE_N; e++)
                     f->erate[e] = FOE_DB[r].er[e];
                 f->atk_elem = FOE_DB[r].elem;
+                btl_art_slot(i);
             }
             tit.etransform[i] = 0;
         }
@@ -495,27 +505,29 @@ static int btl_ev_scan(int isTurnEnd) {
 
 
 static void btl_ce_begin(int ceid) {
-    int k = -1;
-    for (int i = 0; i < CEB_N; i++) {
-        if (CEB_IDS[i] == ceid) {
-            k = i;
+    const FhCmd *list = 0;
+    int len = 0;
+    for (int i = 0; i < btl_ce_n; i++) {
+        if (btl_ce_ids[i] == ceid) {
+            list = btl_ce_lists[i];
+            len = btl_ce_lens[i];
             break;
         }
     }
-    if (k < 0) return;
+    if (!list || len <= 0) return;
     {
         char tb[48];
         snprintf(tb, sizeof(tb), "ce%d turn=%d phase=%d\n", ceid,
                  btl_turn_count, btl_phase);
         btl_trace(tb);
     }
-    fh_interp_init(&tit, CEB_LIST[k], CEB_LEN[k]);
+    fh_interp_init(&tit, list, len);
     tit.rng = btl_rng ? btl_rng : 1u;
     btl_ev_seed();
-    tit.ce_ids = CEB_IDS;
-    tit.ce_lists = CEB_LIST;
-    tit.ce_lens = CEB_LEN;
-    tit.ce_n = CEB_N;
+    tit.ce_ids = btl_ce_ids;
+    tit.ce_lists = btl_ce_lists;
+    tit.ce_lens = btl_ce_lens;
+    tit.ce_n = btl_ce_n;
     msg_content_changed();
     btl_ev_active = 1;
     btl_ev_ended = 0;
@@ -730,6 +742,132 @@ static void btl_known_rebuild(void) {
     }
 }
 
+
+static unsigned char btl_art_mem[1152 * 1024];
+static unsigned char *btl_art_t8[BT_MAX_FOES];
+static unsigned int *btl_art_cl[BT_MAX_FOES];
+static int btl_art_tw[BT_MAX_FOES], btl_art_th[BT_MAX_FOES];
+static int btl_art_stride[BT_MAX_FOES], btl_art_w[BT_MAX_FOES],
+    btl_art_h[BT_MAX_FOES];
+static unsigned char *btl_art_end;
+static unsigned btl_art_left;
+
+
+static void btl_build_merged(void) {
+    int seeds[128];
+    int nseeds = 0;
+    int i, k;
+    btl_item_rebuild();
+    for (i = 0; i < btl_nknown && nseeds < 128; i++) {
+        for (k = 0; SKILL_FX[k].id && nseeds < 128; k++) {
+            if (SKILL_FX[k].id == btl_known[i] && SKILL_FX[k].code == 44)
+                seeds[nseeds++] = SKILL_FX[k].data;
+        }
+    }
+    for (i = 0; i < btl_nitems && nseeds < 128; i++) {
+        for (k = 0; ITEM_FX[k].id && nseeds < 128; k++) {
+            if (ITEM_FX[k].id == btl_item_ids[i] && ITEM_FX[k].code == 44)
+                seeds[nseeds++] = ITEM_FX[k].data;
+        }
+    }
+    skill_union_build(seeds, nseeds);
+    btl_mrg_n = 0;
+    for (i = 0; i < tblob_nces() && btl_mrg_n < 64; i++) {
+        btl_mrg_ids[btl_mrg_n] = tblob_ce_id(i);
+        btl_mrg_lists[btl_mrg_n] = tblob_ce_list(i);
+        btl_mrg_lens[btl_mrg_n] = tblob_ce_len(i);
+        btl_mrg_n++;
+    }
+    for (i = 0; i < skill_union_count() && btl_mrg_n < 64; i++) {
+        int dup = 0, j;
+        for (j = 0; j < btl_mrg_n; j++) {
+            if (btl_mrg_ids[j] == skill_union_id(i)) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup)
+            continue;
+        btl_mrg_ids[btl_mrg_n] = skill_union_id(i);
+        btl_mrg_lists[btl_mrg_n] = skill_union_list(i);
+        btl_mrg_lens[btl_mrg_n] = skill_union_len(i);
+        btl_mrg_n++;
+    }
+    btl_ce_ids = btl_mrg_ids;
+    btl_ce_lists = btl_mrg_lists;
+    btl_ce_lens = btl_mrg_lens;
+    btl_ce_n = btl_mrg_n;
+}
+
+
+static void btl_art_slot(int m) {
+    int r = 0;
+    char pb[96], cb[96];
+    SceUID f1, f2;
+    unsigned tsz, csz;
+    if (m < 0 || m >= BT_MAX_FOES || m >= btl.n_foes)
+        return;
+    while (FOE_DB[r].id && FOE_DB[r].id != btl.f[1 + m].ref) r++;
+    if (!FOE_DB[r].id || !FOE_DB[r].art || !FOE_DB[r].art[0])
+        return;
+    snprintf(pb, sizeof(pb), "data/enemies/%s.t8", FOE_DB[r].art);
+    snprintf(cb, sizeof(cb), "data/enemies/%s.clut", FOE_DB[r].art);
+    f1 = sceIoOpen(pb, PSP_O_RDONLY, 0777);
+    if (f1 < 0)
+        return;
+    tsz = (unsigned)sceIoLseek(f1, 0, PSP_SEEK_END);
+    sceIoLseek(f1, 0, PSP_SEEK_SET);
+    f2 = sceIoOpen(cb, PSP_O_RDONLY, 0777);
+    if (f2 < 0) {
+        sceIoClose(f1);
+        return;
+    }
+    csz = (unsigned)sceIoLseek(f2, 0, PSP_SEEK_END);
+    sceIoLseek(f2, 0, PSP_SEEK_SET);
+    if (tsz == 0 || tsz > btl_art_left || csz != 1024 ||
+        1024 > btl_art_left - tsz) {
+        sceIoClose(f1);
+        sceIoClose(f2);
+        return;
+    }
+    if (sceIoRead(f1, btl_art_end, tsz) != (int)tsz) {
+        sceIoClose(f1);
+        sceIoClose(f2);
+        return;
+    }
+    if (sceIoRead(f2, btl_art_end + tsz, 1024) != 1024) {
+        sceIoClose(f1);
+        sceIoClose(f2);
+        return;
+    }
+    sceIoClose(f1);
+    sceIoClose(f2);
+    btl_art_t8[m] = btl_art_end;
+    btl_art_cl[m] = (unsigned int *)(btl_art_end + tsz);
+    btl_art_tw[m] = FOE_DB[r].tw;
+    btl_art_th[m] = FOE_DB[r].th;
+    btl_art_stride[m] = FOE_DB[r].stride;
+    btl_art_w[m] = FOE_DB[r].w;
+    btl_art_h[m] = FOE_DB[r].h;
+    btl_art_end += tsz + 1024;
+    btl_art_left -= tsz + 1024;
+}
+
+
+static void btl_art_load(void) {
+    int i;
+    btl_art_end = btl_art_mem;
+    btl_art_left = sizeof(btl_art_mem);
+    for (i = 0; i < BT_MAX_FOES; i++) {
+        btl_art_t8[i] = 0;
+        btl_art_cl[i] = 0;
+        btl_art_tw[i] = btl_art_th[i] = btl_art_stride[i] = 0;
+        btl_art_w[i] = btl_art_h[i] = 0;
+    }
+    for (i = 0; i < btl.n_foes && i < BT_MAX_FOES; i++)
+        btl_art_slot(i);
+}
+
 static void btl_start(u64 tick, int char_idx, int troop_id) {
 
     static const int char_actor[4] = {1, 5, 4, 3};
@@ -741,28 +879,17 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
 
 
     btl_troop_id = troop_id;
-    if (troop_id == 44) {
-        btl_cond = TROOP44_COND;
-        btl_lists = TROOP44_LIST;
-        btl_lens = TROOP44_LEN;
-        btl_npages = TROOP44_NPAGES;
-        btl_ce_ids = TROOP44_CE_IDS;
-        btl_ce_lists = TROOP44_CE_LIST;
-        btl_ce_lens = TROOP44_CE_LEN;
-        btl_ce_n = TROOP44_CE_N;
-        btl_seeds = (const BtlActorSeed *)TROOP44_ACTORS;
-    } else {
-        btl_troop_id = 1;
-        btl_cond = TROOP1_COND;
-        btl_lists = TROOP1_LIST;
-        btl_lens = TROOP1_LEN;
-        btl_npages = TROOP1_NPAGES;
-        btl_ce_ids = TROOP1_CE_IDS;
-        btl_ce_lists = TROOP1_CE_LIST;
-        btl_ce_lens = TROOP1_CE_LEN;
-        btl_ce_n = TROOP1_CE_N;
-        btl_seeds = (const BtlActorSeed *)TROOP1_ACTORS;
+    tblob_open("data/troops.blob");
+    skillce_open("data/skillce.blob");
+    if (tblob_load(troop_id) != 0) {
+        dbg_note("no battle data: install data/ next to EBOOT");
+        return;
     }
+    btl_cond = tblob_conds();
+    btl_lists = tblob_lists();
+    btl_lens = tblob_lens();
+    btl_npages = tblob_npages();
+    btl_seeds = tblob_actors();
     memset(&btl, 0, sizeof(btl));
     BtF *a = &btl.f[0];
     a->is_foe = 0;
@@ -846,7 +973,7 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
 
 
     btl_ev_active = 0;
-    for (int i = 0; i < 16; i++) btl_ev_flags[i] = 0;
+    for (int i = 0; i < 24; i++) btl_ev_flags[i] = 0;
     btl_turn_count = 0;
     for (int i = 0; i < 8; i++) btl_forced[i] = -1;
     for (int i = 0; i < 8; i++) btl_foe_skill[i] = -1;
@@ -1380,19 +1507,6 @@ extern unsigned char d_tmerc_start[], d_tmercc_start[];
 extern unsigned char d_toutl_start[], d_toutlc_start[];
 extern unsigned char d_tpriest_start[], d_tpriestc_start[];
 extern unsigned char d_tknight_start[], d_tknightc_start[];
-extern unsigned char d_e0_start[], d_e0c_start[];
-extern unsigned char d_e1_start[], d_e1c_start[];
-extern unsigned char d_e2_start[], d_e2c_start[];
-extern unsigned char d_e3_start[], d_e3c_start[];
-extern unsigned char d_e4_start[], d_e4c_start[];
-extern unsigned char d_e5_start[], d_e5c_start[];
-extern unsigned char d_e6_start[], d_e6c_start[];
-extern unsigned char d_b0_start[], d_b0c_start[];
-extern unsigned char d_b1_start[], d_b1c_start[];
-extern unsigned char d_b2_start[], d_b2c_start[];
-extern unsigned char d_b3_start[], d_b3c_start[];
-extern unsigned char d_b4_start[], d_b4c_start[];
-extern unsigned char d_b5_start[], d_b5c_start[];
 extern unsigned char d_an0_start[], d_an0c_start[];
 extern unsigned char d_an1_start[], d_an1c_start[];
 extern unsigned char d_an2_start[], d_an2c_start[];
@@ -1413,46 +1527,10 @@ extern unsigned char d_bv3a_start[], d_bv3ac_start[];
 extern unsigned char d_bv3b_start[], d_bv3bc_start[];
 
 
-static unsigned char *foe_t8[7];
-static unsigned int *foe_cl[7];
-
-
-static unsigned char *bal_t8[6];
-static unsigned int *bal_cl[6];
-
-
 unsigned char *anim_t8[8];
 unsigned int anim_cl[8][256] __attribute__((aligned(16)));
 unsigned char *icon_t8;
 unsigned int icon_cl[256] __attribute__((aligned(16)));
-
-
-static void btl_foe_art(int enemy_id, unsigned char **t8, unsigned int **cl) {
-    if (btl_troop_id == 44) {
-        static const int ids[6] = {112, 113, 114, 115, 116, 117};
-        for (int s = 0; s < 6; s++) {
-            if (enemy_id == ids[s]) {
-                *t8 = bal_t8[s];
-                *cl = bal_cl[s];
-                return;
-            }
-        }
-        if (enemy_id == 502) { *t8 = bal_t8[0]; *cl = bal_cl[0]; return; }
-        if (enemy_id == 503) { *t8 = bal_t8[2]; *cl = bal_cl[2]; return; }
-    } else {
-        static const int ids[7] = {1, 2, 3, 4, 5, 6, 7};
-        static const int alt[7] = {486, 0, 484, 485, 0, 0, 483};
-        for (int s = 0; s < 7; s++) {
-            if (enemy_id == ids[s] || (alt[s] && enemy_id == alt[s])) {
-                *t8 = foe_t8[s];
-                *cl = foe_cl[s];
-                return;
-            }
-        }
-    }
-    *t8 = NULL;
-    *cl = NULL;
-}
 
 
 static unsigned char *bv_t8a[4], *bv_t8b[4];
@@ -1519,22 +1597,6 @@ static void load_map030(void) {
     characters[2].torch_clut = d_tpriestc_start;
     characters[3].torch_data = d_tknight_start;
     characters[3].torch_clut = d_tknightc_start;
-
-
-    foe_t8[0] = d_e0_start; foe_cl[0] = (unsigned int *)d_e0c_start;
-    foe_t8[1] = d_e1_start; foe_cl[1] = (unsigned int *)d_e1c_start;
-    foe_t8[2] = d_e2_start; foe_cl[2] = (unsigned int *)d_e2c_start;
-    foe_t8[3] = d_e3_start; foe_cl[3] = (unsigned int *)d_e3c_start;
-    foe_t8[4] = d_e4_start; foe_cl[4] = (unsigned int *)d_e4c_start;
-    foe_t8[5] = d_e5_start; foe_cl[5] = (unsigned int *)d_e5c_start;
-    foe_t8[6] = d_e6_start; foe_cl[6] = (unsigned int *)d_e6c_start;
-
-    bal_t8[0] = d_b0_start; bal_cl[0] = (unsigned int *)d_b0c_start;
-    bal_t8[1] = d_b1_start; bal_cl[1] = (unsigned int *)d_b1c_start;
-    bal_t8[2] = d_b2_start; bal_cl[2] = (unsigned int *)d_b2c_start;
-    bal_t8[3] = d_b3_start; bal_cl[3] = (unsigned int *)d_b3c_start;
-    bal_t8[4] = d_b4_start; bal_cl[4] = (unsigned int *)d_b4c_start;
-    bal_t8[5] = d_b5_start; bal_cl[5] = (unsigned int *)d_b5c_start;
 
 
     anim_t8[0] = d_an0_start;
@@ -1695,6 +1757,45 @@ static void diag_color(unsigned int c, const char *label, void *fbp0, void *fbp1
 }
 #endif
 
+static int dbg_open = 0, dbg_sel = 0, dbg_top = 0, dbg_count = 0;
+static char dbg_text[2048];
+
+
+static void dbg_try_open(void) {
+    if (dbg_count <= 0) {
+        if (tblob_open("data/troops.blob") != 0) {
+            dbg_note("no data/troops.blob next to EBOOT");
+            return;
+        }
+        dbg_count = tblob_count();
+    }
+    if (dbg_count > 0) {
+        dbg_open = 1;
+        dbg_sel = 0;
+        dbg_top = 0;
+    } else {
+        dbg_note("troops.blob holds no troops");
+    }
+}
+
+
+static void dbg_draw(void) {
+    int n = 0, rows = 24, i;
+    n += snprintf(dbg_text + n, sizeof(dbg_text) - n,
+                  "BATTLE DEBUG (%d troops)\n"
+                  "UP/DN move CIRCLE fight CROSS close\n", dbg_count);
+    if (dbg_sel < dbg_top) dbg_top = dbg_sel;
+    if (dbg_sel >= dbg_top + rows) dbg_top = dbg_sel - rows + 1;
+    for (i = 0; i < rows && dbg_top + i < dbg_count; i++) {
+        int idx = dbg_top + i;
+        n += snprintf(dbg_text + n, sizeof(dbg_text) - n, "%c %3d %s\n",
+                      idx == dbg_sel ? '>' : ' ', tblob_id(idx),
+                      tblob_name(idx));
+    }
+    render_debug_text(dbg_text);
+}
+
+
 int main(int argc, char *argv[]) {
     (void)argc; (void)argv;
 
@@ -1790,7 +1891,7 @@ int main(int argc, char *argv[]) {
         if (!(input.buttons & PSP_CTRL_CIRCLE)) talk_lock = 0;
         if (talk_cool > 0) talk_cool--;
         if (input_pressed(&input, PSP_CTRL_CIRCLE) && !player.moving &&
-            talk_cool == 0 && !talk_lock && !battle_mode) {
+            talk_cool == 0 && !talk_lock && !battle_mode && !dbg_open) {
             int ptx = player.x / TILE, pty = player.y / TILE;
             int dx = 0, dy = 0;
             switch (player.dir) {
@@ -1898,6 +1999,17 @@ int main(int argc, char *argv[]) {
             } else if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                 msg_mode = 0;
                 talk_cool = 45;
+                if (mit.battle.pending == 1) {
+                    int tr = mit.battle.troop;
+                    mit.battle.pending = 0;
+                    if (tr > 0) {
+                        u64 btick;
+                        sceRtcGetCurrentTick(&btick);
+                        snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
+                                 characters[current_character].name);
+                        btl_start(btick, current_character, tr);
+                    }
+                }
 
                 talk_lock = 1;
                 continue;
@@ -1933,12 +2045,37 @@ int main(int argc, char *argv[]) {
 
 
         if (input_pressed(&input, PSP_CTRL_SQUARE) && !player.moving &&
-            !battle_mode) {
+            !battle_mode && !dbg_open) {
             u64 btick;
             sceRtcGetCurrentTick(&btick);
             snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                      characters[current_character].name);
             btl_start(btick, current_character, 1);
+        }
+
+
+        if (!battle_mode && !msg_mode) {
+            if (!dbg_open) {
+                if (input_pressed(&input, PSP_CTRL_SELECT)) dbg_try_open();
+            } else {
+                if (input_pressed(&input, PSP_CTRL_UP) && dbg_sel > 0)
+                    dbg_sel--;
+                if (input_pressed(&input, PSP_CTRL_DOWN) &&
+                    dbg_sel < dbg_count - 1)
+                    dbg_sel++;
+                if (input_pressed(&input, PSP_CTRL_CROSS)) dbg_open = 0;
+                if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                    int tr = tblob_id(dbg_sel);
+                    dbg_open = 0;
+                    if (tr > 0) {
+                        u64 btick;
+                        sceRtcGetCurrentTick(&btick);
+                        snprintf(btl_actor_name, sizeof(btl_actor_name),
+                                 "%s", characters[current_character].name);
+                        btl_start(btick, current_character, tr);
+                    }
+                }
+            }
         }
 
 
@@ -2105,7 +2242,9 @@ int main(int argc, char *argv[]) {
                             btl_tgt++;
                     } else if (btl_cmd == 1) {
 
-                        btl_known_rebuild();
+    btl_known_rebuild();
+    btl_build_merged();
+    btl_art_load();
                         if (btl_nknown > 0) {
                             btl_list_cur = 0;
                             btl_list_top = 0;
@@ -2322,14 +2461,13 @@ int main(int argc, char *argv[]) {
             for (int i = 0; i < btl.n_foes; i++) {
                 float x, y;
                 btl_foe_xy(i, &x, &y);
-                int r = 0;
-                while (FOE_DB[r].id && FOE_DB[r].id != btl.f[1 + i].ref) r++;
-                btl_foe_art(btl.f[1 + i].ref, &draws[i].t8, &draws[i].clut);
-                draws[i].tw = FOE_DB[r].tw;
-                draws[i].th = FOE_DB[r].th;
-                draws[i].stride = FOE_DB[r].stride;
-                draws[i].w = FOE_DB[r].w;
-                draws[i].h = FOE_DB[r].h;
+                draws[i].t8 = btl_art_t8[i];
+                draws[i].clut = btl_art_cl[i];
+                draws[i].tw = btl_art_tw[i];
+                draws[i].th = btl_art_th[i];
+                draws[i].stride = btl_art_stride[i];
+                draws[i].w = btl_art_w[i];
+                draws[i].h = btl_art_h[i];
                 draws[i].x = x;
                 draws[i].y = y;
                 draws[i].alive =
@@ -2465,14 +2603,15 @@ int main(int argc, char *argv[]) {
 
 
         int pre_px = player.x, pre_py = player.y;
-        player_update(&player, input.buttons, (uint16_t*)map_passability,
+        player_update(&player, dbg_open ? 0 : input.buttons,
+                      (uint16_t*)map_passability,
                       MAP_W, MAP_H, npc_solid);
 
 
         if (!player.moving && player.x == pre_px && player.y == pre_py) {
             unsigned int held = input.buttons &
                 (PSP_CTRL_UP | PSP_CTRL_DOWN | PSP_CTRL_LEFT | PSP_CTRL_RIGHT);
-            if (held) {
+            if (held && !dbg_open) {
                 int dx = 0, dy = 0;
                 switch (player.dir) {
                     case 0: dy = 1; break;
@@ -2522,13 +2661,20 @@ int main(int argc, char *argv[]) {
                     npc_draw, 15, fhl, nfhl);
 
 
-        if (frames == 0 || frames - last_debug_update >= 30) {
-            snprintf(debug_text, sizeof(debug_text),
-                     "F&H: %s | L/R:switch | fps:%d",
-                     characters[current_character].name, fps);
-            last_debug_update = frames;
+        if (dbg_open) {
+            dbg_draw();
+        } else if (dbg_err_t > 0) {
+            render_debug_text(dbg_err);
+            dbg_err_t--;
+        } else {
+            if (frames == 0 || frames - last_debug_update >= 30) {
+                snprintf(debug_text, sizeof(debug_text),
+                         "F&H: %s | L/R:switch | fps:%d",
+                         characters[current_character].name, fps);
+                last_debug_update = frames;
+            }
+            render_debug_text(debug_text);
         }
-        render_debug_text(debug_text);
 
         sceDisplayWaitVblankStart();
         fbp0 = sceGuSwapBuffers();

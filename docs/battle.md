@@ -37,3 +37,11 @@ carry over to the map.
 `tests/test_troopflow.c` replays fights on PC (leg kills, destroy
 pages, escape, Talk). Run the suites in `docs/pipeline.md` before
 changing battle code.
+
+## Debug menu
+
+On the map, press Select to open the battle debug list (plain text
+over the map, ugly on purpose). Up/Down moves, Circle starts that
+troop, Cross closes. Player movement and talk are frozen while it
+is open. It needs `data/troops.blob` staged; without it a notice
+is shown instead of opening.

@@ -78,6 +78,23 @@ static int eval_111(const FhInterp *it, const FhCmd *c) {
         if (id < 0 || id >= FH_MAX_SWITCHES) return 0;
         return it->sw[id] == (want == 0);
     }
+    if (c->op == 9 || c->op == 10) {
+        int id = c->p[0], eq = c->p[1];
+        int lim = c->op == 9 ? FH_MAX_WEAPONS : FH_MAX_ARMORS;
+        const int *inv = c->op == 9 ? it->inv_weap : it->inv_arm;
+        if (id < 0 || id >= lim) return 0;
+        if (inv[id] > 0) return 1;
+        if (eq) {
+            for (int i = 0; i < it->party_n; i++) {
+                int a = it->party[i];
+                if (a < 0 || a >= FH_MAX_ACTORS) continue;
+                for (int s = 0; s < 8; s++)
+                    if (it->equip[a][s] == id) return 1;
+            }
+        }
+        return 0;
+    }
+    if (c->op == 13) return 0;
     if (c->op == 1) {
         int id = c->p[0];
         if (id < 0 || id >= FH_MAX_VARS) return 0;
@@ -631,7 +648,8 @@ int fh_interp_step(FhInterp *it) {
 
 
                 if (c->op == 11) { it->unknown++; it->pc = c->jump; break; }
-                if ((c->op > 1 && c->op != 4 && c->op != 5 && c->op != 8)) it->unknown++; else {
+                if ((c->op > 1 && c->op != 4 && c->op != 5 && c->op != 8 &&
+                     c->op != 9 && c->op != 10 && c->op != 13)) it->unknown++; else {
                     int r = eval_111(it, c);
                     if (c->indent < 16) it->branchv[c->indent] = r;
                     it->pc = r ? it->pc + 1 : c->jump;

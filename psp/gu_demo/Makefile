@@ -1,5 +1,5 @@
 TARGET = fh_demo
-OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o \
+OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o battle_blob.o \
        d_a1.o d_b.o d_e.o d_ib.o d_d.o \
        d_a1c.o d_bc.o d_ec.o d_ibc.o d_dc.o \
        d_layers.o d_pass.o d_high.o \
@@ -11,10 +11,7 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o b
        d_win.o d_winc.o d_floor.o d_floorc.o \
        d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
        d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o \
-       d_e0.o d_e0c.o d_e1.o d_e1c.o d_e2.o d_e2c.o d_e3.o d_e3c.o \
-       d_e4.o d_e4c.o d_e5.o d_e5c.o d_e6.o d_e6c.o d_form.o \
-       d_b0.o d_b0c.o d_b1.o d_b1c.o d_b2.o d_b2c.o d_b3.o d_b3c.o \
-       d_b4.o d_b4c.o d_b5.o d_b5c.o \
+       d_form.o \
        d_an0.o d_an0c.o d_an1.o d_an1c.o d_an2.o d_an2c.o d_an3.o d_an3c.o \
        d_an4.o d_an4c.o d_an5.o d_an5c.o \
        d_an6.o d_an6c.o d_an7.o d_an7c.o d_ico.o d_icoc.o \
@@ -44,8 +41,9 @@ include $(PSPSDK)/lib/build.mak
 # homebrew must not carry - PPSSPP tolerates them, real hardware does not.
 LIBS := $(filter-out -lpspnet -lpspnet_apctl,$(LIBS))
 
-# Embedded demo data: single-file EBOOT (no MS file I/O). Regenerate on
-# data change (make clean && make). Full game will stream from MS (§7).
+# Embedded map/char art plus a streamed data/ folder next to the EBOOT
+# (troops.blob, skillce.blob, enemies/). Regenerate on data change
+# (make clean && make).
 d_a1.o: data/map030/Mines_A1.t8
 	bin2o -i data/map030/Mines_A1.t8 d_a1.o d_a1
 d_b.o: data/map030/Mines_B.t8
@@ -172,58 +170,6 @@ d_tknight.o: data/knight_torch.t8
 	bin2o -i data/knight_torch.t8 d_tknight.o d_tknight
 d_tknightc.o: data/knight_torch.clut
 	bin2o -i data/knight_torch.clut d_tknightc.o d_tknightc
-d_e0.o: data/guard1_torso.t8
-	bin2o -i data/guard1_torso.t8 d_e0.o d_e0
-d_e0c.o: data/guard1_torso.clut
-	bin2o -i data/guard1_torso.clut d_e0c.o d_e0c
-d_e1.o: data/guard1_head.t8
-	bin2o -i data/guard1_head.t8 d_e1.o d_e1
-d_e1c.o: data/guard1_head.clut
-	bin2o -i data/guard1_head.clut d_e1c.o d_e1c
-d_e2.o: data/guard1_R_hand.t8
-	bin2o -i data/guard1_R_hand.t8 d_e2.o d_e2
-d_e2c.o: data/guard1_R_hand.clut
-	bin2o -i data/guard1_R_hand.clut d_e2c.o d_e2c
-d_e3.o: data/guard1_L_hand.t8
-	bin2o -i data/guard1_L_hand.t8 d_e3.o d_e3
-d_e3c.o: data/guard1_L_hand.clut
-	bin2o -i data/guard1_L_hand.clut d_e3c.o d_e3c
-d_e4.o: data/guard1_R_leg.t8
-	bin2o -i data/guard1_R_leg.t8 d_e4.o d_e4
-d_e4c.o: data/guard1_R_leg.clut
-	bin2o -i data/guard1_R_leg.clut d_e4c.o d_e4c
-d_e5.o: data/guard1_L_leg.t8
-	bin2o -i data/guard1_L_leg.t8 d_e5.o d_e5
-d_e5c.o: data/guard1_L_leg.clut
-	bin2o -i data/guard1_L_leg.clut d_e5c.o d_e5c
-d_e6.o: data/guard1_stinger.t8
-	bin2o -i data/guard1_stinger.t8 d_e6.o d_e6
-d_e6c.o: data/guard1_stinger.clut
-	bin2o -i data/guard1_stinger.clut d_e6c.o d_e6c
-d_b0.o: data/bal_torso.t8
-	bin2o -i data/bal_torso.t8 d_b0.o d_b0
-d_b0c.o: data/bal_torso.clut
-	bin2o -i data/bal_torso.clut d_b0c.o d_b0c
-d_b1.o: data/bal_head.t8
-	bin2o -i data/bal_head.t8 d_b1.o d_b1
-d_b1c.o: data/bal_head.clut
-	bin2o -i data/bal_head.clut d_b1c.o d_b1c
-d_b2.o: data/bal_ballista.t8
-	bin2o -i data/bal_ballista.t8 d_b2.o d_b2
-d_b2c.o: data/bal_ballista.clut
-	bin2o -i data/bal_ballista.clut d_b2c.o d_b2c
-d_b3.o: data/bal_legR.t8
-	bin2o -i data/bal_legR.t8 d_b3.o d_b3
-d_b3c.o: data/bal_legR.clut
-	bin2o -i data/bal_legR.clut d_b3c.o d_b3c
-d_b4.o: data/bal_legL.t8
-	bin2o -i data/bal_legL.t8 d_b4.o d_b4
-d_b4c.o: data/bal_legL.clut
-	bin2o -i data/bal_legL.clut d_b4c.o d_b4c
-d_b5.o: data/bal_stinger.t8
-	bin2o -i data/bal_stinger.t8 d_b5.o d_b5
-d_b5c.o: data/bal_stinger.clut
-	bin2o -i data/bal_stinger.clut d_b5c.o d_b5c
 d_an0.o: data/anim_coin_flip.t8
 	bin2o -i data/anim_coin_flip.t8 d_an0.o d_an0
 d_an0c.o: data/anim_coin_flip.clut
@@ -268,14 +214,19 @@ player_rt.o: ../../runtime/player.c
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
 battle_rt.o: ../../runtime/battle.c
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
+battle_blob.o: ../../runtime/battle_blob.c ../../runtime/battle_blob.h
+	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
 
 # interp_rt/text_rt/map_runtime are copies of runtime sources: refresh
 # automatically so the EBOOT can never pin a stale copy again (past
 # incidents: 111-4/5, RNG, 340, mirror).
 interp_rt.c: ../../runtime/interp.c
 	sed '1s/.*/\/\* COPY of runtime\/interp.c - see runtime\/. Refresh with cp. \*\//; s/#include "interp.h"/#include "interp_rt.h"/' ../../runtime/interp.c > interp_rt.c
+# interp_rt.h is a shim over the canonical header (single FhCmd/FhInterp
+# type). A byte copy would conflict with runtime modules that include
+# ../../runtime/interp.h (battle_blob), so only the .c stays a copy.
 interp_rt.h: ../../runtime/interp.h
-	sed 's/FH_INTERP_H/FH_INTERP_RT_H/g' ../../runtime/interp.h > interp_rt.h
+	printf '#ifndef FH_INTERP_RT_H\n#define FH_INTERP_RT_H\n\n#include "../../runtime/interp.h"\n\n#endif\n' > interp_rt.h
 interp_rt.o: interp_rt.c interp_rt.h
 text_rt.c: ../../runtime/text.c
 	sed '1s/.*/\/\* COPY of runtime\/text.c - see runtime\/. Refresh with cp. \*\//; s/#include "text.h"/#include "text_rt.h"/' ../../runtime/text.c > text_rt.c

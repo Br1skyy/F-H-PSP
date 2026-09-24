@@ -34,154 +34,219 @@ def se_name(p0):
     return str(p0)
 
 
-PLAIN = (0, 108, 112, 113, 115, 118, 404, 411, 412, 413, 604, 505, 605,
-         403, 404, 123, 235, 334, 335, 340)
+PLAIN = (0, 105, 108, 112, 113, 115, 118, 404, 411, 412, 413, 604, 505,
+         605, 403, 404, 123, 235, 334, 335, 340)
+
+
+def encode_cmd(c, i, jump, sym):
+    code = c.get('code', -1)
+    p = c.get('parameters', [])
+    indent = c.get('indent', 0)
+    op, pp, raw = 0, [0] * 10, None
+
+    if code in PLAIN:
+        if code == 123 and len(p) >= 2:
+            pp[0] = 'ABCD'.index(p[0]) if p[0] in 'ABCD' else 0
+            pp[1] = num(p, 1)
+        elif code == 235 and p:
+            pp[0] = num(p, 0)
+        elif code in (334, 335) and p:
+            pp[0] = num(p, 0)
+    elif code == 119:
+        pass
+    elif code == 401 and p:
+        raw = str(p[0])
+    elif code == 405 and p:
+        raw = str(p[0])
+    elif code == 101 and p:
+        pp = [num(p, 1), num(p, 2), num(p, 3)] + [0] * 7
+        raw = str(p[0])
+    elif code == 102 and p:
+        raw = '\n'.join(str(x) for x in p[0])
+    elif code == 402 and p:
+        pp[0] = num(p, 0)
+    elif code == 111 and p:
+        op = num(p, 0)
+        assert op in (0, 1, 4, 5, 8, 9, 10, 11, 13), \
+            f'{sym}[{i}]: 111 type {op}'
+        if op == 0:
+            pp = [num(p, 1), num(p, 2)] + [0] * 8
+        elif op == 1:
+            pp = [num(p, 1), num(p, 2), num(p, 3), num(p, 4)] + [0] * 6
+        elif op == 4:
+            pp = [num(p, 1), num(p, 2), num(p, 3)] + [0] * 7
+            if num(p, 2) == 1 and len(p) > 3:
+                raw = str(p[3])
+        elif op == 5:
+            pp = [num(p, 1), num(p, 2), num(p, 3)] + [0] * 7
+        elif op == 8:
+            pp = [num(p, 1)] + [0] * 9
+        elif op == 9 or op == 10:
+            pp = [num(p, 1), 1 if len(p) > 2 and p[2] else 0] + [0] * 8
+        elif op == 13:
+            pp = [num(p, 1)] + [0] * 9
+    elif code == 117 and p:
+        pp[0] = num(p, 0)
+    elif code == 121 and len(p) >= 3:
+        pp = [num(p, 0), num(p, 1), num(p, 2)] + [0] * 7
+    elif code == 122 and len(p) >= 5:
+        op = num(p, 2)
+        v = p[4]
+        pp = [num(p, 0), num(p, 1), num(p, 3),
+              int(v) if isinstance(v, (int, float)) else 0,
+              num(p, 5) if len(p) > 5 else 0] + [0] * 5
+    elif code in (126, 127) and len(p) >= 4:
+        op = num(p, 1)
+        v = p[3]
+        pp = [num(p, 0), 0, num(p, 2),
+              int(v) if isinstance(v, (int, float)) else 0] + [0] * 6
+    elif code == 128 and len(p) >= 4:
+        op = num(p, 1)
+        v = p[3]
+        pp = [num(p, 0), 0, num(p, 2),
+              int(v) if isinstance(v, (int, float)) else 0] + [0] * 6
+    elif code == 129 and len(p) >= 2:
+        pp = [num(p, 0), num(p, 1),
+              num(p, 2) if len(p) > 2 else 0] + [0] * 7
+    elif code == 132 and p:
+        raw = se_name(p[0])
+    elif code == 135 and p:
+        pp[0] = num(p, 0)
+    elif code == 201 and len(p) >= 6:
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3), num(p, 4),
+              num(p, 5)] + [0] * 4
+    elif code == 205 and len(p) >= 2:
+        route = p[1] if isinstance(p[1], dict) else {}
+        pp = [num(p, 0), 0, 1 if route.get('wait') else 0] + [0] * 7
+    elif code == 211 and p:
+        pp[0] = num(p, 0)
+    elif code == 212 and len(p) >= 2:
+        pp = [num(p, 0), num(p, 1),
+              1 if len(p) > 2 and p[2] else 0, 0] + [0] * 6
+    elif code == 216 and p:
+        pp[0] = num(p, 0)
+    elif code == 217:
+        pass
+    elif code == 225 and len(p) >= 3:
+        pp = [num(p, 0), num(p, 1), num(p, 2)] + [0] * 7
+        op = 1 if len(p) > 3 and p[3] else 0
+    elif code == 230 and p:
+        pp[0] = num(p, 0)
+    elif code == 231 and len(p) >= 10:
+        op = 0
+        pp = [num(p, 0), num(p, 2), num(p, 3),
+              num(p, 4), num(p, 5),
+              num(p, 6), num(p, 7), num(p, 8), num(p, 9), 0]
+        raw = str(p[1])
+    elif code == 232 and len(p) >= 12:
+        op = 1 if p[11] else 0
+        pp = [num(p, 0), num(p, 2), num(p, 3),
+              num(p, 4), num(p, 5),
+              num(p, 6), num(p, 7), num(p, 8), num(p, 9),
+              num(p, 10)]
+    elif code == 233 and len(p) >= 2:
+        pp = [num(p, 0), num(p, 1)] + [0] * 8
+    elif code == 234 and len(p) >= 3:
+        tone = p[1] if isinstance(p[1], list) else [0, 0, 0, 0]
+        pp = [num(p, 0),
+              int(tone[0]) if len(tone) > 0 else 0,
+              int(tone[1]) if len(tone) > 1 else 0,
+              int(tone[2]) if len(tone) > 2 else 0,
+              int(tone[3]) if len(tone) > 3 else 0,
+              num(p, 2)] + [0] * 4
+        op = 1 if num(p, 3) else 0
+    elif code == 236 and len(p) >= 3:
+        tmap = {'none': 0, 'rain': 1, 'storm': 2, 'snow': 3}
+        pp = [tmap.get(str(p[0]), 0), num(p, 1), num(p, 2)] + [0] * 7
+        op = 1 if num(p, 3) else 0
+    elif code == 250 and p:
+        raw = se_name(p[0])
+    elif code == 251:
+        pass
+    elif code == 223 and len(p) >= 2:
+        tone = p[0] if isinstance(p[0], list) else [0, 0, 0, 0]
+        pp = [int(tone[0]) if len(tone) > 0 else 0,
+              int(tone[1]) if len(tone) > 1 else 0,
+              int(tone[2]) if len(tone) > 2 else 0,
+              int(tone[3]) if len(tone) > 3 else 0,
+              num(p, 1)] + [0] * 5
+        op = 1 if num(p, 2) else 0
+    elif code == 282 and p:
+        pp[0] = num(p, 0)
+    elif code == 301 and len(p) >= 4:
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3)] + [0] * 6
+    elif code == 303 and len(p) >= 2:
+        pp = [num(p, 0), num(p, 1)] + [0] * 8
+    elif code == 311 and len(p) >= 6:
+        v = p[4]
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3),
+              int(v) if isinstance(v, (int, float)) else 0,
+              num(p, 5)] + [0] * 4
+    elif code == 312 and len(p) >= 5:
+        v = p[4]
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3),
+              int(v) if isinstance(v, (int, float)) else 0, 0] + [0] * 4
+    elif code == 313 and len(p) >= 4:
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3)] + [0] * 6
+    elif code == 314 and len(p) >= 2:
+        pp = [num(p, 0), num(p, 1)] + [0] * 8
+    elif code in (315, 316) and len(p) >= 6:
+        v = p[4]
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3),
+              int(v) if isinstance(v, (int, float)) else 0,
+              num(p, 5)] + [0] * 4
+    elif code == 317 and len(p) >= 6:
+        v = p[4]
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3),
+              int(v) if isinstance(v, (int, float)) else 0,
+              num(p, 5)] + [0] * 4
+    elif code == 318 and len(p) >= 4:
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3)] + [0] * 6
+    elif code == 319 and len(p) >= 3:
+        pp = [num(p, 0), num(p, 1), num(p, 2)] + [0] * 7
+    elif code == 320 and p:
+        pp = [num(p, 0)] + [0] * 9
+        raw = str(p[1]) if len(p) > 1 else ''
+    elif code == 322 and len(p) >= 6:
+        pp = [num(p, 0)] + [0] * 9
+        raw = '\n'.join([str(p[1]), str(num(p, 2)), str(p[3]),
+                         str(num(p, 4)), str(p[5])])
+    elif code == 324 and p:
+        pp = [num(p, 0)] + [0] * 9
+        raw = str(p[1]) if len(p) > 1 else ''
+    elif code in (331, 332, 342) and len(p) >= 5:
+        v = p[3]
+        pp = [num(p, 0), num(p, 1), num(p, 2),
+              int(v) if isinstance(v, (int, float)) else 0,
+              num(p, 4)] + [0] * 5
+    elif code == 333 and len(p) >= 3:
+        pp = [num(p, 0), num(p, 1), num(p, 2)] + [0] * 7
+    elif code == 336 and len(p) >= 2:
+        pp = [num(p, 0), num(p, 1)] + [0] * 8
+    elif code == 337 and len(p) >= 3:
+        pp = [num(p, 0), num(p, 1), 1 if p[2] else 0] + [0] * 7
+    elif code == 339 and len(p) >= 4:
+        pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3)] + [0] * 6
+    elif code in (351, 352, 353, 354):
+        pass
+    elif code == 355 and p:
+        raw = str(p[0])
+    elif code == 356 and p:
+        raw = str(p[0])
+    elif code in (601, 602, 603):
+        pass
+    else:
+        raise AssertionError(f'{sym}[{i}]: code {code} not encodable')
+    return code, indent, jump, op, pp, raw
 
 
 def emit_list(lst, jm, sym):
     n = len(lst)
     L = [f'static const FhCmd {sym}[] = {{']
     for i, c in enumerate(lst):
-        code = c.get('code', -1)
-        p = c.get('parameters', [])
-        indent = c.get('indent', 0)
         jump = int(jm.get(str(i), n))
-        op, pp, s = 0, [0] * 10, 'NULL'
-
-        if code in PLAIN:
-            if code == 123 and len(p) >= 2:
-                pp[0] = 'ABCD'.index(p[0]) if p[0] in 'ABCD' else 0
-                pp[1] = num(p, 1)
-            elif code == 235 and p:
-                pp[0] = num(p, 0)
-            elif code in (334, 335) and p:
-                pp[0] = num(p, 0)
-        elif code == 119:
-            pass
-        elif code == 401 and p:
-            s = cstr(str(p[0]))
-        elif code == 101 and p:
-            pp = [num(p, 1), num(p, 2), num(p, 3)] + [0] * 7
-            s = cstr(str(p[0]))
-        elif code == 102 and p:
-            s = cstr('\n'.join(str(x) for x in p[0]))
-        elif code == 402 and p:
-            pp[0] = num(p, 0)
-        elif code == 111 and p:
-            op = num(p, 0)
-            assert op in (0, 1, 4, 5, 8, 11), f'{sym}[{i}]: 111 type {op}'
-            if op == 0:
-                pp = [num(p, 1), num(p, 2)] + [0] * 8
-            elif op == 1:
-                pp = [num(p, 1), num(p, 2), num(p, 3), num(p, 4)] + [0] * 6
-            elif op == 4:
-                pp = [num(p, 1), num(p, 2), num(p, 3)] + [0] * 7
-                if num(p, 2) == 1 and len(p) > 3:
-                    s = cstr(str(p[3]))
-            elif op == 5:
-                pp = [num(p, 1), num(p, 2), num(p, 3)] + [0] * 7
-            elif op == 8:
-                pp = [num(p, 1)] + [0] * 9
-        elif code == 117 and p:
-            pp[0] = num(p, 0)
-        elif code == 121 and len(p) >= 3:
-            pp = [num(p, 0), num(p, 1), num(p, 2)] + [0] * 7
-        elif code == 122 and len(p) >= 5:
-            op = num(p, 2)
-            v = p[4]
-            pp = [num(p, 0), num(p, 1), num(p, 3),
-                  int(v) if isinstance(v, (int, float)) else 0,
-                  num(p, 5) if len(p) > 5 else 0] + [0] * 5
-        elif code in (126, 127) and len(p) >= 4:
-            op = num(p, 1)
-            v = p[3]
-            pp = [num(p, 0), 0, num(p, 2),
-                  int(v) if isinstance(v, (int, float)) else 0] + [0] * 6
-        elif code == 128 and len(p) >= 4:
-            op = num(p, 1)
-            v = p[3]
-            pp = [num(p, 0), 0, num(p, 2),
-                  int(v) if isinstance(v, (int, float)) else 0] + [0] * 6
-        elif code == 129 and len(p) >= 2:
-            pp = [num(p, 0), num(p, 1),
-                  num(p, 2) if len(p) > 2 else 0] + [0] * 7
-        elif code == 230 and p:
-            pp[0] = num(p, 0)
-        elif code == 231 and len(p) >= 10:
-            op = 0
-            pp = [num(p, 0), num(p, 2), num(p, 3),
-                  num(p, 4), num(p, 5),
-                  num(p, 6), num(p, 7), num(p, 8), num(p, 9), 0]
-            s = cstr(str(p[1]))
-        elif code == 232 and len(p) >= 12:
-            op = 1 if p[11] else 0
-            pp = [num(p, 0), num(p, 2), num(p, 3),
-                  num(p, 4), num(p, 5),
-                  num(p, 6), num(p, 7), num(p, 8), num(p, 9),
-                  num(p, 10)]
-        elif code == 233 and len(p) >= 2:
-            pp = [num(p, 0), num(p, 1)] + [0] * 8
-        elif code == 234 and len(p) >= 3:
-            tone = p[1] if isinstance(p[1], list) else [0, 0, 0, 0]
-            pp = [num(p, 0),
-                  int(tone[0]) if len(tone) > 0 else 0,
-                  int(tone[1]) if len(tone) > 1 else 0,
-                  int(tone[2]) if len(tone) > 2 else 0,
-                  int(tone[3]) if len(tone) > 3 else 0,
-                  num(p, 2)] + [0] * 4
-            op = 1 if num(p, 3) else 0
-        elif code == 236 and len(p) >= 3:
-
-            tmap = {'none': 0, 'rain': 1, 'storm': 2, 'snow': 3}
-            pp = [tmap.get(str(p[0]), 0), num(p, 1), num(p, 2)] + [0] * 7
-            op = 1 if num(p, 3) else 0
-        elif code == 250 and p:
-            s = cstr(se_name(p[0]))
-        elif code == 223 and len(p) >= 2:
-            tone = p[0] if isinstance(p[0], list) else [0, 0, 0, 0]
-            pp = [int(tone[0]) if len(tone) > 0 else 0,
-                  int(tone[1]) if len(tone) > 1 else 0,
-                  int(tone[2]) if len(tone) > 2 else 0,
-                  int(tone[3]) if len(tone) > 3 else 0,
-                  num(p, 1)] + [0] * 5
-            op = 1 if num(p, 2) else 0
-        elif code == 311 and len(p) >= 6:
-            v = p[4]
-            pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3),
-                  int(v) if isinstance(v, (int, float)) else 0,
-                  num(p, 5)] + [0] * 4
-        elif code == 313 and len(p) >= 4:
-            pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3)] + [0] * 6
-        elif code in (315, 316) and len(p) >= 6:
-            v = p[4]
-            pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3),
-                  int(v) if isinstance(v, (int, float)) else 0,
-                  num(p, 5)] + [0] * 4
-        elif code == 319 and len(p) >= 3:
-            pp = [num(p, 0), num(p, 1), num(p, 2)] + [0] * 7
-        elif code == 322 and len(p) >= 6:
-            pp = [num(p, 0)] + [0] * 9
-            s = cstr('\n'.join([str(p[1]), str(num(p, 2)), str(p[3]),
-                                str(num(p, 4)), str(p[5])]))
-        elif code in (331, 332, 342) and len(p) >= 5:
-            v = p[3]
-            pp = [num(p, 0), num(p, 1), num(p, 2),
-                  int(v) if isinstance(v, (int, float)) else 0,
-                  num(p, 4)] + [0] * 5
-        elif code == 333 and len(p) >= 3:
-            pp = [num(p, 0), num(p, 1), num(p, 2)] + [0] * 7
-        elif code == 336 and len(p) >= 2:
-            pp = [num(p, 0), num(p, 1)] + [0] * 8
-        elif code == 337 and len(p) >= 3:
-            pp = [num(p, 0), num(p, 1), 1 if p[2] else 0] + [0] * 7
-        elif code == 339 and len(p) >= 4:
-            pp = [num(p, 0), num(p, 1), num(p, 2), num(p, 3)] + [0] * 6
-        elif code == 355 and p:
-            s = cstr(str(p[0]))
-        elif code == 356 and p:
-            s = cstr(str(p[0]))
-        else:
-            raise AssertionError(f'{sym}[{i}]: code {code} not encodable')
+        code, indent, _, op, pp, raw = encode_cmd(c, i, jump, sym)
+        s = cstr(raw) if raw is not None else 'NULL'
         L.append(f'  {{{code},{indent},{jump},{op},'
                  f'{{{",".join(map(str, pp))}}},{s}}},')
     L += ['};', f'static const int {sym}_LEN = {n};']

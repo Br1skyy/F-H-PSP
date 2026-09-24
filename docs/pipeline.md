@@ -52,7 +52,9 @@ cd psp/gu_demo && make dist && cd ../.. && rm -f FHDEMO.zip && \
 `make dist` builds the EBOOT and copies it plus any streamed
 `data/` it needs into `Build/` at the repo root. `Build/` mirrors
 exactly what goes on the stick: copy the whole folder to
-`PSP/GAME/<NAME>/`.
+`PSP/GAME/<NAME>/`. Battle data streams from the stick at fight
+time: `data/troops.blob` (all 220 troops), `data/skillce.blob`
+(shared skill CEs), and `data/enemies/` (per-foe art).
 
 `stage_data.py` reads its file list from the Makefile itself, so it
 stays correct when the build gains files. It fails loudly naming
@@ -78,8 +80,12 @@ Plain gcc, from the repo root. Run them before changing engine code.
 gcc -Wall -O2 -I runtime -o /tmp/test_battle tests/test_battle.c runtime/battle.c -lm && /tmp/test_battle
 gcc -Wall -O2 -I runtime -I . -o /tmp/test_interp tests/test_interp.c runtime/interp.c runtime/text.c && /tmp/test_interp
 gcc -Wall -O2 -I runtime -o /tmp/test_map tests/test_map.c runtime/map.c && /tmp/test_map
-gcc -Wall -O2 -I runtime -I psp/gu_demo -o /tmp/test_troopflow tests/test_troopflow.c runtime/battle.c runtime/interp.c -lm && /tmp/test_troopflow
+gcc -Wall -O2 -I runtime -I psp/gu_demo -o /tmp/test_troopflow tests/test_troopflow.c runtime/battle.c runtime/interp.c runtime/battle_blob.c -lm && /tmp/test_troopflow
 ```
+
+The troop test loads `psp/gu_demo/data/*.blob`, so stage data
+first; it byte-compares the blob against the emitted headers, then
+replays the demo fights on the blob path.
 
 The battle and troop tests read `converted/code/formulas.bin`, so run
 the converters first.

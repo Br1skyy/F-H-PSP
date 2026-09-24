@@ -4,6 +4,7 @@
 #include <string.h>
 #include "battle.h"
 #include "interp.h"
+#include "battle_blob.h"
 #include "battle_db.h"
 #include "troop1.h"
 #include "troop44.h"
@@ -112,6 +113,158 @@ typedef struct {
     const int *ce_lens;
     int ce_n;
 } TroopTab;
+
+
+static int mrg_ids[64];
+static const FhCmd *mrg_lists[64];
+static int mrg_lens[64];
+static int mrg_n;
+static TroopTab mrg_tab;
+
+
+static void load_tab(int troop) {
+    int known[24], nknown = 0, i, k;
+    int seeds[128], nseeds = 0;
+    if (tblob_load(troop) != 0) {
+        printf("FAIL: blob load troop %d\n", troop);
+        fails++;
+        return;
+    }
+    known[nknown++] = 40;
+    known[nknown++] = 11;
+    {
+        int aid = 1, cls = 0, lv = 1;
+        const TblobActor *sa = tblob_actors();
+        for (int r = 0; sa[r].id; r++) {
+            if (sa[r].id == aid) {
+                cls = sa[r].cls;
+                break;
+            }
+        }
+        for (int r = 0; ACTOR_DB[r].id; r++) {
+            if (ACTOR_DB[r].id == aid) {
+                lv = ACTOR_DB[r].level;
+                break;
+            }
+        }
+        for (int r = 0; CLASS_LEARN[r].cls; r++) {
+            int dup = 0, q;
+            if (CLASS_LEARN[r].cls != cls || CLASS_LEARN[r].lv > lv)
+                continue;
+            for (q = 0; q < nknown; q++)
+                if (known[q] == CLASS_LEARN[r].sk) {
+                    dup = 1;
+                    break;
+                }
+            if (!dup && nknown < 24) known[nknown++] = CLASS_LEARN[r].sk;
+        }
+    }
+    for (i = 0; i < nknown && nseeds < 128; i++) {
+        for (k = 0; SKILL_FX[k].id && nseeds < 128; k++) {
+            if (SKILL_FX[k].id == known[i] && SKILL_FX[k].code == 44)
+                seeds[nseeds++] = SKILL_FX[k].data;
+        }
+    }
+    skill_union_build(seeds, nseeds);
+    mrg_n = 0;
+    for (i = 0; i < tblob_nces() && mrg_n < 64; i++) {
+        mrg_ids[mrg_n] = tblob_ce_id(i);
+        mrg_lists[mrg_n] = tblob_ce_list(i);
+        mrg_lens[mrg_n] = tblob_ce_len(i);
+        mrg_n++;
+    }
+    for (i = 0; i < skill_union_count() && mrg_n < 64; i++) {
+        int dup = 0, j;
+        for (j = 0; j < mrg_n; j++) {
+            if (mrg_ids[j] == skill_union_id(i)) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup)
+            continue;
+        mrg_ids[mrg_n] = skill_union_id(i);
+        mrg_lists[mrg_n] = skill_union_list(i);
+        mrg_lens[mrg_n] = skill_union_len(i);
+        mrg_n++;
+    }
+    mrg_tab.cond = tblob_conds();
+    mrg_tab.lists = tblob_lists();
+    mrg_tab.lens = tblob_lens();
+    mrg_tab.npages = tblob_npages();
+    mrg_tab.ce_ids = mrg_ids;
+    mrg_tab.ce_lists = mrg_lists;
+    mrg_tab.ce_lens = mrg_lens;
+    mrg_tab.ce_n = mrg_n;
+}
+
+
+static const FhCmd *mrg_ce(int id, int *len) {
+    for (int i = 0; i < mrg_n; i++) {
+        if (mrg_ids[i] == id) {
+            *len = mrg_lens[i];
+            return mrg_lists[i];
+        }
+    }
+    *len = 0;
+    return 0;
+}
+
+
+static int cmds_equal(const FhCmd *a, const FhCmd *b, int n) {
+    for (int i = 0; i < n; i++) {
+        if (a[i].code != b[i].code || a[i].indent != b[i].indent ||
+            a[i].jump != b[i].jump || a[i].op != b[i].op)
+            return 0;
+        for (int p = 0; p < 10; p++)
+            if (a[i].p[p] != b[i].p[p]) return 0;
+        if (!a[i].s && !b[i].s) continue;
+        if (!a[i].s || !b[i].s) return 0;
+        if (strcmp(a[i].s, b[i].s)) return 0;
+    }
+    return 1;
+}
+
+
+static void compare_oracle(int troop, const BtPageCond *oc,
+                           const FhCmd **ol, const int *olen, int onp,
+                           const char *tag) {
+    int i;
+    (void)troop;
+    CHECK(mrg_tab.npages == onp, "%s: npages %d vs %d", tag,
+          mrg_tab.npages, onp);
+    if (mrg_tab.npages != onp) return;
+    CHECK(!memcmp(mrg_tab.cond, oc, (size_t)onp * sizeof(*oc)),
+          "%s: page conditions identical", tag);
+    for (i = 0; i < onp; i++) {
+        if (mrg_tab.lens[i] != olen[i]) {
+            CHECK(0, "%s: page %d len %d vs %d", tag, i,
+                  mrg_tab.lens[i], olen[i]);
+            continue;
+        }
+        CHECK(cmds_equal(mrg_tab.lists[i], ol[i], olen[i]),
+              "%s: page %d commands identical", tag, i);
+    }
+}
+
+
+static void compare_ce_oracles(const char *tag) {
+    for (int i = 0; i < mrg_n; i++) {
+        int k = 0, len = 0;
+        const FhCmd *bl;
+        while (k < CEB_N && CEB_IDS[k] != mrg_ids[i]) k++;
+        if (k >= CEB_N) continue;
+        bl = mrg_lists[i];
+        len = mrg_lens[i];
+        if (len != CEB_LEN[k]) {
+            CHECK(0, "%s: CE%d len %d vs %d", tag, mrg_ids[i], len,
+                  CEB_LEN[k]);
+            continue;
+        }
+        CHECK(cmds_equal(bl, CEB_LIST[k], len), "%s: CE%d identical",
+              tag, mrg_ids[i]);
+    }
+}
 
 static void run_page(const TroopTab *t, int pgi, int *flags) {
     FhInterp tit;
@@ -234,21 +387,33 @@ int main(void) {
     resolve_atk();
     CHECK(sk_atk.nins == 8, "skill1 program resolves (nins=%d)", sk_atk.nins);
 
-    static const TroopTab t1 = {TROOP1_COND, TROOP1_LIST, TROOP1_LEN,
-                                TROOP1_NPAGES, TROOP1_CE_IDS, TROOP1_CE_LIST,
-                                TROOP1_CE_LEN, TROOP1_CE_N};
-    static const TroopTab t44 = {TROOP44_COND, TROOP44_LIST, TROOP44_LEN,
-                                 TROOP44_NPAGES, TROOP44_CE_IDS,
-                                 TROOP44_CE_LIST, TROOP44_CE_LEN,
-                                 TROOP44_CE_N};
+    if (tblob_open("psp/gu_demo/data/troops.blob") != 0) {
+        printf("FAIL: cannot open troops.blob\n");
+        return 1;
+    }
+    if (skillce_open("psp/gu_demo/data/skillce.blob") != 0) {
+        printf("FAIL: cannot open skillce.blob\n");
+        return 1;
+    }
+    load_tab(1);
+    compare_oracle(1, TROOP1_COND, TROOP1_LIST, TROOP1_LEN,
+                   TROOP1_NPAGES, "t1");
+    compare_ce_oracles("t1-ce");
 
     seed_btl(1);
     CHECK(bt.n_foes == 7, "troop1 has 7 members (%d)", bt.n_foes);
-    kill_and_cascade(&t1, 5, "t1 left leg");
+    kill_and_cascade(&mrg_tab, 5, "t1 left leg");
+
+    load_tab(44);
+    compare_oracle(44, TROOP44_COND, TROOP44_LIST, TROOP44_LEN,
+                   TROOP44_NPAGES, "t44");
+    compare_ce_oracles("t44-ce");
 
     seed_btl(44);
     CHECK(bt.n_foes == 6, "troop44 has 6 members (%d)", bt.n_foes);
-    kill_and_cascade(&t44, 4, "t44 left leg");
+    kill_and_cascade(&mrg_tab, 4, "t44 left leg");
+
+    load_tab(1);
 
 
     {
@@ -260,16 +425,16 @@ int main(void) {
         ac.hp = 100;
         ac.maxhp = 100;
         int pg = -1;
-        for (int i = 0; i < t1.npages; i++) {
+        for (int i = 0; i < mrg_tab.npages; i++) {
             if (flags[i]) continue;
-            if (bt_page_fire(&t1.cond[i], 0, 0, &bt.f[1], bt.n_foes, &ac,
+            if (bt_page_fire(&mrg_tab.cond[i], 0, 0, &bt.f[1], bt.n_foes, &ac,
                              1, Gsw)) {
                 pg = i;
                 break;
             }
         }
         CHECK(pg == 5, "dismember: battle-start setup page (%d)", pg);
-        run_page(&t1, 5, flags);
+        run_page(&mrg_tab, 5, flags);
         CHECK(bt.f[1].ref == 486, "dismember: torso transformed (%d)",
               bt.f[1].ref);
         CHECK(bt.f[1].hp == 2500 && bt.f[1].maxhp == 2500,
@@ -294,16 +459,16 @@ int main(void) {
         for (int round = 0; round < 10; round++) {
             ac.hp = bt.f[0].hp;
             int p2 = -1;
-            for (int i = 0; i < t1.npages; i++) {
+            for (int i = 0; i < mrg_tab.npages; i++) {
                 if (flags[i]) continue;
-                if (bt_page_fire(&t1.cond[i], 1, 1, &bt.f[1], bt.n_foes,
+                if (bt_page_fire(&mrg_tab.cond[i], 1, 1, &bt.f[1], bt.n_foes,
                                  &ac, 1, Gsw)) {
                     p2 = i;
                     break;
                 }
             }
             if (p2 < 0) break;
-            run_page(&t1, p2, flags);
+            run_page(&mrg_tab, p2, flags);
             if (bt.over) break;
         }
         CHECK(bt.over == 0, "dismember: no round-1 wipe (over=%d)",
@@ -321,16 +486,16 @@ int main(void) {
         for (int round = 0; round < 10 && !bt.over; round++) {
             ac.hp = bt.f[0].hp;
             int p2 = -1;
-            for (int i = 0; i < t1.npages; i++) {
+            for (int i = 0; i < mrg_tab.npages; i++) {
                 if (flags[i]) continue;
-                if (bt_page_fire(&t1.cond[i], 1, 1, &bt.f[1], bt.n_foes,
+                if (bt_page_fire(&mrg_tab.cond[i], 1, 1, &bt.f[1], bt.n_foes,
                                  &ac, 1, Gsw)) {
                     p2 = i;
                     break;
                 }
             }
             if (p2 < 0) break;
-            run_page(&t1, p2, flags);
+            run_page(&mrg_tab, p2, flags);
         }
         {
             int a2 = 0;
@@ -353,9 +518,9 @@ int main(void) {
 
     {
         FhInterp ce;
-        run_ce(CEB_14, CEB_14_LEN, &ce);
+        { int cl = 0; const FhCmd *cc = mrg_ce(14, &cl); CHECK(cc && cl > 0, "union carries CE14"); if (cc) run_ce(cc, cl, &ce); }
         CHECK(ce.sw[52] != 0, "CE14 (Talk) sets sw52");
-        run_ce(CEB_46, CEB_46_LEN, &ce);
+        { int cl = 0; const FhCmd *cc = mrg_ce(46, &cl); CHECK(cc && cl > 0, "union carries CE46"); if (cc) run_ce(cc, cl, &ce); }
         CHECK(ce.sw[200] != 0 && ce.sw[215] != 0,
               "CE46 (Run!) arms sw200/sw215 (%d/%d)", ce.sw[200],
               ce.sw[215]);
@@ -363,9 +528,9 @@ int main(void) {
 
 
     {
-        const TroopTab *t = &t1;
+        const TroopTab *t = &mrg_tab;
         FhInterp ce;
-        run_ce(CEB_46, CEB_46_LEN, &ce);
+        { int cl = 0; const FhCmd *cc = mrg_ce(46, &cl); CHECK(cc && cl > 0, "union carries CE46"); if (cc) run_ce(cc, cl, &ce); }
         CHECK(ce.sw[200] != 0, "run chain: CE46 arms sw200");
 
         int flags[16] = {0};
@@ -412,9 +577,9 @@ int main(void) {
 
 
     {
-        const TroopTab *t = &t1;
+        const TroopTab *t = &mrg_tab;
         FhInterp ce;
-        run_ce(CEB_14, CEB_14_LEN, &ce);
+        { int cl = 0; const FhCmd *cc = mrg_ce(14, &cl); CHECK(cc && cl > 0, "union carries CE14"); if (cc) run_ce(cc, cl, &ce); }
         int flags[16] = {0};
         flags[5] = 1;
         BtActorHp ac;

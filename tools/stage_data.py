@@ -102,12 +102,6 @@ def stage_t8(src, dst):
 
 
 RENAMES = {
-    'bal_ballista': 'enemies/ballista_ballista',
-    'bal_head': 'enemies/ballista_head',
-    'bal_legL': 'enemies/ballista_legL',
-    'bal_legR': 'enemies/ballista_legR',
-    'bal_stinger': 'enemies/ballista_stinger',
-    'bal_torso': 'enemies/ballista_torso',
     'guard1': 'characters/guard1',
     'knight': 'characters/knight',
     'mercenary': 'characters/mercenary',
@@ -146,6 +140,8 @@ def run_emitters(game, map_name):
         ['tools/emit_lights_h.py', str(game), '--map', map_name, '--out',
          'psp/gu_demo/map030_lights.h'],
         ['tools/emit_interp_test.py', str(game), '--out', 'tests'],
+        ['tools/emit_troop_blob.py', str(game), '--out',
+         'psp/gu_demo/data', '--ce-out', 'psp/gu_demo/data'],
     ]
     for cmd in jobs:
         print('running:', ' '.join(cmd))
@@ -187,6 +183,25 @@ def run_bakers(game, map_name, data):
             sys.exit(f'baker failed: {cmd[0]}')
 
 
+def stage_enemies(converted, data, force):
+    """Stream all enemy art as files (battle loads them per fight)."""
+    src = converted / 'enemies'
+    dst = data / 'enemies'
+    dst.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for t8 in sorted(src.glob('*.t8')):
+        d = dst / t8.name
+        c = dst / (t8.stem + '.clut')
+        if d.exists() and c.exists() and not force:
+            continue
+        stage_t8(t8, d)
+        cs = src / (t8.stem + '.clut')
+        if cs.exists():
+            c.write_bytes(cs.read_bytes())
+        n += 1
+    print(f'staged {n} new enemy sheets into psp/gu_demo/data/enemies/')
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('game')
@@ -207,6 +222,7 @@ def main() -> None:
         sys.exit('pad_pow2.py failed')
     run_bakers(game, args.map, data)
     run_emitters(game, args.map)
+    stage_enemies(converted, data, args.force)
 
     missing = []
     for name in needed_data():
