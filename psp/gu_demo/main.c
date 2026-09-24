@@ -985,6 +985,12 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
     btl_act_id = 0;
     btl_act_target = 0;
     btl_known_rebuild();
+    btl_build_merged();
+    btl_art_load();
+    /* Map030 names no battleback1 and every battleback2 file is absent
+       from the game, so the original shows the dark base. floor1 is
+       only for the 38 maps that name it. */
+    floor_px = 0;
     {
         SceUID fd = sceIoOpen("ms0:/fh_battle.txt",
                               PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
@@ -2243,8 +2249,6 @@ int main(int argc, char *argv[]) {
                     } else if (btl_cmd == 1) {
 
     btl_known_rebuild();
-    btl_build_merged();
-    btl_art_load();
                         if (btl_nknown > 0) {
                             btl_list_cur = 0;
                             btl_list_top = 0;
