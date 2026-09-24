@@ -1,20 +1,13 @@
 #!/usr/bin/env python3
-"""Portable build driver for the PSP demo (no make, no sh).
+"""Portable PSP build driver (no make, no sh).
 
-Replicates psp/gu_demo/Makefile using only Python plus the PSP
-toolchain binaries on PATH (psp-gcc, bin2o, psp-fixup-imports,
-mksfoex, psp-strip, pack-pbp, psp-config). Works anywhere those
-exist: Linux, macOS, Windows via WSL, or native Windows through
-MSYS2 (psp-gcc and friends resolve as .exe automatically).
+Uses only Python plus the PSP toolchain binaries on PATH. Object
+list, data embeds, and link libs are parsed from
+psp/gu_demo/Makefile so the two drivers cannot drift.
 
 Usage (from the repo root):
     python3 tools/build.py            build EBOOT.PBP + fill Build/
     python3 tools/build.py --clean    remove build artifacts
-
-The object list, data embeds, and link libs are parsed from the
-Makefile so the two drivers cannot drift apart. Timestamps drive
-rebuilds; generated headers are explicit dependencies so a
-regenerated header always rebuilds what includes it.
 """
 import pathlib
 import re
@@ -31,9 +24,8 @@ TITLE = 'F&H Port'
 
 def need(prog):
     if shutil.which(prog) is None:
-        sys.exit(f'missing tool: {prog} (install the PSP toolchain and'
-                 f' put it on PATH, see docs/pipeline.md)')
-    return prog
+        sys.exit(f'missing tool: {prog} (install the PSP toolchain,'
+                 f' see docs/pipeline.md)')
 
 
 def run(cmd):
@@ -41,7 +33,6 @@ def run(cmd):
     r = subprocess.run([str(c) for c in cmd], cwd=DEMO)
     if r.returncode != 0:
         sys.exit(f'failed: {cmd[0]}')
-    return r
 
 
 def read_make(path):
@@ -62,21 +53,19 @@ def read_make(path):
 
 def write_if_changed(path, data):
     if path.exists() and path.read_bytes() == data:
-        return False
+        return
     path.write_bytes(data)
     print(f'wrote {path.relative_to(ROOT)}')
-    return True
 
 
 def refresh_copies():
     rt = RUNTIME
     jobs = [
-        ('interp_rt.c', rt / 'interp.c', None),
-        ('text_rt.c', rt / 'text.c', None),
-        ('map_runtime.c', rt / 'map.c', None),
+        ('interp_rt.c', rt / 'interp.c'),
+        ('text_rt.c', rt / 'text.c'),
+        ('map_runtime.c', rt / 'map.c'),
     ]
-    changed = False
-    for local, src, _ in jobs:
+    for local, src in jobs:
         lines = src.read_text(encoding='utf-8').splitlines(keepends=True)
         lines[0] = ('/* COPY of runtime/%s - see runtime/. Refresh with'
                     ' cp. */\n' % src.name)
@@ -86,18 +75,17 @@ def refresh_copies():
                             '#include "text_rt.h"')
         text = text.replace('#include "map.h"',
                             '#include "map_runtime.h"')
-        changed |= write_if_changed(DEMO / local, text.encode())
+        write_if_changed(DEMO / local, text.encode())
     shim = (b'#ifndef FH_INTERP_RT_H\n#define FH_INTERP_RT_H\n\n'
             b'#include "../../runtime/interp.h"\n\n#endif\n')
-    changed |= write_if_changed(DEMO / 'interp_rt.h', shim)
+    write_if_changed(DEMO / 'interp_rt.h', shim)
     for local, orig, new in (('text_rt.h', 'FH_TEXT_H', 'FH_TEXT_RT_H'),
                              ('map_runtime.h', 'FH_MAP_H',
                               'FH_MAP_RUNTIME_H')):
         src = {'text_rt.h': rt / 'text.h',
                'map_runtime.h': rt / 'map.h'}[local]
         text = src.read_text(encoding='utf-8').replace(orig, new)
-        changed |= write_if_changed(DEMO / local, text.encode())
-    return changed
+        write_if_changed(DEMO / local, text.encode())
 
 
 SPECIAL_C = {
@@ -188,8 +176,7 @@ def main() -> None:
             continue
         if (DEMO / obj).exists():
             (DEMO / obj).unlink()
-        run(['bin2o', '-i', src, obj,
-             obj[:-2] if obj.endswith('.o') else obj])
+        run(['bin2o', '-i', src, obj, obj[:-2]])
     elf = f'{TARGET}.elf'
     if newer(objs, elf):
         run(['psp-gcc'] + [o for o in objs] +
