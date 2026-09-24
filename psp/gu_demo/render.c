@@ -15,7 +15,7 @@ unsigned char *font_adv = 0;
 unsigned char *window_px = 0;
 unsigned int window_cl[256] __attribute__((aligned(16)));
 unsigned char *floor_px = 0;
-unsigned int *battle_bg = 0;
+int battle_live_bg = 0;
 unsigned int floor_cl[256] __attribute__((aligned(16)));
 
 
@@ -1178,31 +1178,13 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     sceGuDisable(GU_ALPHA_TEST);
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    TVert *bd = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-    bd[0].u = 0; bd[0].v = 0; bd[0].color = 0xff180a0c;
-    bd[0].x = 0; bd[0].y = 0; bd[0].z = 0.0f;
-    bd[1].u = 0; bd[1].v = 0; bd[1].color = 0xff180a0c;
-    bd[1].x = (float)SCR_W; bd[1].y = (float)SCR_H; bd[1].z = 0.0f;
-    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bd);
-    if (battle_bg) {
-        sceGuEnable(GU_TEXTURE_2D);
-        sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
-        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
-        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
-        sceGuTexScale(1.0f, 1.0f);
-        sceGuTexOffset(0.0f, 0.0f);
-        sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-        sceGuTexImage(0, 512, 512, 512, battle_bg);
-        sceGuTexFlush();
-        sceGuTexSync();
-        TVert *bg = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
-        bg[0].u = 0; bg[0].v = 0; bg[0].color = 0xffffffff;
-        bg[0].x = 0; bg[0].y = 0; bg[0].z = 0.0f;
-        bg[1].u = (float)SCR_W; bg[1].v = (float)SCR_H;
-        bg[1].color = 0xffffffff;
-        bg[1].x = (float)SCR_W; bg[1].y = (float)SCR_H; bg[1].z = 0.0f;
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bg);
-        sceGuDisable(GU_TEXTURE_2D);
+    if (!battle_live_bg) {
+        TVert *bd = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        bd[0].u = 0; bd[0].v = 0; bd[0].color = 0xff180a0c;
+        bd[0].x = 0; bd[0].y = 0; bd[0].z = 0.0f;
+        bd[1].u = 0; bd[1].v = 0; bd[1].color = 0xff180a0c;
+        bd[1].x = (float)SCR_W; bd[1].y = (float)SCR_H; bd[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, bd);
     }
     if (floor_px) {
         sceGuEnable(GU_TEXTURE_2D);

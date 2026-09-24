@@ -877,27 +877,8 @@ static void btl_art_load(void) {
         btl_art_slot(i);
 }
 
-static unsigned int btl_bg[512 * 512] __attribute__((aligned(16)));
-
-
-static void btl_snap_bg(void *shown) {
-    unsigned int *src = (unsigned int *)shown;
-    int y;
-    if (!src) {
-        battle_bg = 0;
-        return;
-    }
-    for (y = 0; y < SCR_H; y++) {
-        unsigned int *d = btl_bg + (unsigned)y * 512u;
-        unsigned int *s = src + (unsigned)y * BUF_W;
-        for (int x = 0; x < SCR_W; x++) d[x] = s[x];
-    }
-    sceKernelDcacheWritebackInvalidateRange(btl_bg, sizeof(btl_bg));
-    battle_bg = btl_bg;
-}
-
-
 static void btl_start(u64 tick, int char_idx, int troop_id, void *shown) {
+    (void)shown;
 
     static const int char_actor[4] = {1, 5, 4, 3};
     int want = char_actor[char_idx];
@@ -1017,10 +998,10 @@ static void btl_start(u64 tick, int char_idx, int troop_id, void *shown) {
     btl_build_merged();
     btl_art_load();
     /* Map030 names no battleback1 and every battleback2 file is absent
-       from the game, so the original shows the dark base. floor1 is
-       only for the 38 maps that name it. */
+       from the game, so the original shows the map snapshot. The
+       battle frame re-renders the frozen map underneath. */
     floor_px = 0;
-    btl_snap_bg(shown);
+    battle_live_bg = 1;
     {
         SceUID fd = sceIoOpen("ms0:/fh_battle.txt",
                               PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
@@ -2525,9 +2506,25 @@ int main(int argc, char *argv[]) {
                 if (i == btl_tgt) tcursor = seen;
                 seen++;
             }
+            {
+                unsigned char *csp[4] = {
+                    characters[0].sprite_data, characters[1].sprite_data,
+                    characters[2].sprite_data, characters[3].sprite_data
+                };
+                unsigned int *ccl[4] = {
+                    (unsigned int *)characters[0].clut_data,
+                    (unsigned int *)characters[1].clut_data,
+                    (unsigned int *)characters[2].clut_data,
+                    (unsigned int *)characters[3].clut_data
+                };
+                FhLight fhl_b[24];
+                int nfhl_b = build_lights(fhl_b, 24, cam_x, cam_y);
+                render_frame(cam_x, cam_y, &map_layers[0][0][0], MAP_W,
+                             MAP_H, &player, current_character, csp, ccl,
+                             map_higher, sizeof(map_higher), total_frames,
+                             npc_draw, 15, fhl_b, nfhl_b);
+            }
             sceGuStart(GU_DIRECT, gu_list);
-            sceGuClearColor(0xff000000);
-            sceGuClear(GU_COLOR_BUFFER_BIT);
 
             BtListRow lrows[4];
             int nlrows = 0, lcur = 0, show_list = 0;
