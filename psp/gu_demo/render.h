@@ -24,6 +24,7 @@ typedef struct {
     int tile_x, tile_y;
     int char_index, pattern, dir_mv;
     int prio;
+    int sheet;
 } NpcSprite;
 
 extern const SheetDef SHEETS[9];

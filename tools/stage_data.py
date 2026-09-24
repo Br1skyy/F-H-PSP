@@ -199,6 +199,10 @@ def main() -> None:
     data = pathlib.Path('psp/gu_demo/data')
     (data / 'map030').mkdir(parents=True, exist_ok=True)
 
+    print('padding converted textures to pow2')
+    r = subprocess.run([sys.executable, 'tools/pad_pow2.py'])
+    if r.returncode != 0:
+        sys.exit('pad_pow2.py failed')
     run_bakers(game, args.map, data)
     run_emitters(game)
 

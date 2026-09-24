@@ -1571,6 +1571,7 @@ static void load_map030(void) {
         npc_draw[i].pattern = baked[i].pattern;
         npc_draw[i].dir_mv = baked[i].dir_mv;
         npc_draw[i].prio = baked[i].prio;
+        npc_draw[i].sheet = baked[i].sheet;
     }
 
 
@@ -2465,8 +2466,9 @@ int main(int argc, char *argv[]) {
 
 
         if (frames == 0 || frames - last_debug_update >= 30) {
-            snprintf(debug_text, sizeof(debug_text), "F&H: %s | L/R:switch | fps:%d",
-                    characters[current_character].name, fps);
+            snprintf(debug_text, sizeof(debug_text),
+                     "F&H: %s | L/R:switch | fps:%d",
+                     characters[current_character].name, fps);
             last_debug_update = frames;
         }
         render_debug_text(debug_text);
