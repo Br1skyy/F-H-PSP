@@ -1066,39 +1066,6 @@ static float battle_text_w(const char *s) {
 }
 
 
-static void bar_quad(TVert *q, float x0, float y0, float x1, float y1,
-                     unsigned int c) {
-    q[0].u = 0; q[0].v = 0; q[0].color = c;
-    q[0].x = x0; q[0].y = y0; q[0].z = 0.0f;
-    q[1].u = 0; q[1].v = 0; q[1].color = c;
-    q[1].x = x1; q[1].y = y1; q[1].z = 0.0f;
-}
-
-
-static TVert *gauge_grad(TVert *bp, float x, float y, float fillw,
-                         unsigned int c1, unsigned int c2) {
-    int r1 = (int)(c1 & 0xff), g1 = (int)((c1 >> 8) & 0xff),
-        b1 = (int)((c1 >> 16) & 0xff);
-    int r2 = (int)(c2 & 0xff), g2 = (int)((c2 >> 8) & 0xff),
-        b2 = (int)((c2 >> 16) & 0xff);
-    float fw = (float)((int)fillw);
-    if (fw < 0.0f) fw = 0.0f;
-    for (int s = 0; s < 8; s++) {
-        float sx0 = x + fw * (float)s / 8.0f;
-        float sx1 = x + fw * (float)(s + 1) / 8.0f;
-        float t = ((float)s + 0.5f) / 8.0f;
-        int r = r1 + (int)((float)(r2 - r1) * t);
-        int g = g1 + (int)((float)(g2 - g1) * t);
-        int b = b1 + (int)((float)(b2 - b1) * t);
-        unsigned int c =
-            0xff000000 | ((unsigned int)b << 16) | ((unsigned int)g << 8) |
-            (unsigned int)r;
-        bar_quad(bp, sx0, y, sx1, y + 6.0f, c);
-        bp += 2;
-    }
-    return bp;
-}
-
 void render_battle(const BtFoeDraw *foes, int nfoes,
                    const BtPopup *pops, int npops,
                    const char *actor_name, int hp, int mhp, int mp, int mmp,
@@ -1176,31 +1143,31 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         sceGuTexFlush();
         sceGuTexSync();
         unsigned int va = 0xffffffff;
-        float sink = 0.0f;
         if (col > 0) {
-            if (col > 30) col = 30;
-            va = (((unsigned int)(255 * col / 30)) << 24) | 0x00ffffff;
-            sink = (float)(30 - col);
+            if (col > 32) col = 32;
+            va = (((unsigned int)(255 * col / 32)) << 24) | 0x00ffffff;
         }
         TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
         v[0].u = 0; v[0].v = 0; v[0].color = va;
         v[0].x = foes[i].x - (float)foes[i].w / 2.0f;
-        v[0].y = foes[i].y - (float)foes[i].h + sink;
+        v[0].y = foes[i].y - (float)foes[i].h;
         v[0].z = 0.0f;
         v[1].u = (float)foes[i].w; v[1].v = (float)foes[i].h;
         v[1].color = va;
         v[1].x = foes[i].x + (float)foes[i].w / 2.0f;
-        v[1].y = foes[i].y + sink;
+        v[1].y = foes[i].y;
         v[1].z = 0.0f;
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
 
         int hot = (i == sel_foe && blink) ||
                   (flash && flash[i] > 0);
-        if (hot) {
-            unsigned int wa = (col > 0)
-                                  ? (((unsigned int)(160 * col / 30)) << 24) |
-                                        0x00ffffff
-                                  : 0xa0ffffff;
+        int dying = (col > 0);
+        if (hot || dying) {
+            unsigned int wa;
+            if (dying)
+                wa = (((unsigned int)(160 * col / 32)) << 24) | 0x008080ff;
+            else
+                wa = 0xa0ffffff;
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0x00ffffff);
             TVert *w = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
             w[0].u = 0; w[0].v = 0; w[0].color = wa;
@@ -1445,28 +1412,6 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     }
 
 
-    {
-        float hpf = mhp > 0 ? (float)hp / (float)mhp : 0.0f;
-        float mpf = mmp > 0 ? (float)mp / (float)mmp : 0.0f;
-        if (hpf < 0.0f) hpf = 0.0f;
-        if (mpf < 0.0f) mpf = 0.0f;
-        if (hpf > 1.0f) hpf = 1.0f;
-        if (mpf > 1.0f) mpf = 1.0f;
-        sceGuDisable(GU_TEXTURE_2D);
-
-        TVert *br = (TVert *)sceGuGetMemory(18 * 2 * sizeof(TVert));
-        TVert *bp = br;
-        float by = 258.0f;
-        bar_quad(bp, 158.0f, by, 298.0f, by + 6.0f, 0xff402020);
-        bp += 2;
-        bar_quad(bp, 322.0f, by, 462.0f, by + 6.0f, 0xff402020);
-        bp += 2;
-        bp = gauge_grad(bp, 158.0f, by, 140.0f * hpf, 0xff2a3050,
-                        0xff112589);
-        bp = gauge_grad(bp, 322.0f, by, 140.0f * mpf, 0xff2a3050,
-                        0xff112589);
-        sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(bp - br), 0, br);
-    }
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);
     sceGuDisable(GU_ALPHA_TEST);

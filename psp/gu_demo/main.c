@@ -131,11 +131,6 @@ static int btl_flash[8], btl_collapse[8];
 
 static void btl_log_push(const char *s) {
     if (!s || !s[0]) return;
-
-
-    if ((btl_log_t[1] > 0 && !strcmp(btl_log[1], s)) ||
-        (btl_log_t[0] > 0 && !strcmp(btl_log[0], s)))
-        return;
     snprintf(btl_log[0], sizeof(btl_log[0]), "%s", btl_log[1]);
     snprintf(btl_log[1], sizeof(btl_log[1]), "%s", s);
     btl_log_t[0] = btl_log_t[1];
@@ -371,6 +366,7 @@ static void btl_ev_sync(void) {
             if (f->hp <= 0) {
                 f->hp = 0;
                 f->alive = 0;
+                if (i < 8 && btl_collapse[i] == 0) btl_collapse[i] = 32;
             }
             f->mp = tit.emp[i] < 0 ? 0 : tit.emp[i];
         }
@@ -1056,11 +1052,6 @@ static void btl_do_use(BtF *sub, const BtSkill *sk, const BtFx *fx, int nfx,
                     btl_log_push(rbuf);
                 } else if (sk->dmg_type == 1 || sk->dmg_type == 2 ||
                            sk->dmg_type == 5 || sk->dmg_type == 6) {
-                    if (dmg > 0) {
-                        snprintf(rbuf, sizeof(rbuf), "%s took %d damage!",
-                                 tname, dmg);
-                        btl_log_push(rbuf);
-                    }
                     if (crit)
                         btl_log_push(is_actor_tgt ? "A painful blow!!"
                                                   : "An excellent hit!!");
@@ -1094,6 +1085,8 @@ static void btl_do_use(BtF *sub, const BtSkill *sk, const BtFx *fx, int nfx,
                     if (hit && sk->dmg_type > 0 && sk->dmg_type != 3 &&
                         sk->dmg_type != 4)
                         btl_flash[mi] = 10;
+                    if (!tgt->alive && btl_collapse[mi] == 0)
+                        btl_collapse[mi] = 32;
                 }
             }
 
@@ -1112,8 +1105,6 @@ static void btl_do_use(BtF *sub, const BtSkill *sk, const BtFx *fx, int nfx,
                 btl_pop_at(px, py, 0, 1);
             } else if (sk->dmg_type == 3 || sk->dmg_type == 4) {
                 if (dmg > 0) btl_pop_at(px, py, dmg, 3);
-            } else if (sk->dmg_type > 0 && dmg > 0) {
-                btl_pop_at(px, py, dmg, crit ? 2 : 0);
             } else {
                 int rec = (tgt->hp - hp0) + (tgt->mp - mp0);
                 if (rec > 0) btl_pop_at(px, py, rec, 3);

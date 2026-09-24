@@ -47,33 +47,56 @@ def pad_height(t8, w, h, hn):
     return swizzle8(bytes(pad), w, hn)
 
 
-SMALL_NPC = {'!Flame', '!creature', '!map_objects2', '$minerghost2'}
+def next_pow2(n):
+    p = 16
+    while p < n:
+        p *= 2
+    return p
 
 
-def put_character(src, dst):
-    """Stage a character sheet.
+def pad_pow2(t8, w, h, tw, th):
+    """Pad a swizzled texture to power-of-2 dims (GE requirement).
 
-    Big sheets go out padded to 512x512 (the player renderer uploads
-    with a 512 stride). Padding happens here, never in converted/:
-    re-running the converter used to silently un-pad the cache and
-    break the build. Meta dims drive the pad, so already-padded sheets
-    copy through byte-identical. Small NPC sheets keep their own
-    stride (the renderer addresses them directly).
+    The converter only aligns to 16x8 blocks, so e.g. enemies come out
+    112x160 while the renderer uploads 128x256: the short upload reads
+    past the buffer and bands across the sprite. Identity when already
+    pow2.
     """
+    nw, nh = next_pow2(tw), next_pow2(th)
+    if nw == tw and nh == th:
+        return t8
+    lin = deswizzle8(t8, tw, th)
+    art = bytearray(nw * nh)
+    for y in range(th):
+        art[y * nw:y * nw + tw] = lin[y * tw:y * tw + tw]
+    return swizzle8(bytes(art), nw, nh)
+
+
+def converted_dims(src):
     import json as _json
-    if (dst.suffix == '.clut' or 'characters/' not in src.as_posix()
-            or src.stem in SMALL_NPC):
-        dst.write_bytes(src.read_bytes())
-        return
     meta = _json.loads((src.parent / (src.stem + '.meta.json'))
                        .read_text(encoding='utf-8'))
-    w, h, tw, th = meta['w'], meta['h'], meta['tex_w'], meta['tex_h']
+    return meta['w'], meta['h'], meta['tex_w'], meta['tex_h']
+
+
+def stage_t8(src, dst):
+    """Stage one texture: byte copy, pow2-padded when needed.
+
+    Character sheets pad to 512x512 and everything else to the next
+    pow2 of its converted stride; already-pow2 files copy through
+    untouched. Padding happens here, never in converted/: re-running
+    the converter used to silently un-pad the cache and break the
+    build. Small NPC sheets keep their own stride (the renderer
+    addresses them directly), which is already pow2.
+    """
+    import json as _json
     raw = src.read_bytes()
-    lin = deswizzle8(raw, tw, th)
-    art = bytearray(512 * 512)
-    for y in range(h):
-        art[y * 512:y * 512 + w] = lin[y * tw:y * tw + w]
-    dst.write_bytes(swizzle8(bytes(art), 512, 512))
+    if dst.suffix == '.t8':
+        meta = _json.loads((src.parent / (src.stem + '.meta.json'))
+                           .read_text(encoding='utf-8'))
+        raw = pad_pow2(raw, meta['w'], meta['h'],
+                       meta['tex_w'], meta['tex_h'])
+    dst.write_bytes(raw)
 
 
 RENAMES = {
@@ -137,6 +160,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('game')
     ap.add_argument('--map', default='Map030')
+    ap.add_argument('--force', action='store_true',
+                    help='re-stage even files already present')
     args = ap.parse_args()
     if not pathlib.Path('psp/gu_demo/Makefile').exists():
         sys.exit('run from the repo root')
@@ -150,9 +175,16 @@ def main() -> None:
     missing = []
     for name in needed_data():
         dst = data / name
-        if dst.exists():
-            continue
         stem = pathlib.Path(name).stem
+        if (stem.startswith(('bv_', 'anim_')) or stem in ('font', 'window')
+                or name in ('font_adv.bin', 'map030/layers.bin',
+                            'map030/higher.bin')):
+            if dst.exists():
+                continue
+            missing.append(f'{name} (its baker did not produce it)')
+            continue
+        if dst.exists() and not args.force:
+            continue
         parent = pathlib.Path(name).parent
         if name == 'map030/Map030.bin':
             src = converted / 'baked/passability' / f'{args.map}.bin'
@@ -193,7 +225,7 @@ def main() -> None:
                 s = converted / (RENAMES[stem] + ext)
                 d = data / parent / (stem + ext)
                 if s.exists():
-                    put_character(s, d)
+                    stage_t8(s, d)
                 else:
                     missing.append(f'{name} (missing {RENAMES[stem]}{ext})')
             print(f'staged {name} (renamed)')
@@ -204,7 +236,7 @@ def main() -> None:
                 s = hits[0].parent / (hits[0].stem + ext)
                 d = data / parent / (stem + ext)
                 if s.exists():
-                    put_character(s, d)
+                    stage_t8(s, d)
             print(f'staged {name}')
         elif not hits:
             missing.append(f'{name} (no converted match, run converters)')
