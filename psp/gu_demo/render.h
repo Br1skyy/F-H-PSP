@@ -83,6 +83,7 @@ extern unsigned int window_cl[256];
 
 
 extern unsigned char *floor_px;
+extern unsigned int *battle_bg;
 extern unsigned int floor_cl[256];
 
 

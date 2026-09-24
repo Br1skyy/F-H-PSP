@@ -877,7 +877,27 @@ static void btl_art_load(void) {
         btl_art_slot(i);
 }
 
-static void btl_start(u64 tick, int char_idx, int troop_id) {
+static unsigned int btl_bg[512 * 272] __attribute__((aligned(16)));
+
+
+static void btl_snap_bg(void *shown) {
+    unsigned int *src = (unsigned int *)shown;
+    int y;
+    if (!src) {
+        battle_bg = 0;
+        return;
+    }
+    for (y = 0; y < SCR_H; y++) {
+        unsigned int *d = btl_bg + (unsigned)y * 512u;
+        unsigned int *s = src + (unsigned)y * BUF_W;
+        for (int x = 0; x < SCR_W; x++) d[x] = s[x];
+    }
+    sceKernelDcacheWritebackInvalidateRange(btl_bg, sizeof(btl_bg));
+    battle_bg = btl_bg;
+}
+
+
+static void btl_start(u64 tick, int char_idx, int troop_id, void *shown) {
 
     static const int char_actor[4] = {1, 5, 4, 3};
     int want = char_actor[char_idx];
@@ -1000,6 +1020,7 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
        from the game, so the original shows the dark base. floor1 is
        only for the 38 maps that name it. */
     floor_px = 0;
+    btl_snap_bg(shown);
     {
         SceUID fd = sceIoOpen("ms0:/fh_battle.txt",
                               PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
@@ -1945,7 +1966,7 @@ int main(int argc, char *argv[]) {
                     snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                              characters[current_character].name);
                     btl_start(btick, current_character,
-                              npcs[found].battle_troop);
+                              npcs[found].battle_troop, fbp0);
                     continue;
                 }
                 if (npcs[found].talk && npcs[found].talk_len > 1) {
@@ -2022,7 +2043,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                                  characters[current_character].name);
-                        btl_start(btick, current_character, tr);
+                        btl_start(btick, current_character, tr, fbp0);
                     }
                 }
 
@@ -2065,7 +2086,7 @@ int main(int argc, char *argv[]) {
             sceRtcGetCurrentTick(&btick);
             snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                      characters[current_character].name);
-            btl_start(btick, current_character, 1);
+            btl_start(btick, current_character, 1, fbp0);
         }
 
 
@@ -2087,7 +2108,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name),
                                  "%s", characters[current_character].name);
-                        btl_start(btick, current_character, tr);
+                        btl_start(btick, current_character, tr, fbp0);
                     }
                 }
             }
@@ -2642,7 +2663,7 @@ int main(int argc, char *argv[]) {
                         snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                                  characters[current_character].name);
                         btl_start(btick, current_character,
-                                  npcs[i].battle_troop);
+                                  npcs[i].battle_troop, fbp0);
                         break;
                     }
                 }
