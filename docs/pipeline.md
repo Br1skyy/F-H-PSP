@@ -39,22 +39,15 @@ Rules that have bitten us:
 
 ## 2. Stage data and build
 
-One script stages all 106 files the Makefile embeds (copies, renames,
-pads, and the quick bakers that write into `data/` directly), then
-build as usual:
-
 ```bash
 python3 tools/stage_data.py "Fear & Hunger_WIN/www"
-cd psp/gu_demo && make dist && cd ../.. && rm -f FHDEMO.zip && \
-  (cd Build && zip -q ../FHDEMO.zip -r .)
+cd psp/gu_demo && make dist
 ```
 
-`make dist` builds the EBOOT and copies it plus any streamed
-`data/` it needs into `Build/` at the repo root. `Build/` mirrors
-exactly what goes on the stick: copy the whole folder to
-`PSP/GAME/<NAME>/`. Battle data streams from the stick at fight
-time: `data/troops.blob` (all 220 troops), `data/skillce.blob`
-(shared skill CEs), and `data/enemies/` (per-foe art).
+`make dist` builds the EBOOT into `Build/`, overwriting what is
+there. `Build/` is the whole install: EBOOT plus streamed `data/`
+(`troops.blob` with all 220 troops, `skillce.blob`, `enemies/`,
+`battlebacks/`).
 
 `stage_data.py` reads its file list from the Makefile itself, so it
 stays correct when the build gains files. It fails loudly naming

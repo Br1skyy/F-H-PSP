@@ -50,9 +50,10 @@ Full steps, including data staging and the PC test commands, are in
 ```bash
 python3 tools/convert_assets.py "Fear & Hunger_WIN/www" --out converted --tile 24
 python3 tools/stage_data.py "Fear & Hunger_WIN/www"
-cd psp/gu_demo && make && cd ../.. && rm -f FHDEMO.zip && \
-  (cd psp/gu_demo && zip ../../FHDEMO.zip EBOOT.PBP)
+cd psp/gu_demo && make dist
 ```
+
+Copy `Build/` to `PSP/GAME/<NAME>/` on the stick.
 
 
 ## Project Structure
