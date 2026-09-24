@@ -851,6 +851,8 @@ static void btl_art_slot(int m) {
     btl_art_h[m] = FOE_DB[r].h;
     btl_art_end += tsz + 1024;
     btl_art_left -= tsz + 1024;
+    sceKernelDcacheWritebackInvalidateRange(btl_art_t8[m],
+                                           tsz + 1024);
 }
 
 
