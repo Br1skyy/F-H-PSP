@@ -210,6 +210,10 @@ player_rt.o: ../../runtime/player.c
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
 battle_rt.o: ../../runtime/battle.c
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
+# Generated headers: no auto-dependency tracking, so declare them
+# explicitly (stale main.o once shipped a broken BACK_DB this way).
+main.o: battle_db.h troop1.h troop44.h itemce.h anim_data.h \
+    event_demo.h map030_lights.h
 battle_blob.o: ../../runtime/battle_blob.c ../../runtime/battle_blob.h
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
 
