@@ -37,10 +37,12 @@ def main() -> None:
     w2, h2 = img.size
     img = img.crop(((w2 - 512) // 2, (h2 - 272) // 2,
                     (w2 - 512) // 2 + 512, (h2 - 272) // 2 + 272))
+    full = Image.new('RGBA', (512, 512), (0, 0, 0, 255))
+    full.paste(img, (0, 0))
     out = pathlib.Path('psp/gu_demo/data/title.rgba')
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(img.tobytes())
-    print(f'wrote {out} ({len(img.tobytes())} bytes)')
+    out.write_bytes(full.tobytes())
+    print(f'wrote {out} ({len(full.tobytes())} bytes)')
 
 
 if __name__ == '__main__':

@@ -581,7 +581,7 @@ void render_title(unsigned int *card, const char *cmds[8], int ncmds,
         sceGuTexFlush();
         sceGuTexSync();
         TVert *v = (TVert *)sceGuGetMemory(
-            (ncmds * 20 + 48) * 2 * 2 * sizeof(TVert));
+            (ncmds * 20 + 48 + 24) * 2 * 2 * sizeof(TVert));
         TVert *vp = v;
         for (i = 0; i < ncmds; i++) {
             float tw = battle_text_w(cmds[i]);
@@ -589,6 +589,11 @@ void render_title(unsigned int *card, const char *cmds[8], int ncmds,
                                                            0xffffffff;
             battle_text(cmds[i], 240.0f - tw * 0.5f, 188.0f + (float)i * 22,
                         col, &vp);
+        }
+        {
+            char stamp[32];
+            snprintf(stamp, sizeof(stamp), "build %s", __DATE__);
+            battle_text(stamp, 8.0f, 252.0f, 0xff808080, &vp);
         }
         if (vp > v)
             sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
