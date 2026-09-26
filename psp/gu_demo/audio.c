@@ -18,6 +18,7 @@ typedef struct {
     int rate, ch;
     OggVorbis_File vf;
     int stream_open;
+    long stream_total;
     short cache[AU_CACHE_FRAMES * 2];
     long cache_start;
     int cache_n;
@@ -120,8 +121,7 @@ static int au_cache_fill(AVoice *v, long frame) {
         } else {
             int got = 0, bs = 0, step;
             vorbis_info *vi = ov_info(&v->vf, -1);
-            long total = ov_pcm_total(&v->vf, -1);
-            if (want >= total)
+            if (want >= v->stream_total)
                 return 0;
             if (want != v->cache_start + v->cache_n) {
                 if (ov_pcm_seek(&v->vf, want) != 0)
@@ -185,6 +185,7 @@ static void au_stream_fill(AVoice *v, const char *path, int loop) {
     v->f = f;
     v->kind = 2;
     v->stream_open = 1;
+    v->stream_total = (long)ov_pcm_total(&v->vf, -1);
     v->loop = loop;
     v->cache_start = 0;
     v->cache_n = 0;
