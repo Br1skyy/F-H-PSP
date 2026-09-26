@@ -1168,7 +1168,8 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    int actor_sy,
                    int sel_foe, const int *flash, const int *collapse,
                    const BtListRow *lrows, int nlrows, int lcursor,
-                   int show_list, const int *st_icons, int nst_icons) {
+                   int show_list, const int *st_icons, int nst_icons,
+                   const char *tgt_name) {
 
 
     sceGuDisable(GU_TEXTURE_2D);
@@ -1217,7 +1218,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
 
 
     render_ticks++;
-    int blink = ((render_ticks / 10) % 2) == 0;
+    int blink = ((render_ticks / 15) % 2) == 0;
     sceGuEnable(GU_TEXTURE_2D);
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
@@ -1277,7 +1278,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             if (dying)
                 wa = (((unsigned int)(160 * col / 32)) << 24) | 0x008080ff;
             else
-                wa = 0xa0ffffff;
+                wa = 0xc0ffffff;
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0x00ffffff);
             TVert *w = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
             w[0].u = 0; w[0].v = 0; w[0].color = wa;
@@ -1318,6 +1319,8 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         if (nn > 5) nn = 5;
         skin_box(8, 156, 142, 162 + (nn - 1) * 18 + 38, 0xc8343c42, 1);
     }
+    if (tgt_name && tgt_name[0])
+        skin_box(8, 8, 472, 48, 0xc8343c42, 1);
 
 
     {
@@ -1343,10 +1346,13 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         for (int i = 0; i < nlrows; i++)
             listtotal += (int)strlen(lrows[i].text) + 2;
     }
+    int tgttotal = 0;
+    if (tgt_name && tgt_name[0])
+        tgttotal = (int)strlen(tgt_name) + 2;
 
 
     TVert *v = (TVert *)sceGuGetMemory(
-        (cmdtotal + poptotal + loglen + listtotal + 48) * 2 * 2 *
+        (cmdtotal + poptotal + loglen + listtotal + tgttotal + 48) * 2 * 2 *
         sizeof(TVert));
     TVert *vp = v;
 
@@ -1354,6 +1360,56 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     light_mask_blt(200.0f, 160.0f, 220.0f);
 
 
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    {
+        struct { int v, max, x0, x1; } gs[2] = {
+            {hp, mhp, 218, 298},
+            {mp, mmp, 382, 462},
+        };
+        for (int g = 0; g < 2; g++) {
+            float rate = gs[g].max > 0 ? (float)gs[g].v / (float)gs[g].max
+                                       : 0.0f;
+            int fw;
+            if (rate < 0.0f) rate = 0.0f;
+            if (rate > 1.0f) rate = 1.0f;
+            TVert *gb = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+            gb[0].u = 0; gb[0].v = 0; gb[0].color = 0x80000000;
+            gb[0].x = (float)gs[g].x0; gb[0].y = 260.0f; gb[0].z = 0.0f;
+            gb[1].u = 0; gb[1].v = 0; gb[1].color = 0x80000000;
+            gb[1].x = (float)gs[g].x1; gb[1].y = 265.0f; gb[1].z = 0.0f;
+            sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, gb);
+            fw = (int)((float)(gs[g].x1 - gs[g].x0) * rate + 0.5f);
+            if (fw > 0) {
+                int segs = 8, s;
+                for (s = 0; s < segs; s++) {
+                    int xa = gs[g].x0 + fw * s / segs;
+                    int xb = gs[g].x0 + fw * (s + 1) / segs;
+                    int r0 = 0x50 + (0x89 - 0x50) * s / segs;
+                    int g0 = 0x30 + (0x25 - 0x30) * s / segs;
+                    int b0 = 0x2a + (0x11 - 0x2a) * s / segs;
+                    unsigned c0 =
+                        0xff000000u | ((unsigned)b0 << 16) |
+                        ((unsigned)g0 << 8) | (unsigned)r0;
+                    int r1 = 0x50 + (0x89 - 0x50) * (s + 1) / segs;
+                    int g1 = 0x30 + (0x25 - 0x30) * (s + 1) / segs;
+                    int b1 = 0x2a + (0x11 - 0x2a) * (s + 1) / segs;
+                    unsigned c1 =
+                        0xff000000u | ((unsigned)b1 << 16) |
+                        ((unsigned)g1 << 8) | (unsigned)r1;
+                    TVert *gf =
+                        (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+                    gf[0].u = 0; gf[0].v = 0; gf[0].color = c0;
+                    gf[0].x = (float)xa; gf[0].y = 260.0f; gf[0].z = 0.0f;
+                    gf[1].u = 0; gf[1].v = 0; gf[1].color = c1;
+                    gf[1].x = (float)xb; gf[1].y = 265.0f; gf[1].z = 0.0f;
+                    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, gf);
+                }
+            }
+        }
+    }
     if (font_px) {
         sceGuEnable(GU_BLEND);
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
@@ -1378,8 +1434,8 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             snprintf(hpb, sizeof(hpb), "%d/%d", hp, mhp);
             snprintf(mpb, sizeof(mpb), "%d/%d", mp, mmp);
             unsigned int hcol = 0xffffffff;
-            if (hp <= 0) hcol = 0xff808080;
-            else if (mhp > 0 && hp < (mhp + 3) / 4) hcol = 0xff2020ff;
+            if (hp <= 0) hcol = 0xff2020ff;
+            else if (mhp > 0 && hp * 4 < mhp) hcol = 0xff7bdcdc;
             battle_text(actor_name, 158.0f, 222.0f, 0xffffffff, &vp);
             battle_text("Body", 158.0f, 240.0f, MSG_PAL[16], &vp);
             battle_text(hpb, 298.0f - battle_text_w(hpb), 240.0f, hcol,
@@ -1423,10 +1479,17 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         }
 
 
+        if (tgt_name && tgt_name[0]) {
+            float tw = battle_text_w(tgt_name);
+            battle_text(tgt_name, (480.0f - tw) * 0.5f, 16.0f, 0xffffffff,
+                        &vp);
+        }
         if (log0 && log0[0])
-            battle_text(log0, 12.0f, 10.0f, 0xffffffff, &vp);
+            battle_text(log0, 12.0f, tgt_name && tgt_name[0] ? 52.0f : 10.0f,
+                        0xffffffff, &vp);
         if (log1 && log1[0])
-            battle_text(log1, 12.0f, 32.0f, 0xffffffff, &vp);
+            battle_text(log1, 12.0f, tgt_name && tgt_name[0] ? 74.0f : 32.0f,
+                        0xffffffff, &vp);
 
 
         if (vp > v)

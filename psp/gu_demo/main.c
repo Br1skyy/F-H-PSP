@@ -2621,8 +2621,19 @@ int main(int argc, char *argv[]) {
 
 
             int sel_foe = -1;
-            if ((btl_phase == 1 || btl_phase == 7) && !btl_ev_active)
+            const char *tgt_name = NULL;
+            if ((btl_phase == 1 || btl_phase == 7) && !btl_ev_active) {
                 sel_foe = btl_tgt;
+                if (btl_tgt >= 0 && btl_tgt < btl.n_foes &&
+                    btl.f[1 + btl_tgt].alive) {
+                    int r = 0;
+                    while (FOE_DB[r].id &&
+                           FOE_DB[r].id != btl.f[1 + btl_tgt].ref)
+                        r++;
+                    if (FOE_DB[r].id)
+                        tgt_name = FOE_DB[r].name;
+                }
+            }
             render_battle(draws, btl.n_foes, btl_pops, 8, st_name,
                          btl.f[0].hp, btl.f[0].maxhp, btl.f[0].mp,
                          btl.f[0].maxmp,
@@ -2641,7 +2652,7 @@ int main(int argc, char *argv[]) {
                          214 - 112,
                          sel_foe, btl_flash, btl_collapse,
                          lrows, nlrows, lcur, show_list,
-                         st_icons, nst_icons);
+                         st_icons, nst_icons, tgt_name);
 
             render_battle_anims(draws, btl.n_foes);
 
