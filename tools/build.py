@@ -95,6 +95,7 @@ SPECIAL_C = {
     'interp_rt.o': ('interp_rt.c', []),
     'text_rt.o': ('text_rt.c', []),
     'map_runtime.o': ('map_runtime.c', []),
+    'audio.o': ('audio.c', ['-I../../runtime', '-I../../runtime/tremor']),
 }
 
 HEADER_DEPS = {
@@ -106,7 +107,12 @@ HEADER_DEPS = {
     'render.o': ['render.c', 'render.h', 'anim_data.h', 'map_runtime.h',
                  'interp_rt.h', 'text_rt.h'],
     'input.o': ['input.c', 'input.h'],
-    'movie.o': ['movie.c', 'movie.h'],    'map_runtime.o': ['map_runtime.c', 'map_runtime.h',
+    'movie.o': ['movie.c', 'movie.h'],
+    'audio.o': ['audio.c', 'audio.h'],
+    'tremor_all.o': ['../../runtime/tremor_all.c'],
+    'audio.o': ['audio.c', 'audio.h'],
+    'tremor_all.o': ('../../runtime/tremor_all.c',
+                     ['-w', '-I../../runtime', '-I../../runtime/tremor']),    'map_runtime.o': ['map_runtime.c', 'map_runtime.h',
                       '../../runtime/map.h'],
     'interp_rt.o': ['interp_rt.c', 'interp_rt.h',
                     '../../runtime/interp.h'],
@@ -156,20 +162,26 @@ def main() -> None:
            f'-I{sdk / "include"}']
     refresh_copies()
     for obj in objs:
-        if obj in SPECIAL_C:
-            src, extra = SPECIAL_C[obj]
+        if obj in SPECIAL_C or obj not in rules:
+            if obj in SPECIAL_C:
+                src, extra = SPECIAL_C[obj]
+            elif obj.startswith('tremor_'):
+                src = '../../runtime/tremor/' + obj[7:-2] + '.c'
+                extra = ['-w', '-I../../runtime', '-I../../runtime/tremor']
+            elif obj.startswith('ogg_'):
+                src = '../../runtime/ogg/ogg_' + obj[4:-2] + '.c'
+                extra = ['-w', '-I../../runtime', '-I../../runtime/tremor']
+            else:
+                src, extra = obj.replace('.o', '.c'), []
             deps = HEADER_DEPS.get(obj, [src])
-        elif obj in rules:
-            continue
         else:
-            src, extra = obj.replace('.o', '.c'), []
-            deps = HEADER_DEPS.get(obj, [src])
+            continue
         if not newer(deps, obj):
             continue
         run(['psp-gcc'] + cflags + ['-D_PSP_FW_VERSION=600'] + inc +
             extra + ['-c', src, '-o', obj])
     for obj in objs:
-        if obj not in rules:
+        if obj not in rules or obj in SPECIAL_C:
             continue
         src = rules[obj]
         if not newer([src], obj):
@@ -199,7 +211,7 @@ def main() -> None:
         (dist / 'data').mkdir(exist_ok=True)
         for name in ('troops.blob', 'skillce.blob'):
             shutil.copy2(data / name, dist / 'data' / name)
-        for sub in ('enemies', 'battlebacks', 'movies'):
+        for sub in ('enemies', 'battlebacks', 'movies', 'audio'):
             if (data / sub).exists():
                 shutil.copytree(data / sub, dist / 'data' / sub,
                                 dirs_exist_ok=True)

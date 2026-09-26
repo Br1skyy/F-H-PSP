@@ -10,6 +10,7 @@ You need three things on PATH:
 - PSP toolchain: `psp-gcc`, `psp-config`, `bin2o`,
   `psp-fixup-imports`, `mksfoex`, `psp-strip`, `pack-pbp`.
 - Python 3 with Pillow: `pip install Pillow`.
+- ffmpeg, for audio and movie staging.
 - Your owned game copy at `Fear & Hunger_WIN/www` (gitignored,
   never committed).
 
@@ -79,7 +80,8 @@ Link rules (learned on real hardware, a PSP-2000 hard-freezes otherwise):
   defaults `-lpspnet -lpspnet_apctl`, and never link `-lpspkernel`.
 - The ELF must show zero `ForKernel` imports: check with
   `psp-strings -a fh_demo.elf | grep ForKernel` (expect empty).
-- Keep the heap small (1 MB). Everything is static, nothing mallocs.
+- Keep the heap small (4 MB; tremor allocates decode state per open
+  stream). Everything else is static, nothing else mallocs.
 
 ## 3. Install
 

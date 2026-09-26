@@ -12,6 +12,7 @@
 #include "render.h"
 #include "input.h"
 #include "movie.h"
+#include "audio.h"
 #include "map_runtime.h"
 #include "interp_rt.h"
 #include "text_rt.h"
@@ -24,7 +25,7 @@
 
 PSP_MODULE_INFO("F&H port", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
-PSP_HEAP_SIZE_KB(1024);
+PSP_HEAP_SIZE_KB(4096);
 
 
 static FhInterp mit;
@@ -250,6 +251,7 @@ static void btl_check_end(void) {
         if (btl.f[1 + i].alive) foes_alive++;
     if (btl.f[0].alive) party_alive++;
     if (!foes_alive) {
+        int first = btl.over == 0;
         btl.over = 1;
         btl.exp_all = 0;
         btl.gold_all = 0;
@@ -266,8 +268,12 @@ static void btl_check_end(void) {
                      btl_actor_name);
             btl_log_push(vbuf);
         }
+        if (first && tit.victory_me[0])
+            audio_play_me(tit.victory_me, tit.victory_vol, tit.victory_pitch,
+                           tit.victory_pan);
         btl_phase = 3;
     } else if (!party_alive) {
+        int first = btl.over == 0;
         btl.over = 2;
         {
             char vbuf[96];
@@ -275,6 +281,9 @@ static void btl_check_end(void) {
                      btl_actor_name);
             btl_log_push(vbuf);
         }
+        if (first && tit.defeat_me[0])
+            audio_play_me(tit.defeat_me, tit.defeat_vol, tit.defeat_pitch,
+                           tit.defeat_pan);
         btl_phase = 3;
     }
 }
@@ -1089,6 +1098,8 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
         }
     }
     battle_mode = 1;
+    audio_push_bgm();
+    audio_play_bgm("muted_aggression", 90, 100);
     {
         int pg = btl_ev_scan(0);
         if (pg >= 0) btl_ev_begin(pg);
@@ -1913,6 +1924,8 @@ int main(int argc, char *argv[]) {
 #ifdef DIAG_STAGES
     diag_color(0xff00ff00, "data-loaded\n", fbp0, fbp1);
 #endif
+    audio_init();
+    audio_play_bgs("god_of_the_depths", 90, 100, 0);
 
 
     InputState input = {0};
@@ -2536,10 +2549,14 @@ int main(int argc, char *argv[]) {
 
                 if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                     battle_mode = 0;
+                    audio_pop_bgm();
                     talk_cool = 45;
                     talk_lock = 1;
                 }
             }
+
+
+            audio_poll(&tit);
 
 
             if (!btl_ev_active &&
@@ -2690,6 +2707,7 @@ int main(int argc, char *argv[]) {
 
 
         int pre_px = player.x, pre_py = player.y;
+        audio_poll(&mit);
         player_update(&player, dbg_open ? 0 : input.buttons,
                       (uint16_t*)map_passability,
                       MAP_W, MAP_H, npc_solid);

@@ -1,5 +1,5 @@
 TARGET = fh_demo
-OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o battle_blob.o movie.o \
+OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o battle_blob.o movie.o audio.o tremor_block.o tremor_codebook.o tremor_floor0.o tremor_floor1.o tremor_info.o tremor_mapping0.o tremor_mdct.o tremor_registry.o tremor_res012.o tremor_sharedbook.o tremor_synthesis.o tremor_vorbisfile.o tremor_window.o ogg_bitwise.o ogg_framing.o \
        d_a1.o d_b.o d_e.o d_ib.o d_d.o \
        d_a1c.o d_bc.o d_ec.o d_ibc.o d_dc.o \
        d_layers.o d_pass.o d_high.o \
@@ -27,7 +27,7 @@ ASFLAGS = $(CFLAGS)
 
 LIBDIR =
 LDFLAGS =
-LIBS = -lpspgu -lpspctrl -lpspdisplay -lpspge -lpsprtc -lpspdebug -lpspmpeg -lpsputility -lm
+LIBS = -lpspgu -lpspctrl -lpspdisplay -lpspge -lpsprtc -lpspdebug -lpspmpeg -lpsputility -lpspaudio -lm
 
 EXTRA_TARGETS = EBOOT.PBP
 PSP_EBOOT_TITLE = F&H Port
@@ -216,6 +216,12 @@ main.o: battle_db.h troop1.h troop44.h itemce.h anim_data.h \
     event_demo.h map030_lights.h
 battle_blob.o: ../../runtime/battle_blob.c ../../runtime/battle_blob.h
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
+tremor_%.o: ../../runtime/tremor/%.c
+	$(CC) $(CFLAGS) -w -I../../runtime -I../../runtime/tremor -c $< -o $@
+ogg_%.o: ../../runtime/ogg/%.c
+	$(CC) $(CFLAGS) -w -I../../runtime -I../../runtime/tremor -c $< -o $@
+audio.o: audio.c audio.h
+	$(CC) $(CFLAGS) -I../../runtime -I../../runtime/tremor -c $< -o $@
 
 # interp_rt/text_rt/map_runtime are copies of runtime sources: refresh
 # automatically so the EBOOT can never pin a stale copy again (past
@@ -252,4 +258,5 @@ dist: EBOOT.PBP
 		cp -rf data/enemies $(DISTDIR)/data/ 2>/dev/null; \
 		cp -rf data/battlebacks $(DISTDIR)/data/ 2>/dev/null; \
 		cp -rf data/movies $(DISTDIR)/data/ 2>/dev/null; \
+		cp -rf data/audio $(DISTDIR)/data/ 2>/dev/null; \
 	fi

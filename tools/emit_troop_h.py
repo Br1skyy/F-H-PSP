@@ -28,10 +28,10 @@ def num(p, k, default=0):
     return int(v)
 
 
-def se_name(p0):
-    if isinstance(p0, dict):
-        return str(p0.get('name', ''))
-    return str(p0)
+def aud(p):
+    d = p[0] if p and isinstance(p[0], dict) else {}
+    return ([int(d.get('volume', 100)), int(d.get('pitch', 100)),
+             int(d.get('pan', 0))], str(d.get('name', '')))
 
 
 PLAIN = (0, 105, 108, 112, 113, 115, 118, 404, 411, 412, 413, 604, 505,
@@ -108,8 +108,9 @@ def encode_cmd(c, i, jump, sym):
     elif code == 129 and len(p) >= 2:
         pp = [num(p, 0), num(p, 1),
               num(p, 2) if len(p) > 2 else 0] + [0] * 7
-    elif code == 132 and p:
-        raw = se_name(p[0])
+    elif code in (132, 133, 139) and p:
+        vpp, raw = aud(p)
+        pp = vpp + [0] * 7
     elif code == 135 and p:
         pp[0] = num(p, 0)
     elif code == 201 and len(p) >= 6:
@@ -160,7 +161,11 @@ def encode_cmd(c, i, jump, sym):
         pp = [tmap.get(str(p[0]), 0), num(p, 1), num(p, 2)] + [0] * 7
         op = 1 if num(p, 3) else 0
     elif code == 250 and p:
-        raw = se_name(p[0])
+        vpp, raw = aud(p)
+        pp = vpp + [0] * 7
+    elif code in (241, 245, 249) and p:
+        vpp, raw = aud(p)
+        pp = vpp + [0] * 7
     elif code == 251:
         pass
     elif code == 223 and len(p) >= 2:

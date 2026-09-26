@@ -142,6 +142,7 @@ def run_emitters(game, map_name):
         ['tools/emit_interp_test.py', str(game), '--out', 'tests'],
         ['tools/emit_troop_blob.py', str(game), '--out',
          'psp/gu_demo/data', '--ce-out', 'psp/gu_demo/data'],
+        ['tools/bake_audio.py', str(game)],
     ]
     for cmd in jobs:
         print('running:', ' '.join(cmd))

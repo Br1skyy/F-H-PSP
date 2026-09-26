@@ -55,6 +55,7 @@ typedef struct {
     int party[FH_MAX_PARTY]; int party_n;
     int tint[4]; int tint_frames;
     char last_se[64]; int se_count;
+    int se_vol, se_pitch, se_pan;
     struct { int ch, steps, wait; } routes[FH_ROUTE_Q]; int route_n;
     unsigned char astate[FH_MAX_ACTORS][FH_MAX_STATES];
     FhFrame callst[FH_CALL_DEPTH]; int depth;
@@ -76,6 +77,7 @@ typedef struct {
     int timer_on, timer_frames;
     int gold;
     char bbgm[FH_NAME_CAP];
+    int bbgm_vol, bbgm_pitch, bbgm_pan;
     int menu_disabled;
     int fade;
     int flash[4], flash_frames;
@@ -107,8 +109,13 @@ typedef struct {
     int scene_req;
     int numinput[3], itemchoice[2];
     char last_bgm[FH_NAME_CAP], last_bgs[FH_NAME_CAP], last_me[FH_NAME_CAP];
+    int bgm_vol, bgm_pitch, bgm_pan;
+    int bgs_vol, bgs_pitch, bgs_pan;
+    int me_vol, me_pitch, me_pan;
     int bgm_fade, bgs_fade, se_stop, bgm_saved, bgm_replayed;
     char victory_me[FH_NAME_CAP], defeat_me[FH_NAME_CAP];
+    int victory_vol, victory_pitch, victory_pan;
+    int defeat_vol, defeat_pitch, defeat_pan;
     int save_on, encounter_on, formation_on, namedisp;
     int wtone[4];
     int tileset;
