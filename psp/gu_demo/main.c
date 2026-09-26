@@ -232,6 +232,7 @@ static int btl_force_tgt[8];
 static unsigned btl_rng;
 
 static int btl_troop_id;
+static char btl_enc_why[16] = "";
 
 static const BtPageCond *btl_cond;
 static const FhCmd **btl_lists;
@@ -1158,7 +1159,8 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
                               PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
         if (fd >= 0) {
             char tb[48];
-            snprintf(tb, sizeof(tb), "battle troop=%d\n", btl_troop_id);
+            snprintf(tb, sizeof(tb), "battle troop=%d why=%s\n", btl_troop_id,
+                     btl_enc_why);
             sceIoWrite(fd, tb, strlen(tb));
             sceIoClose(fd);
         }
@@ -1175,11 +1177,14 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
 static int btl_enc_t;
 static u64 btl_enc_tick;
 static int btl_enc_char, btl_enc_troop;
+static int ui_just_closed = 0;
 
 
-static void btl_encounter(u64 tick, int char_idx, int troop_id) {
+static void btl_encounter(u64 tick, int char_idx, int troop_id,
+                          const char *why) {
     if (battle_mode || btl_enc_t > 0 || troop_id <= 0)
         return;
+    snprintf(btl_enc_why, sizeof(btl_enc_why), "%s", why ? why : "?");
     btl_enc_tick = tick;
     btl_enc_char = char_idx;
     btl_enc_troop = troop_id;
@@ -2563,7 +2568,7 @@ int main(int argc, char *argv[]) {
                     snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                              characters[current_character].name);
                     btl_encounter(btick, current_character,
-                              npcs[found].battle_troop);
+                              npcs[found].battle_troop, "touch");
                     continue;
                 }
                 if (npcs[found].talk && npcs[found].talk_len > 1) {
@@ -2640,7 +2645,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                                  characters[current_character].name);
-                        btl_encounter(btick, current_character, tr);
+                        btl_encounter(btick, current_character, tr, "msg301");
                     }
                 }
 
@@ -2683,7 +2688,7 @@ int main(int argc, char *argv[]) {
             sceRtcGetCurrentTick(&btick);
             snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                      characters[current_character].name);
-            btl_encounter(btick, current_character, 1);
+            btl_encounter(btick, current_character, 1, "square");
         }
 
 
@@ -2735,6 +2740,7 @@ int main(int argc, char *argv[]) {
                     if (input_pressed(&input, PSP_CTRL_CROSS)) {
                         mnu_open = 0;
                         talk_cool = 45;
+                        ui_just_closed = 1;
                     }
                 } else if (mnu_mode == 1 || mnu_mode == 2) {
                     if (input_pressed(&input, PSP_CTRL_UP) &&
@@ -2838,6 +2844,7 @@ int main(int argc, char *argv[]) {
                 if (input_pressed(&input, PSP_CTRL_CROSS)) {
                     dbg_open = 0;
                     talk_cool = 45;
+                    ui_just_closed = 1;
                 }
                 if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                     int tr = tblob_id(dbg_sel);
@@ -2847,7 +2854,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name),
                                  "%s", characters[current_character].name);
-                        btl_encounter(btick, current_character, tr);
+                        btl_encounter(btick, current_character, tr, "debug");
                     }
                 }
             }
@@ -3233,6 +3240,7 @@ int main(int argc, char *argv[]) {
                     audio_pop_bgs();
                     talk_cool = 45;
                     talk_lock = 1;
+                    ui_just_closed = 1;
                 }
             }
 
@@ -3433,7 +3441,9 @@ int main(int argc, char *argv[]) {
         if (!player.moving && player.x == pre_px && player.y == pre_py) {
             unsigned int held = input.buttons &
                 (PSP_CTRL_UP | PSP_CTRL_DOWN | PSP_CTRL_LEFT | PSP_CTRL_RIGHT);
-            if (held && !dbg_open && !mnu_open && talk_cool == 0) {
+            if (!held) ui_just_closed = 0;
+            if (held && !ui_just_closed && !dbg_open && !mnu_open &&
+                talk_cool == 0) {
                 int dx = 0, dy = 0;
                 switch (player.dir) {
                     case 0: dy = 1; break;
@@ -3451,7 +3461,7 @@ int main(int argc, char *argv[]) {
                         snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                                  characters[current_character].name);
                         btl_encounter(btick, current_character,
-                                  npcs[i].battle_troop);
+                                  npcs[i].battle_troop, "face");
                         break;
                     }
                 }

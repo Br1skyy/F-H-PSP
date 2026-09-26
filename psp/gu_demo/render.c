@@ -564,13 +564,13 @@ void render_title(unsigned char *card, unsigned int *card_cl,
     sceGuDisable(GU_ALPHA_TEST);
     sceGuDisable(GU_TEXTURE_2D);
     if (vals) {
-        skin_box(96, 96, 384, 96 + 6 + ncmds * 22 + 12, 0xc8343c42,
+        skin_box(120, 58, 360, 58 + 6 + ncmds * 22 + 12, 0xc8343c42,
                  1);
         {
             int pulse = (render_ticks / 12) % 2;
             unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
-            skin_box(100, 104 + cursor * 22, 380,
-                     104 + cursor * 22 + 24, hc, 0);
+            skin_box(124, 66 + cursor * 22, 356,
+                     66 + cursor * 22 + 24, hc, 0);
         }
         sceGuDisable(GU_TEXTURE_2D);
         sceGuDisable(GU_ALPHA_TEST);
@@ -578,14 +578,14 @@ void render_title(unsigned char *card, unsigned int *card_cl,
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0,
                        0);
         for (i = 0; i < ncmds && i < 8; i++) {
-            float cy = 112.0f + (float)i * 22;
-            int fw = vals[i] < 0 ? 0 : vals[i] > 100 ? 150 :
-                                   vals[i] * 150 / 100;
+            float cy = 62.0f + (float)i * 22;
+            int fw = vals[i] < 0 ? 0 : vals[i] > 100 ? 130 :
+                                   vals[i] * 130 / 100;
             TVert *b = (TVert *)sceGuGetMemory(6 * sizeof(TVert));
             b[0].u = 0; b[0].v = 0; b[0].color = 0x80202020;
             b[0].x = 220; b[0].y = cy + 12; b[0].z = 0.0f;
             b[1].u = 0; b[1].v = 0; b[1].color = 0x80202020;
-            b[1].x = 370; b[1].y = cy + 20; b[1].z = 0.0f;
+            b[1].x = 350; b[1].y = cy + 20; b[1].z = 0.0f;
             b[2].u = 0; b[2].v = 0; b[2].color = 0xffb0b0b0;
             b[2].x = 220; b[2].y = cy + 12; b[2].z = 0.0f;
             b[3].u = 0; b[3].v = 0; b[3].color = 0xffb0b0b0;
@@ -633,12 +633,12 @@ void render_title(unsigned char *card, unsigned int *card_cl,
             unsigned int col = (i == 1 && !can_continue) ? 0xff808080 :
                                                            0xffffffff;
             if (vals) {
-                battle_text(cmds[i], 132.0f, 112.0f + (float)i * 22,
+                battle_text(cmds[i], 132.0f, 62.0f + (float)i * 22,
                             col, &vp);
             } else {
                 float tw = battle_text_w(cmds[i]);
                 battle_text(cmds[i], 240.0f - tw * 0.5f,
-                            188.0f + (float)i * 22, col, &vp);
+                            182.0f + (float)i * 22, col, &vp);
             }
         }
         if (vp > v)
@@ -1442,7 +1442,7 @@ void render_menu(int mode, int cursor,
     vp = v;
     if (mode == 0) {
         for (i = 0; i < 4; i++)
-            battle_text(mcmds[i], 30.0f, 104.0f + (float)i * 24,
+            battle_text(mcmds[i], 30.0f, 99.0f + (float)i * 24,
                         0xffffffff, &vp);
         for (r = 0; r < nactors && r < 4; r++) {
             const MenuActor *a = &actors[r];
@@ -1463,15 +1463,15 @@ void render_menu(int mode, int cursor,
         if (shown > 9) shown = 9;
         if (shown < 0) shown = 0;
         if (!nrows)
-            battle_text("Nothing here.", 30.0f, 60.0f, 0xff808080, &vp);
+            battle_text("Nothing here.", 30.0f, 55.0f, 0xff808080, &vp);
         for (k = 0; k < shown; k++) {
-            float ry = 48.0f + (float)k * 22;
+            float ry = 42.0f + (float)k * 22;
             battle_text(rows[rowtop + k].text, 30.0f, ry,
                         rows[rowtop + k].color, &vp);
         }
     } else if (mode == 3) {
         for (r = 0; r < nrows && r < 5; r++) {
-            float ry = 72.0f + (float)r * 24;
+            float ry = 67.0f + (float)r * 24;
             battle_text(rows[r].text, 30.0f, ry, rows[r].color, &vp);
         }
         for (i = 0; i < 8; i++) {
@@ -1667,14 +1667,14 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         int nn = show_cmds ? ncmds : nlrows;
         if (nn < 1) nn = 1;
         if (nn > 5) nn = 5;
-        skin_box(8, 156, 142, 162 + (nn - 1) * 18 + 38, 0xc8343c42, 1);
+        skin_box(8, 156, 142, 162 + (nn - 1) * 20 + 40, 0xc8343c42, 1);
     }
     if (tgt_name && tgt_name[0])
         skin_box(8, 8, 472, 48, 0xc8343c42, 1);
     if (gab && gab[0] && gab_alpha > 0) {
         int ga = gab_alpha > 200 ? 200 : gab_alpha;
         unsigned int fill = ((unsigned)ga << 24) | 0x00343c42;
-        skin_box(8, 96, 472, 144, fill, 1);
+        skin_box(8, 104, 472, 144, fill, 1);
     }
 
 
@@ -1801,14 +1801,14 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         }
         if (show_cmds) {
             for (int i = 0; i < ncmds; i++) {
-                float cy = 162.0f + (float)i * 18.0f;
+                float cy = 157.0f + (float)i * 20;
                 battle_text(cmds[i], 30.0f, cy, 0xffffffff, &vp);
             }
         }
 
         if (show_list && lrows) {
             for (int i = 0; i < nlrows; i++) {
-                float cy = 162.0f + (float)i * 18.0f;
+                float cy = 157.0f + (float)i * 20;
                 battle_text(lrows[i].text, 50.0f, cy, lrows[i].color, &vp);
             }
         }
@@ -1836,32 +1836,25 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
 
         if (tgt_name && tgt_name[0]) {
             float tw = battle_text_w(tgt_name);
-            battle_text(tgt_name, (480.0f - tw) * 0.5f, 16.0f, 0xffffffff,
+            battle_text(tgt_name, (480.0f - tw) * 0.5f, 12.0f, 0xffffffff,
                         &vp);
         }
         if (gab && gab[0] && gab_alpha > 0) {
-            char line[80];
-            int n = 0, li = 0;
+            char line[52];
+            int k = 0;
             unsigned int gc = ((unsigned)(gab_alpha > 255 ? 255 :
                                           gab_alpha) << 24) | 0x00ffffff;
-            while (gab[n] && li < 2) {
-                int e = n + 50, s = e;
-                while (s > n && gab[s] && gab[s] != ' ') s--;
-                if (s <= n || !gab[e]) s = e;
-                {
-                    int k = 0;
-                    while (n + k < s && gab[n + k] && k < 51) {
-                        line[k] = gab[n + k];
-                        k++;
-                    }
-                    line[k] = 0;
-                }
-                battle_text(line, 24.0f, 104.0f + (float)li * 20, gc,
-                            &vp);
-                n = gab[s] ? s + 1 : s;
-                li++;
-                if (!gab[n]) break;
+            while (gab[k] && k < 46) {
+                line[k] = gab[k];
+                k++;
             }
+            if (gab[k]) {
+                line[44] = '.';
+                line[45] = '.';
+                k = 46;
+            }
+            line[k] = 0;
+            battle_text(line, 24.0f, 108.0f, gc, &vp);
         }
         if (log0 && log0[0])
             battle_text(log0, 12.0f, tgt_name && tgt_name[0] ? 52.0f : 10.0f,
