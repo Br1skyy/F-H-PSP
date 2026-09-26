@@ -2518,10 +2518,10 @@ int main(int argc, char *argv[]) {
                 static const char *onames[5] = {"Master", "BGM", "BGS",
                                                 "ME", "SE"};
                 int i;
-                if (input_pressed(&input, PSP_CTRL_UP) && opt_cur > 0)
-                    opt_cur--;
-                if (input_pressed(&input, PSP_CTRL_DOWN) && opt_cur < 4)
-                    opt_cur++;
+                if (input_pressed(&input, PSP_CTRL_UP))
+                    opt_cur = (opt_cur + 4) % 5;
+                if (input_pressed(&input, PSP_CTRL_DOWN))
+                    opt_cur = (opt_cur + 1) % 5;
                 if (input_pressed(&input, PSP_CTRL_LEFT) &&
                     opt_vol[opt_cur] > 0) {
                     opt_vol[opt_cur] -= 20;
@@ -2715,8 +2715,13 @@ int main(int argc, char *argv[]) {
                 if (mit.await_choice) {
 
                     if (!msg_text_revealed()) msg_reveal_all();
-                    if (input_pressed(&input, PSP_CTRL_UP) && msg_cursor > 0) msg_cursor--;
-                    if (input_pressed(&input, PSP_CTRL_DOWN) && msg_cursor < mit.choice_n - 1) msg_cursor++;
+                    if (input_pressed(&input, PSP_CTRL_UP) &&
+                        mit.choice_n > 0)
+                        msg_cursor = (msg_cursor + mit.choice_n - 1) %
+                                     mit.choice_n;
+                    if (input_pressed(&input, PSP_CTRL_DOWN) &&
+                        mit.choice_n > 0)
+                        msg_cursor = (msg_cursor + 1) % mit.choice_n;
                     if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                         mit.choice_sel = msg_cursor;
                         mit.await_choice = 0;
@@ -2815,11 +2820,10 @@ int main(int argc, char *argv[]) {
             }
             if (mnu_open) {
                 if (mnu_mode == 0) {
-                    if (input_pressed(&input, PSP_CTRL_UP) && mnu_cmd > 0)
-                        mnu_cmd--;
-                    if (input_pressed(&input, PSP_CTRL_DOWN) &&
-                        mnu_cmd < 3)
-                        mnu_cmd++;
+                    if (input_pressed(&input, PSP_CTRL_UP))
+                        mnu_cmd = (mnu_cmd + 3) % 4;
+                    if (input_pressed(&input, PSP_CTRL_DOWN))
+                        mnu_cmd = (mnu_cmd + 1) % 4;
                     if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                         mnu_row = 0;
                         mnu_top = 0;
@@ -2848,13 +2852,16 @@ int main(int argc, char *argv[]) {
                     }
                 } else if (mnu_mode == 1 || mnu_mode == 2) {
                     if (input_pressed(&input, PSP_CTRL_UP) &&
-                        mnu_row > 0) {
-                        mnu_row--;
+                        mnu_nrows > 0) {
+                        mnu_row = (mnu_row + mnu_nrows - 1) % mnu_nrows;
                         if (mnu_row < mnu_top) mnu_top = mnu_row;
+                        if (mnu_row > mnu_top + 8)
+                            mnu_top = mnu_row - 8;
                     }
                     if (input_pressed(&input, PSP_CTRL_DOWN) &&
-                        mnu_row < mnu_nrows - 1) {
-                        mnu_row++;
+                        mnu_nrows > 0) {
+                        mnu_row = (mnu_row + 1) % mnu_nrows;
+                        if (mnu_row < mnu_top) mnu_top = mnu_row;
                         if (mnu_row > mnu_top + 8)
                             mnu_top = mnu_row - 8;
                     }
@@ -2864,11 +2871,10 @@ int main(int argc, char *argv[]) {
                         mnu_top = 0;
                     }
                 } else if (mnu_mode == 3) {
-                    if (input_pressed(&input, PSP_CTRL_UP) && mnu_row > 0)
-                        mnu_row--;
-                    if (input_pressed(&input, PSP_CTRL_DOWN) &&
-                        mnu_row < 4)
-                        mnu_row++;
+                    if (input_pressed(&input, PSP_CTRL_UP))
+                        mnu_row = (mnu_row + 4) % 5;
+                    if (input_pressed(&input, PSP_CTRL_DOWN))
+                        mnu_row = (mnu_row + 1) % 5;
                     if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                         mnu_slot = mnu_row;
                         mnu_row = 0;
@@ -2893,13 +2899,13 @@ int main(int argc, char *argv[]) {
                     }
                 } else if (mnu_mode == 4) {
                     if (input_pressed(&input, PSP_CTRL_UP) &&
-                        mnu_row > 0) {
-                        mnu_row--;
+                        mnu_nrows > 0) {
+                        mnu_row = (mnu_row + mnu_nrows - 1) % mnu_nrows;
                         if (mnu_row < mnu_top) mnu_top = mnu_row;
                     }
                     if (input_pressed(&input, PSP_CTRL_DOWN) &&
-                        mnu_row < mnu_nrows - 1) {
-                        mnu_row++;
+                        mnu_nrows > 0) {
+                        mnu_row = (mnu_row + 1) % mnu_nrows;
                         if (mnu_row > mnu_top + 8)
                             mnu_top = mnu_row - 8;
                     }
@@ -2940,11 +2946,11 @@ int main(int argc, char *argv[]) {
             if (!dbg_open && !mnu_open && btl_enc_t == 0) {
                 if (input_pressed(&input, PSP_CTRL_SELECT)) dbg_try_open();
             } else if (dbg_open) {
-                if (input_pressed(&input, PSP_CTRL_UP) && dbg_sel > 0)
-                    dbg_sel--;
+                if (input_pressed(&input, PSP_CTRL_UP) && dbg_count > 0)
+                    dbg_sel = (dbg_sel + dbg_count - 1) % dbg_count;
                 if (input_pressed(&input, PSP_CTRL_DOWN) &&
-                    dbg_sel < dbg_count - 1)
-                    dbg_sel++;
+                    dbg_count > 0)
+                    dbg_sel = (dbg_sel + 1) % dbg_count;
                 if (input_pressed(&input, PSP_CTRL_CROSS)) {
                     dbg_open = 0;
                     talk_cool = 45;
@@ -3015,11 +3021,13 @@ int main(int argc, char *argv[]) {
             if (btl_ev_active) {
                 if (tit.await_choice) {
                     if (!msg_text_revealed()) msg_reveal_all();
-                    if (input_pressed(&input, PSP_CTRL_UP) && btl_ev_cursor > 0)
-                        btl_ev_cursor--;
+                    if (input_pressed(&input, PSP_CTRL_UP) &&
+                        tit.choice_n > 0)
+                        btl_ev_cursor = (btl_ev_cursor + tit.choice_n - 1) %
+                                        tit.choice_n;
                     if (input_pressed(&input, PSP_CTRL_DOWN) &&
-                        btl_ev_cursor < tit.choice_n - 1)
-                        btl_ev_cursor++;
+                        tit.choice_n > 0)
+                        btl_ev_cursor = (btl_ev_cursor + 1) % tit.choice_n;
                     if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                         tit.choice_sel = btl_ev_cursor;
                         tit.await_choice = 0;
@@ -3123,10 +3131,10 @@ int main(int argc, char *argv[]) {
             } else if (btl_phase == 0) {
 
 
-                if (input_pressed(&input, PSP_CTRL_UP) && btl_cmd > 0)
-                    btl_cmd--;
-                if (input_pressed(&input, PSP_CTRL_DOWN) && btl_cmd < 3)
-                    btl_cmd++;
+                if (input_pressed(&input, PSP_CTRL_UP))
+                    btl_cmd = (btl_cmd + 3) % 4;
+                if (input_pressed(&input, PSP_CTRL_DOWN))
+                    btl_cmd = (btl_cmd + 1) % 4;
                 if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                     if (btl_cmd == 0) {
                         btl_act_kind = 0;
@@ -3158,13 +3166,17 @@ int main(int argc, char *argv[]) {
                 }
             } else if (btl_phase == 5) {
 
-                if (input_pressed(&input, PSP_CTRL_UP) && btl_list_cur > 0) {
-                    btl_list_cur--;
+                if (input_pressed(&input, PSP_CTRL_UP) && btl_nknown > 0) {
+                    btl_list_cur = (btl_list_cur + btl_nknown - 1) %
+                                   btl_nknown;
                     if (btl_list_cur < btl_list_top) btl_list_top = btl_list_cur;
+                    if (btl_list_cur > btl_list_top + 4)
+                        btl_list_top = btl_list_cur - 4;
                 }
                 if (input_pressed(&input, PSP_CTRL_DOWN) &&
-                    btl_list_cur < btl_nknown - 1) {
-                    btl_list_cur++;
+                    btl_nknown > 0) {
+                    btl_list_cur = (btl_list_cur + 1) % btl_nknown;
+                    if (btl_list_cur < btl_list_top) btl_list_top = btl_list_cur;
                     if (btl_list_cur > btl_list_top + 4)
                         btl_list_top = btl_list_cur - 4;
                 }
@@ -3208,13 +3220,17 @@ int main(int argc, char *argv[]) {
                 }
             } else if (btl_phase == 6) {
 
-                if (input_pressed(&input, PSP_CTRL_UP) && btl_list_cur > 0) {
-                    btl_list_cur--;
+                if (input_pressed(&input, PSP_CTRL_UP) && btl_nitems > 0) {
+                    btl_list_cur = (btl_list_cur + btl_nitems - 1) %
+                                   btl_nitems;
                     if (btl_list_cur < btl_list_top) btl_list_top = btl_list_cur;
+                    if (btl_list_cur > btl_list_top + 4)
+                        btl_list_top = btl_list_cur - 4;
                 }
                 if (input_pressed(&input, PSP_CTRL_DOWN) &&
-                    btl_list_cur < btl_nitems - 1) {
-                    btl_list_cur++;
+                    btl_nitems > 0) {
+                    btl_list_cur = (btl_list_cur + 1) % btl_nitems;
+                    if (btl_list_cur < btl_list_top) btl_list_top = btl_list_cur;
                     if (btl_list_cur > btl_list_top + 4)
                         btl_list_top = btl_list_cur - 4;
                 }
@@ -3509,7 +3525,14 @@ int main(int argc, char *argv[]) {
             if (btl_enc_t == 0)
                 btl_start(btl_enc_tick, btl_enc_char, btl_enc_troop);
         }
-        btl_enc_flash = btl_enc_t > 20 ? 255 * (btl_enc_t - 20) / 40 : 0;
+        btl_enc_flash = 0;
+        if (btl_enc_t > 0) {
+            int n = 60 - btl_enc_t;
+            if (n >= 2 && n < 40)
+                btl_enc_flash = 255;
+            else if (n >= 40)
+                btl_enc_flash = 255 * (60 - n) / 20;
+        }
         player_update(&player, (dbg_open || mnu_open || btl_enc_t > 0) ? 0 : input.buttons,
                       (uint16_t*)map_passability,
                       MAP_W, MAP_H, npc_solid);

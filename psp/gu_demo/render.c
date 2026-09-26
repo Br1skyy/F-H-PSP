@@ -23,10 +23,10 @@ static const unsigned int MSG_PAL[32] = {
     0xffffcc99, 0xffffc0cc, 0xffa0ffff, 0xff808080,
     0xffc0c0c0, 0xffcc8020, 0xff1038ff, 0xff10a000,
     0xffde9a3e, 0xffff98a0, 0xff39d6fd, 0xff000000,
-    0xff9b7e64, 0xff7bdcdb, 0xff2020ff, 0xff402020,
-    0xff2a3023, 0xff112511, 0xff2a3023, 0xff112511,
+    0xff9b7e64, 0xff7bdcdc, 0xff2020ff, 0xff404020,
+    0xff2a3050, 0xff112589, 0xff2a3050, 0xff112589,
     0xff80ff80, 0xff8080c0, 0xffff8080, 0xfff0c041,
-    0xff40100a, 0xff60e060, 0xffe060a0, 0xffff80c0,
+    0xff40a000, 0xff60e000, 0xffe060a0, 0xffff80c0,
 };
 
 
@@ -1828,9 +1828,9 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         if (hot || dying) {
             unsigned int wa;
             if (dying)
-                wa = (((unsigned int)(160 * col / 32)) << 24) | 0x008080ff;
+                wa = 0x808080ff;
             else
-                wa = 0xc0ffffff;
+                wa = 0x40ffffff;
             sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_FIX, 0, 0x00ffffff);
             TVert *w = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
             w[0].u = 0; w[0].v = 0; w[0].color = wa;
