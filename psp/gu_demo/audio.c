@@ -197,6 +197,7 @@ static void au_stream_fill(AVoice *v, const char *path, int loop) {
         au_last_err = -102;
         snprintf(au_err_at, sizeof(au_err_at), "ovopen %-34s", path);
         fclose(f);
+        v->f = 0;
         return;
     }
     {
@@ -222,10 +223,7 @@ static void au_stream_stop(AVoice *v) {
         ov_clear(&v->vf);
         v->stream_open = 0;
     }
-    if (v->f) {
-        fclose(v->f);
-        v->f = 0;
-    }
+    v->f = 0;
     v->active = 0;
     v->kind = 0;
     v->name[0] = 0;
@@ -251,15 +249,27 @@ static void au_stream_start(AVoice *v, const char *dir, const char *name,
         v->name[0] = 0;
 }
 
+static void au_mix_chunk(short *out);
+
+
 static int au_thread(SceSize args, void *argp) {
     static short out[AU_CHUNK * 2];
-    static int acc[AU_CHUNK * 2];
     (void)args;
     (void)argp;
     for (;;) {
-        int i, n;
         sceKernelWaitSema(au_sema, 1, 0);
-        for (i = 0; i < AU_CHUNK * 2; i++) acc[i] = 0;
+        au_mix_chunk(out);
+        sceKernelSignalSema(au_sema, 1);
+        sceAudioOutputBlocking(au_ch, PSP_AUDIO_VOLUME_MAX, out);
+        if ((++au_mix_count & 255) == 0)
+            au_trace("mix", au_mix_count);
+    }
+    return 0;
+}
+static void au_mix_chunk(short *out) {
+    static int acc[AU_CHUNK * 2];
+    int i, n;
+    for (i = 0; i < AU_CHUNK * 2; i++) acc[i] = 0;
         for (n = 0; n < AU_SE_N; n++) {
             AVoice *v = &au_se[n];
             int s, l, r;
@@ -322,12 +332,6 @@ static int au_thread(SceSize args, void *argp) {
             if (s > 32767) s = 32767;
             out[i] = (short)s;
         }
-        sceKernelSignalSema(au_sema, 1);
-        sceAudioOutputBlocking(au_ch, PSP_AUDIO_VOLUME_MAX, out);
-        if ((++au_mix_count & 255) == 0)
-            au_trace("mix", au_mix_count);
-    }
-    return 0;
 }
 
 void audio_init(void) {
