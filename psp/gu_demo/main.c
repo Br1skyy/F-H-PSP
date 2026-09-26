@@ -1098,6 +1098,7 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
         }
     }
     battle_mode = 1;
+    audio_forget(&tit);
     {
         int pg = btl_ev_scan(0);
         if (pg >= 0) btl_ev_begin(pg);

@@ -564,11 +564,32 @@ void audio_pop_bgm(void) {
 typedef struct {
     FhInterp *it;
     int se_count;
-    char bgm[64], bgs[64], me[64];
+    char bgm[64], bgs[64], me[64], bbgm[64];
     int bgm_fade, bgs_fade;
 } AuSlot;
 
 static AuSlot au_slots[2];
+
+void audio_forget(FhInterp *it) {
+    int i;
+    if (!it || au_sema < 0)
+        return;
+    sceKernelWaitSema(au_sema, 1, 0);
+    for (i = 0; i < 2; i++) {
+        if (au_slots[i].it == it) {
+            au_slots[i].se_count = 0;
+            au_slots[i].bgm[0] = au_slots[i].bgs[0] = 0;
+            au_slots[i].me[0] = au_slots[i].bbgm[0] = 0;
+            au_slots[i].bgm_fade = au_slots[i].bgs_fade = 0;
+        }
+    }
+    it->se_count = 0;
+    it->bbgm[0] = 0;
+    it->victory_me[0] = 0;
+    it->defeat_me[0] = 0;
+    it->last_me[0] = 0;
+    sceKernelSignalSema(au_sema, 1);
+}
 
 void audio_poll(FhInterp *it) {
     AuSlot *s = 0;
@@ -601,6 +622,11 @@ void audio_poll(FhInterp *it) {
             au_stream_stop(&au_bgm);
             sceKernelSignalSema(au_sema, 1);
         }
+    }
+    if (strcmp(it->bbgm, s->bbgm)) {
+        snprintf(s->bbgm, sizeof(s->bbgm), "%s", it->bbgm);
+        if (it->bbgm[0])
+            audio_play_bgm(it->bbgm, it->bbgm_vol, it->bbgm_pitch);
     }
     if (it->bgm_fade) {
         audio_fade_bgm(it->bgm_fade);

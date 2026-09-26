@@ -18,6 +18,7 @@ void audio_push_bgm(void);
 void audio_pop_bgm(void);
 void audio_push_bgs(void);
 void audio_pop_bgs(void);
+void audio_forget(FhInterp *it);
 void audio_status(char *out, int cap);
 
 #endif
