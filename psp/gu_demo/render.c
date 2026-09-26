@@ -816,6 +816,7 @@ static void msg_text_cb(const char *ptr, int len, void *ud) {
             msg_name[o++] = ptr[k++];
         }
         msg_name[o] = 0;
+        while (o > 0 && msg_name[o - 1] == ' ') msg_name[--o] = 0;
         msg_expect_name = 0;
         if (k < len && ptr[k] == '>') k++;
         i = k;
