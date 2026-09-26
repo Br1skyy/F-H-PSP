@@ -24,7 +24,6 @@ typedef struct {
     OggVorbis_File vf;
     int stream_open;
     long stream_total;
-    int fail_streak;
     short cache[AU_CACHE_FRAMES * 2];
     long cache_start;
     int cache_n;
@@ -32,7 +31,12 @@ typedef struct {
     int vol, pitch, pan;
     int lg, rg;
     int active, loop;
+    int fail_streak;
     int fade_left, fade_total, fade_from;
+    int pend;
+    char pend_path[96];
+    int pend_vol, pend_pitch, pend_pan, pend_loop;
+    int opening;
     char name[64];
 } AVoice;
 
@@ -218,7 +222,7 @@ static void au_stream_fill(AVoice *v, const char *path, int loop) {
     v->active = 1;
 }
 
-static void au_stream_stop(AVoice *v) {
+static void au_teardown(AVoice *v) {
     if (v->stream_open) {
         ov_clear(&v->vf);
         v->stream_open = 0;
@@ -229,6 +233,15 @@ static void au_stream_stop(AVoice *v) {
     v->name[0] = 0;
 }
 
+static void au_stream_stop(AVoice *v) {
+    if (v->opening) {
+        v->pend = 2;
+        return;
+    }
+    au_teardown(v);
+    v->pend = 0;
+}
+
 static void au_stream_start(AVoice *v, const char *dir, const char *name,
                             int vol, int pitch, int pan, int loop) {
     char path[96];
@@ -236,17 +249,18 @@ static void au_stream_start(AVoice *v, const char *dir, const char *name,
         au_stream_stop(v);
         return;
     }
-    if (v->active && !strcmp(v->name, name))
+    if (!v->opening && v->active && !strcmp(v->name, name))
         return;
-    au_stream_stop(v);
+    if (!v->opening)
+        au_teardown(v);
     snprintf(path, sizeof(path), "data/audio/%s/%s.ogg", dir, name);
-    v->vol = vol;
-    v->pitch = pitch < 50 ? 50 : pitch > 150 ? 150 : pitch;
-    v->pan = pan;
+    snprintf(v->pend_path, sizeof(v->pend_path), "%s", path);
+    v->pend_vol = vol;
+    v->pend_pitch = pitch < 50 ? 50 : pitch > 150 ? 150 : pitch;
+    v->pend_pan = pan;
+    v->pend_loop = loop;
     snprintf(v->name, sizeof(v->name), "%s", name);
-    au_stream_fill(v, path, loop);
-    if (!v->active)
-        v->name[0] = 0;
+    v->pend = 1;
 }
 
 static void au_mix_chunk(short *out);
@@ -269,6 +283,31 @@ static int au_thread(SceSize args, void *argp) {
 static void au_mix_chunk(short *out) {
     static int acc[AU_CHUNK * 2];
     int i, n;
+    {
+        AVoice *vs[3] = {&au_bgm, &au_bgs, &au_me};
+        for (n = 0; n < 3; n++) {
+            AVoice *v = vs[n];
+            if (v->pend != 1)
+                continue;
+            v->pend = 0;
+            v->opening = 1;
+            v->vol = v->pend_vol;
+            v->pitch = v->pend_pitch;
+            v->pan = v->pend_pan;
+            sceKernelSignalSema(au_sema, 1);
+            au_stream_fill(v, v->pend_path, v->pend_loop);
+            sceKernelWaitSema(au_sema, 1, 0);
+            v->opening = 0;
+            if (v->pend == 2) {
+                au_teardown(v);
+                v->pend = 0;
+            } else if (v->pend == 1) {
+                au_teardown(v);
+            } else if (!v->active) {
+                v->name[0] = 0;
+            }
+        }
+    }
     for (i = 0; i < AU_CHUNK * 2; i++) acc[i] = 0;
         for (n = 0; n < AU_SE_N; n++) {
             AVoice *v = &au_se[n];
