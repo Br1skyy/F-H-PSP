@@ -1497,9 +1497,9 @@ void render_menu(int mode, int cursor,
         sceGuEnable(GU_BLEND);
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0,
                        0);
-        d[0].u = 0; d[0].v = 0; d[0].color = 0xa0000000;
+        d[0].u = 0; d[0].v = 0; d[0].color = 0x40000000;
         d[0].x = 0; d[0].y = 0; d[0].z = 0.0f;
-        d[1].u = 0; d[1].v = 0; d[1].color = 0xa0000000;
+        d[1].u = 0; d[1].v = 0; d[1].color = 0x40000000;
         d[1].x = (float)SCR_W; d[1].y = (float)SCR_H; d[1].z = 0.0f;
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, d);
     }
@@ -1522,6 +1522,8 @@ void render_menu(int mode, int cursor,
                 bw = bh * 91.0f / 180.0f;
             }
             bx = cx + (colw - bw) * 0.5f;
+            skin_box((int)bx, 16, (int)(bx + bw), (int)(16.0f + bh),
+                     0x00000000, 1);
             if (a->bust >= 0 && a->bust < 4 && bust_t8[a->bust])
                 draw_bust(bust_t8[a->bust], bust_cl[a->bust], bx, 16.0f,
                           bw, bh);
@@ -1568,6 +1570,15 @@ void render_menu(int mode, int cursor,
                 skin_box(12, 46 + (float)r * 22, 468,
                          46 + (float)r * 22 + 24, hc, 0);
         }
+    } else if (mode == 5) {
+        skin_box(8, 40, 472, 264, WIN_BG, 1);
+        {
+            const MenuActor *a = &actors[cur_actor < nactors ? cur_actor
+                                                             : 0];
+            skin_box(24, 56, 96, 128, 0x00000000, 1);
+            draw_face(face_t8[a->face_sheet], face_cl[a->face_sheet],
+                      a->face_cell, 24.0f, 56.0f, 72.0f);
+        }
     } else {
         skin_box(8, 64, 226, 64 + 5 * 24 + 16, WIN_BG, 1);
         for (r = 0; r < nrows && r < 5; r++) {
@@ -1576,12 +1587,6 @@ void render_menu(int mode, int cursor,
                          70 + (float)r * 24 + 26, hc, 0);
         }
         skin_box(236, 64, 472, 64 + 8 * 22 + 16, WIN_BG, 1);
-        if (mode == 5) {
-            const MenuActor *a = &actors[cur_actor < nactors ? cur_actor
-                                                             : 0];
-            draw_face(face_t8[a->face_sheet], face_cl[a->face_sheet],
-                      a->face_cell, 24.0f, 56.0f, 72.0f);
-        }
     }
     if (!font_px) return;
     sceGuEnable(GU_BLEND);
@@ -1666,14 +1671,15 @@ void render_menu(int mode, int cursor,
         battle_text(lv, 110.0f, 84.0f, 0xffffffff, &vp);
         snprintf(hp, sizeof(hp), "HP %d/%d", a->hp, a->mhp);
         snprintf(mp, sizeof(mp), "MP %d/%d", a->mp, a->mmp);
-        battle_text(hp, 110.0f, 108.0f, 0xffffffff, &vp);
-        battle_text(mp, 280.0f, 108.0f, 0xffffffff, &vp);
+        battle_text(hp, 280.0f, 60.0f, 0xffffffff, &vp);
+        battle_text(mp, 280.0f, 84.0f, 0xffffffff, &vp);
         for (i = 0; i < 8; i++) {
             char pb[32];
-            float ry = 148.0f + (float)i * 13;
+            float px = (i < 4) ? 30.0f : 260.0f;
+            float ry = 150.0f + (float)(i % 4) * 22;
             snprintf(pb, sizeof(pb), "%s %d", pnames[i],
                      preview ? preview[i] : 0);
-            battle_text(pb, 30.0f, ry, 0xffffffff, &vp);
+            battle_text(pb, px, ry, 0xffffffff, &vp);
         }
     }
     if (vp > v)
@@ -2017,6 +2023,8 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         for (int i = 0; i < npops; i++) {
 
             float k = pops[i].max > 0 ? (float)pops[i].ttl / (float)pops[i].max : 0.0f;
+            float ox = (float)((i % 3) - 1) * 14.0f;
+            float oy = (float)(i / 3) * 18.0f;
             if (k < 0.0f) k = 0.0f;
             char buf[16];
             unsigned int col;
@@ -2031,8 +2039,8 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             }
             col = (col & 0x00ffffff) |
                   (((unsigned int)(255.0f * k)) << 24);
-            float py = (float)pops[i].y - (1.0f - k) * 24.0f;
-            battle_text(buf, (float)pops[i].x, py, col, &vp);
+            float py = (float)pops[i].y - (1.0f - k) * 24.0f - oy;
+            battle_text(buf, (float)pops[i].x + ox, py, col, &vp);
         }
 
 
