@@ -189,6 +189,9 @@ int fh_interp_step(FhInterp *it) {
             }
             case 132:
                 if (c->s) snprintf(it->bbgm, FH_NAME_CAP, "%s", c->s);
+                it->bbgm_vol = c->p[0];
+                it->bbgm_pitch = c->p[1];
+                it->bbgm_pan = c->p[2];
                 it->pc++;
                 break;
             case 135:
@@ -516,9 +519,19 @@ int fh_interp_step(FhInterp *it) {
             case 249:
                 if (c->s) {
                     char *dst = it->last_bgm;
-                    if (c->code == 245) dst = it->last_bgs;
-                    if (c->code == 249) dst = it->last_me;
+                    int *vv = &it->bgm_vol;
+                    if (c->code == 245) {
+                        dst = it->last_bgs;
+                        vv = &it->bgs_vol;
+                    }
+                    if (c->code == 249) {
+                        dst = it->last_me;
+                        vv = &it->me_vol;
+                    }
                     snprintf(dst, FH_NAME_CAP, "%s", c->s);
+                    vv[0] = c->p[0];
+                    vv[1] = c->p[1];
+                    vv[2] = c->p[2];
                 }
                 it->pc++;
                 break;
@@ -529,10 +542,16 @@ int fh_interp_step(FhInterp *it) {
             case 244: it->bgm_replayed = 1; it->pc++; break;
             case 133:
                 if (c->s) snprintf(it->victory_me, FH_NAME_CAP, "%s", c->s);
+                it->victory_vol = c->p[0];
+                it->victory_pitch = c->p[1];
+                it->victory_pan = c->p[2];
                 it->pc++;
                 break;
             case 139:
                 if (c->s) snprintf(it->defeat_me, FH_NAME_CAP, "%s", c->s);
+                it->defeat_vol = c->p[0];
+                it->defeat_pitch = c->p[1];
+                it->defeat_pan = c->p[2];
                 it->pc++;
                 break;
             case 134: it->save_on = (c->p[0] != 0); it->pc++; break;
@@ -826,6 +845,9 @@ int fh_interp_step(FhInterp *it) {
                     if (n > 63) n = 63;
                     memcpy(it->last_se, c->s, (size_t)n);
                     it->last_se[n] = '\0';
+                    it->se_vol = c->p[0];
+                    it->se_pitch = c->p[1];
+                    it->se_pan = c->p[2];
                     it->se_count++;
                 }
                 it->pc++;

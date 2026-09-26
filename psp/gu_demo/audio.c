@@ -15,6 +15,12 @@
 static int au_mix_count;
 static int au_last_err;
 static char au_err_at[48];
+static int au_master = 100;
+static int au_bus[4] = {100, 100, 100, 100};
+
+static int au_bus_gain(int bus) {
+    return au_master * au_bus[bus] / 100;
+}
 
 typedef struct {
     int kind;
@@ -308,6 +314,10 @@ static void au_mix_chunk(short *out) {
             }
         }
     }
+    int gse = au_bus_gain(3);
+    int gbgm = au_bus_gain(0);
+    int gbgs = au_bus_gain(1);
+    int gme = au_bus_gain(2);
     for (i = 0; i < AU_CHUNK * 2; i++) acc[i] = 0;
         for (n = 0; n < AU_SE_N; n++) {
             AVoice *v = &au_se[n];
@@ -326,15 +336,15 @@ static void au_mix_chunk(short *out) {
                 }
                 if (!au_voice_sample(v, &l, &r))
                     break;
-                acc[s * 2] += l * v->lg >> 8;
-                acc[s * 2 + 1] += r * v->rg >> 8;
+                acc[s * 2] += (l * v->lg >> 8) * gse / 100;
+                acc[s * 2 + 1] += (r * v->rg >> 8) * gse / 100;
             }
         }
         {
             AVoice *vs[3] = {&au_bgm, &au_bgs, &au_me};
-            for (n = 0; n < 3; n++) {
-                AVoice *v = vs[n];
-                int s;
+        for (n = 0; n < 3; n++) {
+            AVoice *v = vs[n];
+            int s, gb = n == 0 ? gbgm : n == 1 ? gbgs : gme;
                 if (!v->active)
                     continue;
                 au_gains(v, &v->lg, &v->rg);
@@ -360,8 +370,8 @@ static void au_mix_chunk(short *out) {
                         break;
                     }
                     v->fail_streak = 0;
-                    acc[s * 2] += (l * v->lg >> 8) * g >> 8;
-                    acc[s * 2 + 1] += (r * v->rg >> 8) * g >> 8;
+                    acc[s * 2] += ((l * v->lg >> 8) * g >> 8) * gb / 100;
+                    acc[s * 2 + 1] += ((r * v->rg >> 8) * g >> 8) * gb / 100;
                 }
             }
         }
@@ -569,6 +579,16 @@ typedef struct {
 } AuSlot;
 
 static AuSlot au_slots[2];
+
+void audio_set_master(int vol) {
+    au_master = vol < 0 ? 0 : vol > 100 ? 100 : vol;
+}
+
+void audio_set_bus(int bus, int vol) {
+    if (bus < 0 || bus > 3)
+        return;
+    au_bus[bus] = vol < 0 ? 0 : vol > 100 ? 100 : vol;
+}
 
 void audio_forget(FhInterp *it) {
     int i;
