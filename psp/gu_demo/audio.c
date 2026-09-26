@@ -345,9 +345,10 @@ void audio_init(void) {
 }
 
 void audio_status(char *out, int cap) {
-    snprintf(out, cap, "mix=%d err=%d@%s bgm=%d bgs=%d",
-             au_mix_count, au_last_err, au_err_at,
-             au_bgm.active, au_bgs.active);
+    snprintf(out, cap, "mix=%d err=%d@%s bgm=%d:%ld/%ldv%d bgs=%d:%ld/%ld",
+             au_mix_count, au_last_err, au_err_at, au_bgm.active,
+             (long)au_bgm.pos, au_bgm.stream_total, au_bgm.vol,
+             au_bgs.active, (long)au_bgs.pos, au_bgs.stream_total);
 }
 
 static void au_se_alloc(const char *name, int vol, int pitch, int pan) {

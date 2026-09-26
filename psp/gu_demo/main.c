@@ -1957,7 +1957,7 @@ int main(int argc, char *argv[]) {
     int frames = 0, fps = 0;
 
 
-    static char debug_text[128] = "";
+    static char debug_text[192] = "";
     int last_debug_update = 0;
     int talk_cool = 0;
     int talk_lock = 0;
