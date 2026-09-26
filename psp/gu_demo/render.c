@@ -1055,6 +1055,7 @@ typedef struct {
     int active, row;
     int foe_idx, mirror;
     int duration;
+    int tick;
     int frame;
 } BtAnimLive;
 
@@ -1103,7 +1104,8 @@ void battle_anim_start(int anim_id, int foe_idx, int mirror) {    int r = anim_r
         bt_anims[i].row = r;
         bt_anims[i].foe_idx = foe_idx;
         bt_anims[i].mirror = mirror ? 1 : 0;
-        bt_anims[i].duration = ANIM_IDX[r].nframes * ANIM_RATE + 1;
+        bt_anims[i].duration = ANIM_IDX[r].hold * ANIM_RATE + 1;
+        bt_anims[i].tick = 0;
         bt_anims[i].frame = -1;
         return;
     }
@@ -1123,11 +1125,11 @@ void battle_anim_tick(void) {
             continue;
         }
 
-        if (bt_anims[i].duration % ANIM_RATE == 0) {
-            int nf = ANIM_IDX[bt_anims[i].row].nframes;
-            int fi = nf - (bt_anims[i].duration + ANIM_RATE - 1) / ANIM_RATE;
-            if (fi >= 0 && fi < nf) {
-                bt_anims[i].frame = fi;
+        bt_anims[i].tick++;
+        if ((bt_anims[i].tick - 1) % ANIM_RATE == 0) {
+            int fi = (bt_anims[i].tick - 1) / ANIM_RATE;
+            bt_anims[i].frame = fi;
+            {
                 const FhAnimTiming *tm = ANIM_IDX[bt_anims[i].row].tim;
                 for (int k = 0; k < ANIM_IDX[bt_anims[i].row].ntim; k++) {
                     if (tm[k].frame != fi) continue;
@@ -1199,6 +1201,9 @@ void render_battle_anims(const BtFoeDraw *foes, int nfoes) {
         int fi = bt_anims[i].frame;
         int nf = ANIM_IDX[bt_anims[i].row].nframes;
         if (fi < 0 || fi >= nf) continue;
+        if (!ANIM_IDX[bt_anims[i].row].cells ||
+            !ANIM_IDX[bt_anims[i].row].foff)
+            continue;
 
 
         float ox = (float)SCR_W / 2.0f, oy = (float)SCR_H / 2.0f;
@@ -1669,7 +1674,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     if (gab && gab[0] && gab_alpha > 0) {
         int ga = gab_alpha > 200 ? 200 : gab_alpha;
         unsigned int fill = ((unsigned)ga << 24) | 0x00343c42;
-        skin_box(8, 150, 472, 198, fill, 1);
+        skin_box(8, 96, 472, 144, fill, 1);
     }
 
 
@@ -1851,7 +1856,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                     }
                     line[k] = 0;
                 }
-                battle_text(line, 24.0f, 158.0f + (float)li * 20, gc,
+                battle_text(line, 24.0f, 104.0f + (float)li * 20, gc,
                             &vp);
                 n = gab[s] ? s + 1 : s;
                 li++;

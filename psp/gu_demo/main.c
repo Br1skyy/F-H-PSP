@@ -125,7 +125,6 @@ static void btl_trace(const char *line) {
     }
 }
 static BtPopup btl_pops[8];
-static int btl_dmgse_n;
 
 
 static char btl_log[2][96];
@@ -1425,18 +1424,11 @@ static void btl_do_use(BtF *sub, const BtSkill *sk, const BtFx *fx, int nfx,
             }
             if (missed || evaded) {
                 btl_pop_at(px, py, 0, 1);
-                audio_play_se("Miss", 90, 100, 0);
             } else if (sk->dmg_type == 3 || sk->dmg_type == 4) {
                 if (dmg > 0) btl_pop_at(px, py, dmg, 3);
             } else if (dmg > 0 && (sk->dmg_type == 1 || sk->dmg_type == 2 ||
                        sk->dmg_type == 5 || sk->dmg_type == 6)) {
                 btl_pop_at(px, py, dmg, crit ? 2 : 0);
-                btl_dmgse_n = (btl_dmgse_n % 5) + 1;
-                {
-                    char dnm[8];
-                    snprintf(dnm, sizeof(dnm), "Damage%d", btl_dmgse_n);
-                    audio_play_se(dnm, 90, crit ? 115 : 100, 0);
-                }
             } else {
                 int rec = (tgt->hp - hp0) + (tgt->mp - mp0);
                 if (rec > 0) btl_pop_at(px, py, rec, 3);
@@ -3346,6 +3338,33 @@ int main(int argc, char *argv[]) {
                         r++;
                     if (FOE_DB[r].id)
                         tgt_name = FOE_DB[r].name;
+                }
+            }
+            {
+                static char tbuf[32768];
+                static int tlen = 0, tcount = 0;
+                char tb[96];
+                int n = snprintf(tb, sizeof(tb),
+                                 "f ph=%d ev=%d oi=%d/%d wt=%d ch=%d pw=%d end=%d\n",
+                                 btl_phase, btl_ev_active, btl_oi,
+                                 btl_norder, btl_wait, tit.await_choice,
+                                 btl_ev_pagewait, btl_ev_ended);
+                if (n > 0) {
+                    if (tlen + n >= (int)sizeof(tbuf)) tlen = 0;
+                    memcpy(tbuf + tlen, tb, (size_t)n);
+                    tlen += n;
+                }
+                if (++tcount >= 64) {
+                    SceUID fd;
+                    tcount = 0;
+                    fd = sceIoOpen("ms0:/fh_battle.txt",
+                                   PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND,
+                                   0777);
+                    if (fd >= 0) {
+                        sceIoWrite(fd, tbuf, tlen);
+                        sceIoClose(fd);
+                    }
+                    tlen = 0;
                 }
             }
             render_battle(draws, btl.n_foes, btl_pops, 8, st_name,
