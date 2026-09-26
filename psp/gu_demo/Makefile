@@ -8,7 +8,7 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o b
        d_flame.o d_flamec.o d_creat.o d_creatc.o \
        d_mobj.o d_mobjc.o d_ghost.o d_ghostc.o d_guard1.o d_guard1c.o \
        d_font.o d_fontc.o d_fontadv.o \
-       d_win.o d_winc.o d_title.o \
+       d_win.o d_winc.o d_title.o d_titlec.o \
        d_face1.o d_face1c.o d_face2.o d_face2c.o d_face3.o d_face3c.o \
        d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
        d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o \
@@ -115,8 +115,10 @@ d_fontc.o: data/font.clut
 	bin2o -i data/font.clut d_fontc.o d_fontc
 d_win.o: data/window.t8
 	bin2o -i data/window.t8 d_win.o d_win
-d_title.o: data/title.rgba
-	bin2o -i data/title.rgba d_title.o d_title
+d_title.o: data/title.t8
+	bin2o -i data/title.t8 d_title.o d_title
+d_titlec.o: data/title.clut
+	bin2o -i data/title.clut d_titlec.o d_titlec
 d_face1.o: data/face_Actor1.t8
 	bin2o -i data/face_Actor1.t8 d_face1.o d_face1
 d_face1c.o: data/face_Actor1.clut

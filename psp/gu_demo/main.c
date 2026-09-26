@@ -1684,7 +1684,7 @@ extern unsigned char d_ghost_start[], d_ghostc_start[];
 extern unsigned char d_guard1_start[], d_guard1c_start[];
 extern unsigned char d_font_start[], d_fontc_start[], d_fontadv_start[];
 extern unsigned char d_win_start[], d_winc_start[];
-extern unsigned char d_title_start[];
+extern unsigned char d_title_start[], d_titlec_start[];
 extern unsigned char d_tmerc_start[], d_tmercc_start[];
 extern unsigned char d_toutl_start[], d_toutlc_start[];
 extern unsigned char d_tpriest_start[], d_tpriestc_start[];
@@ -2319,7 +2319,7 @@ static void dbg_draw(void) {
     int n = 0, rows = 24, i;
     n += snprintf(dbg_text + n, sizeof(dbg_text) - n,
                   "BATTLE DEBUG (%d troops)\n"
-                  "UP/DN move CIRCLE fight CROSS close TRIANGLE save\n", dbg_count);
+                  "UP/DN move CIRCLE fight CROSS close\n", dbg_count);
     if (dbg_sel < dbg_top) dbg_top = dbg_sel;
     if (dbg_sel >= dbg_top + rows) dbg_top = dbg_sel - rows + 1;
     for (i = 0; i < rows && dbg_top + i < dbg_count; i++) {
@@ -2392,8 +2392,8 @@ int main(int argc, char *argv[]) {
                         break;
                     }
                 }
-                render_title((unsigned int *)d_title_start, tcmds, 3,
-                             title_cmd, can_continue);
+                render_title(d_title_start, (unsigned int *)d_titlec_start,
+                             tcmds, 3, title_cmd, can_continue, 0);
             } else {
                 static const char *onames[5] = {"Master", "BGM", "BGS",
                                                 "ME", "SE"};
@@ -2421,12 +2421,11 @@ int main(int argc, char *argv[]) {
                 audio_set_bus(2, opt_vol[3]);
                 audio_set_bus(3, opt_vol[4]);
                 for (i = 0; i < 5; i++) {
-                    snprintf(obuf[i], sizeof(obuf[i]), "%s %d", onames[i],
-                             opt_vol[i]);
+                    snprintf(obuf[i], sizeof(obuf[i]), "%s", onames[i]);
                     ocmds[i] = obuf[i];
                 }
-                render_title((unsigned int *)d_title_start, ocmds, 5,
-                             opt_cur, 1);
+                render_title(d_title_start, (unsigned int *)d_titlec_start,
+                             ocmds, 5, opt_cur, 1, opt_vol);
             }
             sceDisplayWaitVblankStart();
             fbp0 = sceGuSwapBuffers();
@@ -2668,7 +2667,7 @@ int main(int argc, char *argv[]) {
 
 
         if (input_pressed(&input, PSP_CTRL_SQUARE) && !player.moving &&
-            !battle_mode && !dbg_open) {
+            !battle_mode && !dbg_open && !mnu_open && btl_enc_t == 0) {
             u64 btick;
             sceRtcGetCurrentTick(&btick);
             snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
@@ -2722,8 +2721,10 @@ int main(int argc, char *argv[]) {
                                     actor_param(menu_aid(), p);
                         }
                     }
-                    if (input_pressed(&input, PSP_CTRL_CROSS))
+                    if (input_pressed(&input, PSP_CTRL_CROSS)) {
                         mnu_open = 0;
+                        talk_cool = 45;
+                    }
                 } else if (mnu_mode == 1 || mnu_mode == 2) {
                     if (input_pressed(&input, PSP_CTRL_UP) &&
                         mnu_row > 0) {
@@ -2815,7 +2816,7 @@ int main(int argc, char *argv[]) {
                         mnu_mode = 0;
                 }
             }
-            if (!dbg_open && !mnu_open) {
+            if (!dbg_open && !mnu_open && btl_enc_t == 0) {
                 if (input_pressed(&input, PSP_CTRL_SELECT)) dbg_try_open();
             } else {
                 if (input_pressed(&input, PSP_CTRL_UP) && dbg_sel > 0)
@@ -2823,14 +2824,9 @@ int main(int argc, char *argv[]) {
                 if (input_pressed(&input, PSP_CTRL_DOWN) &&
                     dbg_sel < dbg_count - 1)
                     dbg_sel++;
-                if (input_pressed(&input, PSP_CTRL_CROSS)) dbg_open = 0;
-                if (input_pressed(&input, PSP_CTRL_TRIANGLE)) {
-                    SaveState st;
-                    collect_save_state(&st);
-                    if (save_store_state(&st) == 0)
-                        dbg_note("saved");
-                    else
-                        dbg_note("save failed");
+                if (input_pressed(&input, PSP_CTRL_CROSS)) {
+                    dbg_open = 0;
+                    talk_cool = 45;
                 }
                 if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                     int tr = tblob_id(dbg_sel);
@@ -3385,7 +3381,7 @@ int main(int argc, char *argv[]) {
         if (!player.moving && player.x == pre_px && player.y == pre_py) {
             unsigned int held = input.buttons &
                 (PSP_CTRL_UP | PSP_CTRL_DOWN | PSP_CTRL_LEFT | PSP_CTRL_RIGHT);
-            if (held && !dbg_open && !mnu_open) {
+            if (held && !dbg_open && !mnu_open && talk_cool == 0) {
                 int dx = 0, dy = 0;
                 switch (player.dir) {
                     case 0: dy = 1; break;

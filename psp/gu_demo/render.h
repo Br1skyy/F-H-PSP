@@ -118,8 +118,9 @@ typedef struct {
     int icon;
 } BtListRow;
 
-void render_title(unsigned int *card, const char *cmds[8], int ncmds,
-                  int cursor, int can_continue);
+void render_title(unsigned char *card, unsigned int *card_cl,
+                  const char *cmds[8], int ncmds, int cursor,
+                  int can_continue, const int *vals);
 
 typedef struct {
     const char *name;

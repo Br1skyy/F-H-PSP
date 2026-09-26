@@ -13,6 +13,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).parent))
 from convert_assets import decrypt_blob
+from stage_data import swizzle8
 
 try:
     from PIL import Image
@@ -39,10 +40,23 @@ def main() -> None:
                     (w2 - 512) // 2 + 512, (h2 - 272) // 2 + 272))
     full = Image.new('RGBA', (512, 512), (0, 0, 0, 255))
     full.paste(img, (0, 0))
-    out = pathlib.Path('psp/gu_demo/data/title.rgba')
+    rgb = full.convert('RGB').quantize(colors=255, method=Image.MEDIANCUT)
+    pal = rgb.getpalette()[:255 * 3]
+    idx = rgb.tobytes()
+    mask = bytes(255 if y < 272 else 0 for y in range(512)
+                 for _ in range(512))
+    idx = bytes(b + 1 if m else 0 for b, m in zip(idx, mask))
+    import struct
+    swiz = swizzle8(bytes(idx), 512, 512)
+    out = pathlib.Path('psp/gu_demo/data/title')
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(full.tobytes())
-    print(f'wrote {out} ({len(full.tobytes())} bytes)')
+    (out.parent / 'title.t8').write_bytes(swiz)
+    clut = struct.pack('<I', 0x00000000)
+    for i in range(255):
+        r, g, b = pal[i * 3:(i + 1) * 3]
+        clut += struct.pack('<I', 0xFF000000 | (b << 16) | (g << 8) | r)
+    (out.parent / 'title.clut').write_bytes(clut)
+    print(f'wrote title.t8 ({len(swiz)} bytes)')
 
 
 if __name__ == '__main__':

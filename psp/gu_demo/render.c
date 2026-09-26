@@ -531,22 +531,27 @@ static void battle_text(const char *s, float x, float y, unsigned int col,
                         TVert **vpp);
 static float battle_text_w(const char *s);
 
-void render_title(unsigned int *card, const char *cmds[8], int ncmds,
-                  int cursor, int can_continue) {
+void render_title(unsigned char *card, unsigned int *card_cl,
+                  const char *cmds[8], int ncmds,
+                  int cursor, int can_continue, const int *vals) {
     int i;
     sceGuStart(GU_DIRECT, gu_list_ptr);
     sceGuClearColor(0xff000000);
     sceGuClear(GU_COLOR_BUFFER_BIT);
     sceGuEnable(GU_TEXTURE_2D);
     sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
-    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
     sceGuTexWrap(GU_CLAMP, GU_CLAMP);
     sceGuTexScale(1.0f, 1.0f);
     sceGuTexOffset(0.0f, 0.0f);
-    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
-    sceGuTexImage(0, 512, 272, 512, card);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuClutLoad(32, card_cl);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+    sceGuTexImage(0, 512, 512, 512, card);
     sceGuTexFlush();
     sceGuTexSync();
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xff);
     {
         TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
         v[0].u = 16; v[0].v = 0; v[0].color = 0xffffffff;
@@ -555,13 +560,53 @@ void render_title(unsigned int *card, const char *cmds[8], int ncmds,
         v[1].x = (float)SCR_W; v[1].y = (float)SCR_H; v[1].z = 0.0f;
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
     }
+    sceGuDisable(GU_ALPHA_TEST);
     sceGuDisable(GU_TEXTURE_2D);
-    skin_box(170, 178, 310, 178 + 6 + ncmds * 22 + 12, 0xc8343c42, 1);
-    {
-        int pulse = (render_ticks / 12) % 2;
-        unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
-        skin_box(174, 186 + cursor * 22, 306, 186 + cursor * 22 + 24,
-                 hc, 0);
+    if (vals) {
+        skin_box(120, 150, 360, 150 + 6 + ncmds * 22 + 12, 0xc8343c42,
+                 1);
+        {
+            int pulse = (render_ticks / 12) % 2;
+            unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+            skin_box(124, 158 + cursor * 22, 356,
+                     158 + cursor * 22 + 24, hc, 0);
+        }
+        sceGuDisable(GU_TEXTURE_2D);
+        sceGuDisable(GU_ALPHA_TEST);
+        sceGuEnable(GU_BLEND);
+        sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0,
+                       0);
+        for (i = 0; i < ncmds && i < 8; i++) {
+            float cy = 166.0f + (float)i * 22;
+            int fw = vals[i] < 0 ? 0 : vals[i] > 100 ? 180 :
+                                   vals[i] * 180 / 100;
+            TVert *b = (TVert *)sceGuGetMemory(6 * sizeof(TVert));
+            b[0].u = 0; b[0].v = 0; b[0].color = 0x80202020;
+            b[0].x = 250; b[0].y = cy + 12; b[0].z = 0.0f;
+            b[1].u = 0; b[1].v = 0; b[1].color = 0x80202020;
+            b[1].x = 430; b[1].y = cy + 20; b[1].z = 0.0f;
+            b[2].u = 0; b[2].v = 0; b[2].color = 0xffb0b0b0;
+            b[2].x = 250; b[2].y = cy + 12; b[2].z = 0.0f;
+            b[3].u = 0; b[3].v = 0; b[3].color = 0xffb0b0b0;
+            b[3].x = (float)(250 + fw); b[3].y = cy + 20; b[3].z = 0.0f;
+            b[4].u = 0; b[4].v = 0; b[4].color = 0xffffffff;
+            b[4].x = (float)(250 + fw - 3); b[4].y = cy + 10;
+            b[4].z = 0.0f;
+            b[5].u = 0; b[5].v = 0; b[5].color = 0xffffffff;
+            b[5].x = (float)(250 + fw + 3); b[5].y = cy + 22;
+            b[5].z = 0.0f;
+            sceGuDrawArray(GU_SPRITES, TVERT_FMT, 6, 0, b);
+        }
+        sceGuDisable(GU_BLEND);
+    } else {
+        skin_box(170, 178, 310, 178 + 6 + ncmds * 22 + 12, 0xc8343c42,
+                 1);
+        {
+            int pulse = (render_ticks / 12) % 2;
+            unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+            skin_box(174, 186 + cursor * 22, 306, 186 + cursor * 22 + 24,
+                     hc, 0);
+        }
     }
     if (font_px) {
         sceGuEnable(GU_BLEND);
@@ -581,19 +626,19 @@ void render_title(unsigned int *card, const char *cmds[8], int ncmds,
         sceGuTexFlush();
         sceGuTexSync();
         TVert *v = (TVert *)sceGuGetMemory(
-            (ncmds * 20 + 48 + 24) * 2 * 2 * sizeof(TVert));
+            (ncmds * 20 + 48) * 2 * 2 * sizeof(TVert));
         TVert *vp = v;
         for (i = 0; i < ncmds; i++) {
-            float tw = battle_text_w(cmds[i]);
             unsigned int col = (i == 1 && !can_continue) ? 0xff808080 :
                                                            0xffffffff;
-            battle_text(cmds[i], 240.0f - tw * 0.5f, 188.0f + (float)i * 22,
-                        col, &vp);
-        }
-        {
-            char stamp[32];
-            snprintf(stamp, sizeof(stamp), "build %s", __DATE__);
-            battle_text(stamp, 8.0f, 252.0f, 0xff808080, &vp);
+            if (vals) {
+                battle_text(cmds[i], 140.0f, 166.0f + (float)i * 22,
+                            col, &vp);
+            } else {
+                float tw = battle_text_w(cmds[i]);
+                battle_text(cmds[i], 240.0f - tw * 0.5f,
+                            188.0f + (float)i * 22, col, &vp);
+            }
         }
         if (vp > v)
             sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
