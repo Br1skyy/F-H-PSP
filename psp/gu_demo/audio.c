@@ -317,7 +317,7 @@ static int au_thread(SceSize args, void *argp) {
             }
         }
         for (i = 0; i < AU_CHUNK * 2; i++) {
-            int s = acc[i] >> 8;
+            int s = acc[i];
             if (s < -32768) s = -32768;
             if (s > 32767) s = 32767;
             out[i] = (short)s;
@@ -450,6 +450,47 @@ void audio_stop_se(void) {
         }
         au_se[n].active = 0;
     }
+    sceKernelSignalSema(au_sema, 1);
+}
+
+void audio_stop_bgs(void) {
+    if (au_sema < 0)
+        return;
+    sceKernelWaitSema(au_sema, 1, 0);
+    au_stream_stop(&au_bgs);
+    sceKernelSignalSema(au_sema, 1);
+}
+
+void audio_stop_me(void) {
+    if (au_sema < 0)
+        return;
+    sceKernelWaitSema(au_sema, 1, 0);
+    au_stream_stop(&au_me);
+    sceKernelSignalSema(au_sema, 1);
+}
+
+static char au_pushed_bgs[64];
+static int au_pushed_bgs_vol, au_pushed_bgs_pitch, au_pushed_bgs_pan;
+
+void audio_push_bgs(void) {
+    if (au_sema < 0)
+        return;
+    sceKernelWaitSema(au_sema, 1, 0);
+    snprintf(au_pushed_bgs, sizeof(au_pushed_bgs), "%s", au_bgs.name);
+    au_pushed_bgs_vol = au_bgs.vol;
+    au_pushed_bgs_pitch = au_bgs.pitch;
+    au_pushed_bgs_pan = au_bgs.pan;
+    sceKernelSignalSema(au_sema, 1);
+}
+
+void audio_pop_bgs(void) {
+    if (au_sema < 0)
+        return;
+    sceKernelWaitSema(au_sema, 1, 0);
+    if (au_pushed_bgs[0])
+        au_stream_start(&au_bgs, "bgs", au_pushed_bgs, au_pushed_bgs_vol,
+                        au_pushed_bgs_pitch, au_pushed_bgs_pan, 1);
+    au_pushed_bgs[0] = 0;
     sceKernelSignalSema(au_sema, 1);
 }
 

@@ -12,8 +12,12 @@ void audio_play_me(const char *name, int vol, int pitch, int pan);
 void audio_fade_bgm(int frames);
 void audio_fade_bgs(int frames);
 void audio_stop_se(void);
+void audio_stop_bgs(void);
+void audio_stop_me(void);
 void audio_push_bgm(void);
 void audio_pop_bgm(void);
+void audio_push_bgs(void);
+void audio_pop_bgs(void);
 void audio_status(char *out, int cap);
 
 #endif

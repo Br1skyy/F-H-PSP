@@ -96,6 +96,8 @@ typedef struct { float u, v; unsigned int color; float x, y, z; } TVert;
 static unsigned int *gu_list_ptr;
 static int render_ticks;
 
+int btl_enc_flash = 0;
+
 void render_init(void *fbp0, void *fbp1, void *zbp, unsigned int *gu_list) {
     gu_list_ptr = gu_list;
     light_bake();
@@ -502,6 +504,21 @@ void render_frame(int cam_x, int cam_y,
 
 
     render_light_pass(lights, nlights);
+
+    if (btl_enc_flash > 0) {
+        int a = btl_enc_flash > 255 ? 255 : btl_enc_flash;
+        unsigned int c = ((unsigned)a << 24) | 0x00ffffff;
+        TVert *fl = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        sceGuDisable(GU_TEXTURE_2D);
+        sceGuEnable(GU_BLEND);
+        sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0,
+                       0);
+        fl[0].u = 0; fl[0].v = 0; fl[0].color = c;
+        fl[0].x = 0; fl[0].y = 0; fl[0].z = 0.0f;
+        fl[1].u = 0; fl[1].v = 0; fl[1].color = c;
+        fl[1].x = (float)SCR_W; fl[1].y = (float)SCR_H; fl[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, fl);
+    }
 
     sceGuFinish();
     sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);

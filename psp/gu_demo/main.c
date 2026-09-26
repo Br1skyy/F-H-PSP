@@ -1098,12 +1098,30 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
         }
     }
     battle_mode = 1;
-    audio_push_bgm();
-    audio_play_bgm("muted_aggression", 90, 100);
     {
         int pg = btl_ev_scan(0);
         if (pg >= 0) btl_ev_begin(pg);
     }
+}
+
+
+static int btl_enc_t;
+static u64 btl_enc_tick;
+static int btl_enc_char, btl_enc_troop;
+
+
+static void btl_encounter(u64 tick, int char_idx, int troop_id) {
+    if (battle_mode || btl_enc_t > 0 || troop_id <= 0)
+        return;
+    btl_enc_tick = tick;
+    btl_enc_char = char_idx;
+    btl_enc_troop = troop_id;
+    btl_enc_t = 60;
+    audio_stop_se();
+    audio_stop_bgs();
+    audio_stop_me();
+    audio_push_bgm();
+    audio_push_bgs();
 }
 
 
@@ -1992,7 +2010,8 @@ int main(int argc, char *argv[]) {
         if (!(input.buttons & PSP_CTRL_CIRCLE)) talk_lock = 0;
         if (talk_cool > 0) talk_cool--;
         if (input_pressed(&input, PSP_CTRL_CIRCLE) && !player.moving &&
-            talk_cool == 0 && !talk_lock && !battle_mode && !dbg_open) {
+            talk_cool == 0 && !talk_lock && !battle_mode && !dbg_open &&
+            btl_enc_t == 0) {
             int ptx = player.x / TILE, pty = player.y / TILE;
             int dx = 0, dy = 0;
             switch (player.dir) {
@@ -2030,7 +2049,7 @@ int main(int argc, char *argv[]) {
                     sceRtcGetCurrentTick(&btick);
                     snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                              characters[current_character].name);
-                    btl_start(btick, current_character,
+                    btl_encounter(btick, current_character,
                               npcs[found].battle_troop);
                     continue;
                 }
@@ -2108,7 +2127,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                                  characters[current_character].name);
-                        btl_start(btick, current_character, tr);
+                        btl_encounter(btick, current_character, tr);
                     }
                 }
 
@@ -2151,7 +2170,7 @@ int main(int argc, char *argv[]) {
             sceRtcGetCurrentTick(&btick);
             snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                      characters[current_character].name);
-            btl_start(btick, current_character, 1);
+            btl_encounter(btick, current_character, 1);
         }
 
 
@@ -2180,7 +2199,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name),
                                  "%s", characters[current_character].name);
-                        btl_start(btick, current_character, tr);
+                        btl_encounter(btick, current_character, tr);
                     }
                 }
             }
@@ -2550,6 +2569,7 @@ int main(int argc, char *argv[]) {
                 if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                     battle_mode = 0;
                     audio_pop_bgm();
+                    audio_pop_bgs();
                     talk_cool = 45;
                     talk_lock = 1;
                 }
@@ -2708,7 +2728,15 @@ int main(int argc, char *argv[]) {
 
         int pre_px = player.x, pre_py = player.y;
         audio_poll(&mit);
-        player_update(&player, dbg_open ? 0 : input.buttons,
+        if (btl_enc_t > 0) {
+            btl_enc_t--;
+            if (btl_enc_t == 30)
+                audio_play_bgm("muted_aggression", 90, 100);
+            if (btl_enc_t == 0)
+                btl_start(btl_enc_tick, btl_enc_char, btl_enc_troop);
+        }
+        btl_enc_flash = btl_enc_t > 20 ? 255 * (btl_enc_t - 20) / 40 : 0;
+        player_update(&player, (dbg_open || btl_enc_t > 0) ? 0 : input.buttons,
                       (uint16_t*)map_passability,
                       MAP_W, MAP_H, npc_solid);
 
@@ -2733,7 +2761,7 @@ int main(int argc, char *argv[]) {
                         sceRtcGetCurrentTick(&btick);
                         snprintf(btl_actor_name, sizeof(btl_actor_name), "%s",
                                  characters[current_character].name);
-                        btl_start(btick, current_character,
+                        btl_encounter(btick, current_character,
                                   npcs[i].battle_troop);
                         break;
                     }

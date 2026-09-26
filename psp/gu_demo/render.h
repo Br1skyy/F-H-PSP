@@ -88,6 +88,7 @@ typedef struct {
     int w, h, tw, th, stride;
 } BackLayer;
 extern BackLayer back_layer[2];
+extern int btl_enc_flash;
 
 
 extern unsigned char *anim_t8[8];
