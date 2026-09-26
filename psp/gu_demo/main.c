@@ -102,7 +102,7 @@ static int battle_mode = 0;
 static Bt btl;
 static int btl_phase;
 static int btl_cmd, btl_tgt;
-static int btl_order[12], btl_norder, btl_oi, btl_wait;
+static int btl_order[12], btl_norder, btl_oi, btl_wait, btl_anim_cap;
 
 
 static int btl_act_kind, btl_act_id, btl_act_target;
@@ -125,10 +125,13 @@ static void btl_trace(const char *line) {
     }
 }
 static BtPopup btl_pops[8];
+static int btl_dmgse_n;
 
 
 static char btl_log[2][96];
 static int btl_log_t[2];
+static char btl_gab[160];
+static int btl_gab_t, btl_gab_a;
 
 static char btl_actor_name[32];
 
@@ -148,7 +151,7 @@ static void btl_log_push(const char *s) {
     snprintf(btl_log[0], sizeof(btl_log[0]), "%s", btl_log[1]);
     snprintf(btl_log[1], sizeof(btl_log[1]), "%s", s);
     btl_log_t[0] = btl_log_t[1];
-    btl_log_t[1] = 420;
+    btl_log_t[1] = 240;
 }
 static int btl_actor_row;
 
@@ -521,10 +524,15 @@ static void btl_ev_sync(void) {
             gcb.on_code = &gab_code_cb;
             gcb.ud = &gcap;
             fh_decode_escapes(tit.plug[btl_plug_i].args, &gctx, &gcb);
-            btl_log_push(gbuf);
+            snprintf(btl_gab, sizeof(btl_gab), "%s", gbuf);
+            btl_gab_t = 90 + 4 * (int)strlen(gbuf);
+            btl_gab_a = 255;
         } else if (!strcmp(tit.plug[btl_plug_i].name, "ShowGab")) {
 
         } else if (!strcmp(tit.plug[btl_plug_i].name, "ClearGab")) {
+            btl_gab[0] = 0;
+            btl_gab_t = 0;
+            btl_gab_a = 0;
             btl_log[0][0] = 0;
             btl_log[1][0] = 0;
             btl_log_t[0] = btl_log_t[1] = 0;
@@ -1268,7 +1276,8 @@ static void btl_begin_exec(void) {
     }
     btl_norder = bt_order_act(&btl, spd, btl_order, 12);
     btl_oi = 0;
-    btl_wait = 20;
+    btl_wait = 12;
+    btl_anim_cap = 240;
     btl_phase = 2;
     {
         char ab[96];
@@ -1352,7 +1361,7 @@ static void btl_do_use(BtF *sub, const BtSkill *sk, const BtFx *fx, int nfx,
                 (sk->dmg_type == 1 || sk->dmg_type == 2 ||
                  sk->dmg_type == 5 || sk->dmg_type == 6)) {
                 btl_motion(0, 4, 0);
-                btl_pose_t = 24;
+                btl_pose_t = 16;
             }
 
             {
@@ -1416,8 +1425,18 @@ static void btl_do_use(BtF *sub, const BtSkill *sk, const BtFx *fx, int nfx,
             }
             if (missed || evaded) {
                 btl_pop_at(px, py, 0, 1);
+                audio_play_se("Miss", 90, 100, 0);
             } else if (sk->dmg_type == 3 || sk->dmg_type == 4) {
                 if (dmg > 0) btl_pop_at(px, py, dmg, 3);
+            } else if (dmg > 0 && (sk->dmg_type == 1 || sk->dmg_type == 2 ||
+                       sk->dmg_type == 5 || sk->dmg_type == 6)) {
+                btl_pop_at(px, py, dmg, crit ? 2 : 0);
+                btl_dmgse_n = (btl_dmgse_n % 5) + 1;
+                {
+                    char dnm[8];
+                    snprintf(dnm, sizeof(dnm), "Damage%d", btl_dmgse_n);
+                    audio_play_se(dnm, 90, crit ? 115 : 100, 0);
+                }
             } else {
                 int rec = (tgt->hp - hp0) + (tgt->mp - mp0);
                 if (rec > 0) btl_pop_at(px, py, rec, 3);
@@ -1485,7 +1504,7 @@ static int btl_exec_step(void) {
                 btl_motion(3, 2, 0);
             else
                 btl_motion(3, 1, 0);
-            btl_pose_t = 30;
+            btl_pose_t = 20;
         } else if (btl_act_kind == 1) {
             sk = btl_skill_any(2);
             nfx = btl_fx(0, 2, fx, 8);
@@ -1499,7 +1518,7 @@ static int btl_exec_step(void) {
                 if (btl.f[0].mp >= SKILL_DB[r].mp) btl.f[0].mp -= SKILL_DB[r].mp;
             }
             btl_motion(3, 3, 0);
-            btl_pose_t = 30;
+            btl_pose_t = 20;
         } else if (btl_act_kind == 4) {
             sk = btl_item_skill(btl_act_id);
             if (!sk) return 0;
@@ -1515,7 +1534,7 @@ static int btl_exec_step(void) {
                 }
             }
             btl_motion(3, 5, 0);
-            btl_pose_t = 30;
+            btl_pose_t = 20;
         }
         if (!sk) return 0;
         scope = sk->scope;
@@ -2510,7 +2529,7 @@ int main(int argc, char *argv[]) {
 
 
         if (!(input.buttons & PSP_CTRL_CIRCLE)) talk_lock = 0;
-        if (talk_cool > 0) talk_cool--;
+        if (talk_cool > 0 && !mnu_open && !dbg_open) talk_cool--;
         if (input_pressed(&input, PSP_CTRL_CIRCLE) && !player.moving &&
             talk_cool == 0 && !talk_lock && !battle_mode && !dbg_open &&
             !mnu_open && btl_enc_t == 0) {
@@ -2875,6 +2894,15 @@ int main(int argc, char *argv[]) {
             for (int i = 0; i < 2; i++)
                 if (btl_log_t[i] > 0 && --btl_log_t[i] == 0)
                     btl_log[i][0] = 0;
+            if (btl_gab_t > 0 && --btl_gab_t == 0)
+                btl_gab_a = 239;
+            if (btl_gab_t == 0 && btl_gab_a > 0) {
+                btl_gab_a -= 16;
+                if (btl_gab_a <= 0) {
+                    btl_gab_a = 0;
+                    btl_gab[0] = 0;
+                }
+            }
             for (int i = 0; i < 8; i++) {
                 if (btl_flash[i] > 0) btl_flash[i]--;
                 if (btl_collapse[i] > 0) btl_collapse[i]--;
@@ -2955,7 +2983,8 @@ int main(int argc, char *argv[]) {
                         if (pg >= 0) btl_ev_begin(pg);
                         else {
                             btl_phase = 2;
-                            btl_wait = 15;
+                            btl_wait = 8;
+                            btl_anim_cap = 240;
                         }
                     } else {
                         btl_ce_run = 0;
@@ -3170,6 +3199,8 @@ int main(int argc, char *argv[]) {
             } else if (btl_phase == 2) {
                 if (btl_wait > 0) {
                     btl_wait--;
+                } else if (battle_anim_active() && btl_anim_cap > 0) {
+                    btl_anim_cap--;
                 } else if (btl_exec_step()) {
 
 
@@ -3195,7 +3226,8 @@ int main(int argc, char *argv[]) {
                         }
                     }
                 } else {
-                    btl_wait = 25;
+                    btl_wait = 10;
+                    btl_anim_cap = 240;
                 }
             } else if (btl_phase == 4) {
 
@@ -3334,7 +3366,8 @@ int main(int argc, char *argv[]) {
                          214 - 112,
                          sel_foe, btl_flash, btl_collapse,
                          lrows, nlrows, lcur, show_list,
-                         st_icons, nst_icons, tgt_name);
+                         st_icons, nst_icons, tgt_name,
+                         btl_gab[0] ? btl_gab : NULL, btl_gab_a);
 
             render_battle_anims(draws, btl.n_foes);
 

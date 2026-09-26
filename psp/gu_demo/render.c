@@ -2,6 +2,7 @@
 #include "render.h"
 #include "map_runtime.h"
 #include "anim_data.h"
+#include "audio.h"
 #include <pspge.h>
 #include <pspdisplay.h>
 #include <pspdebug.h>
@@ -563,13 +564,13 @@ void render_title(unsigned char *card, unsigned int *card_cl,
     sceGuDisable(GU_ALPHA_TEST);
     sceGuDisable(GU_TEXTURE_2D);
     if (vals) {
-        skin_box(120, 150, 360, 150 + 6 + ncmds * 22 + 12, 0xc8343c42,
+        skin_box(96, 96, 384, 96 + 6 + ncmds * 22 + 12, 0xc8343c42,
                  1);
         {
             int pulse = (render_ticks / 12) % 2;
             unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
-            skin_box(124, 158 + cursor * 22, 356,
-                     158 + cursor * 22 + 24, hc, 0);
+            skin_box(100, 104 + cursor * 22, 380,
+                     104 + cursor * 22 + 24, hc, 0);
         }
         sceGuDisable(GU_TEXTURE_2D);
         sceGuDisable(GU_ALPHA_TEST);
@@ -577,23 +578,23 @@ void render_title(unsigned char *card, unsigned int *card_cl,
         sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0,
                        0);
         for (i = 0; i < ncmds && i < 8; i++) {
-            float cy = 166.0f + (float)i * 22;
-            int fw = vals[i] < 0 ? 0 : vals[i] > 100 ? 180 :
-                                   vals[i] * 180 / 100;
+            float cy = 112.0f + (float)i * 22;
+            int fw = vals[i] < 0 ? 0 : vals[i] > 100 ? 150 :
+                                   vals[i] * 150 / 100;
             TVert *b = (TVert *)sceGuGetMemory(6 * sizeof(TVert));
             b[0].u = 0; b[0].v = 0; b[0].color = 0x80202020;
-            b[0].x = 250; b[0].y = cy + 12; b[0].z = 0.0f;
+            b[0].x = 220; b[0].y = cy + 12; b[0].z = 0.0f;
             b[1].u = 0; b[1].v = 0; b[1].color = 0x80202020;
-            b[1].x = 430; b[1].y = cy + 20; b[1].z = 0.0f;
+            b[1].x = 370; b[1].y = cy + 20; b[1].z = 0.0f;
             b[2].u = 0; b[2].v = 0; b[2].color = 0xffb0b0b0;
-            b[2].x = 250; b[2].y = cy + 12; b[2].z = 0.0f;
+            b[2].x = 220; b[2].y = cy + 12; b[2].z = 0.0f;
             b[3].u = 0; b[3].v = 0; b[3].color = 0xffb0b0b0;
-            b[3].x = (float)(250 + fw); b[3].y = cy + 20; b[3].z = 0.0f;
+            b[3].x = (float)(220 + fw); b[3].y = cy + 20; b[3].z = 0.0f;
             b[4].u = 0; b[4].v = 0; b[4].color = 0xffffffff;
-            b[4].x = (float)(250 + fw - 3); b[4].y = cy + 10;
+            b[4].x = (float)(220 + fw - 3); b[4].y = cy + 10;
             b[4].z = 0.0f;
             b[5].u = 0; b[5].v = 0; b[5].color = 0xffffffff;
-            b[5].x = (float)(250 + fw + 3); b[5].y = cy + 22;
+            b[5].x = (float)(220 + fw + 3); b[5].y = cy + 22;
             b[5].z = 0.0f;
             sceGuDrawArray(GU_SPRITES, TVERT_FMT, 6, 0, b);
         }
@@ -632,7 +633,7 @@ void render_title(unsigned char *card, unsigned int *card_cl,
             unsigned int col = (i == 1 && !can_continue) ? 0xff808080 :
                                                            0xffffffff;
             if (vals) {
-                battle_text(cmds[i], 140.0f, 166.0f + (float)i * 22,
+                battle_text(cmds[i], 132.0f, 112.0f + (float)i * 22,
                             col, &vp);
             } else {
                 float tw = battle_text_w(cmds[i]);
@@ -1087,6 +1088,13 @@ void battle_anim_reset(void) {
     anim_flash_a = 0.0f;
 }
 
+int battle_anim_active(void) {
+    for (int i = 0; i < BT_ANIM_MAX; i++) {
+        if (bt_anims[i].active) return 1;
+    }
+    return 0;
+}
+
 void battle_anim_start(int anim_id, int foe_idx, int mirror) {    int r = anim_row_of(anim_id);
     if (r < 0) return;
     for (int i = 0; i < BT_ANIM_MAX; i++) {
@@ -1122,8 +1130,10 @@ void battle_anim_tick(void) {
                 bt_anims[i].frame = fi;
                 const FhAnimTiming *tm = ANIM_IDX[bt_anims[i].row].tim;
                 for (int k = 0; k < ANIM_IDX[bt_anims[i].row].ntim; k++) {
-                    if (tm[k].frame != fi || tm[k].scope != 2) continue;
-
+                    if (tm[k].frame != fi) continue;
+                    if (tm[k].se && tm[k].se[0])
+                        audio_play_se(tm[k].se, 90, 100, 0);
+                    if (tm[k].scope != 2) continue;
                     anim_flash_rgb = (tm[k].col[0] & 255) |
                                      ((tm[k].col[1] & 255) << 8) |
                                      ((tm[k].col[2] & 255) << 16);
@@ -1504,7 +1514,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    int sel_foe, const int *flash, const int *collapse,
                    const BtListRow *lrows, int nlrows, int lcursor,
                    int show_list, const int *st_icons, int nst_icons,
-                   const char *tgt_name) {
+                   const char *tgt_name, const char *gab, int gab_alpha) {
 
 
     sceGuDisable(GU_TEXTURE_2D);
@@ -1656,6 +1666,11 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     }
     if (tgt_name && tgt_name[0])
         skin_box(8, 8, 472, 48, 0xc8343c42, 1);
+    if (gab && gab[0] && gab_alpha > 0) {
+        int ga = gab_alpha > 200 ? 200 : gab_alpha;
+        unsigned int fill = ((unsigned)ga << 24) | 0x00343c42;
+        skin_box(8, 150, 472, 198, fill, 1);
+    }
 
 
     {
@@ -1687,8 +1702,8 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
 
 
     TVert *v = (TVert *)sceGuGetMemory(
-        (cmdtotal + poptotal + loglen + listtotal + tgttotal + 48) * 2 * 2 *
-        sizeof(TVert));
+        (cmdtotal + poptotal + loglen + listtotal + tgttotal + 210 + 48) *
+        2 * 2 * sizeof(TVert));
     TVert *vp = v;
 
 
@@ -1818,6 +1833,30 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             float tw = battle_text_w(tgt_name);
             battle_text(tgt_name, (480.0f - tw) * 0.5f, 16.0f, 0xffffffff,
                         &vp);
+        }
+        if (gab && gab[0] && gab_alpha > 0) {
+            char line[80];
+            int n = 0, li = 0;
+            unsigned int gc = ((unsigned)(gab_alpha > 255 ? 255 :
+                                          gab_alpha) << 24) | 0x00ffffff;
+            while (gab[n] && li < 2) {
+                int e = n + 50, s = e;
+                while (s > n && gab[s] && gab[s] != ' ') s--;
+                if (s <= n || !gab[e]) s = e;
+                {
+                    int k = 0;
+                    while (n + k < s && gab[n + k] && k < 51) {
+                        line[k] = gab[n + k];
+                        k++;
+                    }
+                    line[k] = 0;
+                }
+                battle_text(line, 24.0f, 158.0f + (float)li * 20, gc,
+                            &vp);
+                n = gab[s] ? s + 1 : s;
+                li++;
+                if (!gab[n]) break;
+            }
         }
         if (log0 && log0[0])
             battle_text(log0, 12.0f, tgt_name && tgt_name[0] ? 52.0f : 10.0f,

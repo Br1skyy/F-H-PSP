@@ -145,12 +145,13 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    int sel_foe, const int *flash, const int *collapse,
                    const BtListRow *lrows, int nlrows, int lcursor,
                    int show_list, const int *st_icons, int nst_icons,
-                   const char *tgt_name);
+                   const char *tgt_name, const char *gab, int gab_alpha);
 
 
 void battle_anim_start(int anim_id, int foe_idx, int mirror);
 void battle_anim_tick(void);
 void battle_anim_reset(void);
+int battle_anim_active(void);
 void render_battle_anims(const BtFoeDraw *foes, int nfoes);
 
 
