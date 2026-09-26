@@ -13,6 +13,7 @@
 #include "input.h"
 #include "movie.h"
 #include "audio.h"
+#include "save.h"
 #include "map_runtime.h"
 #include "interp_rt.h"
 #include "text_rt.h"
@@ -238,6 +239,64 @@ static const int *btl_ce_ids;
 static const FhCmd **btl_ce_lists;
 static const int *btl_ce_lens;
 static int btl_ce_n;
+static int mit_equip_init_done;
+
+
+static void init_mit_equip(void) {
+    int r, s;
+    if (mit_equip_init_done) return;
+    mit_equip_init_done = 1;
+    for (r = 0; ACTOR_EQ[r].id; r++) {
+        int aid = ACTOR_EQ[r].id;
+        if (aid < 0 || aid >= FH_MAX_ACTORS) continue;
+        for (s = 0; s < 5; s++) mit.equip[aid][s] = ACTOR_EQ[r].eq[s];
+        for (s = 5; s < 8; s++) mit.equip[aid][s] = 0;
+    }
+}
+
+
+static int actor_eq_id(int aid, int slot) {
+    if (aid < 0 || aid >= FH_MAX_ACTORS || slot < 0 || slot >= 8)
+        return 0;
+    return mit.equip[aid][slot];
+}
+
+
+static int actor_param(int aid, int pi) {
+    int r = 0, v = 0, s;
+    while (ACTOR_DB[r].id && ACTOR_DB[r].id != aid) r++;
+    if (!ACTOR_DB[r].id || pi < 0 || pi > 7) return 0;
+    switch (pi) {
+        case 0: v = ACTOR_DB[r].mhp; break;
+        case 1: v = ACTOR_DB[r].mmp; break;
+        case 2: v = ACTOR_DB[r].atk; break;
+        case 3: v = ACTOR_DB[r].def; break;
+        case 4: v = ACTOR_DB[r].mat; break;
+        case 5: v = ACTOR_DB[r].mdf; break;
+        case 6: v = ACTOR_DB[r].agi; break;
+        default: v = ACTOR_DB[r].luk; break;
+    }
+    for (s = 0; s < 5; s++) {
+        int id = actor_eq_id(aid, s), k;
+        if (id <= 0) continue;
+        if (s == 0) {
+            for (k = 0; WEAPON_DB[k].id; k++) {
+                if (WEAPON_DB[k].id == id) {
+                    v += WEAPON_DB[k].p[pi];
+                    break;
+                }
+            }
+        } else {
+            for (k = 0; ARMOR_DB[k].id; k++) {
+                if (ARMOR_DB[k].id == id) {
+                    v += ARMOR_DB[k].p[pi];
+                    break;
+                }
+            }
+        }
+    }
+    return v;
+}
 static const TblobActor *btl_seeds;
 static int btl_mrg_ids[64];
 static const FhCmd *btl_mrg_lists[64];
@@ -311,7 +370,7 @@ static void btl_ev_seed(void) {
             if (btl_seeds[r].id == aid) {
                 tit.aclass[aid] = btl_seeds[r].cls;
                 for (int e = 0; e < 8; e++)
-                    tit.equip[aid][e] = btl_seeds[r].eq[e];
+                    tit.equip[aid][e] = mit.equip[aid][e];
                 break;
             }
         }
@@ -992,14 +1051,14 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
     BtF *a = &btl.f[0];
     a->is_foe = 0;
     a->ref = want;
-    a->maxhp = a->hp = ACTOR_DB[row].mhp;
-    a->maxmp = a->mp = ACTOR_DB[row].mmp;
-    a->atk = ACTOR_DB[row].atk;
-    a->def = ACTOR_DB[row].def;
-    a->mat = ACTOR_DB[row].mat;
-    a->mdf = ACTOR_DB[row].mdf;
-    a->agi = ACTOR_DB[row].agi;
-    a->luk = ACTOR_DB[row].luk;
+    a->maxhp = a->hp = actor_param(want, 0);
+    a->maxmp = a->mp = actor_param(want, 1);
+    a->atk = actor_param(want, 2);
+    a->def = actor_param(want, 3);
+    a->mat = actor_param(want, 4);
+    a->mdf = actor_param(want, 5);
+    a->agi = actor_param(want, 6);
+    a->luk = actor_param(want, 7);
     a->hit = ACTOR_DB[row].hit;
     a->eva = ACTOR_DB[row].eva;
     a->cri = ACTOR_DB[row].cri;
@@ -1625,12 +1684,17 @@ extern unsigned char d_ghost_start[], d_ghostc_start[];
 extern unsigned char d_guard1_start[], d_guard1c_start[];
 extern unsigned char d_font_start[], d_fontc_start[], d_fontadv_start[];
 extern unsigned char d_win_start[], d_winc_start[];
+extern unsigned char d_title_start[];
 extern unsigned char d_tmerc_start[], d_tmercc_start[];
 extern unsigned char d_toutl_start[], d_toutlc_start[];
 extern unsigned char d_tpriest_start[], d_tpriestc_start[];
 extern unsigned char d_tknight_start[], d_tknightc_start[];
-extern unsigned char d_an0_start[], d_an0c_start[];
-extern unsigned char d_an1_start[], d_an1c_start[];
+extern unsigned char d_face1_start[], d_face1c_start[];
+extern unsigned char d_face2_start[], d_face2c_start[];
+extern unsigned char d_face3_start[], d_face3c_start[];
+static unsigned char *face_t8[3];
+static unsigned int *face_cl[3];
+extern unsigned char d_an0_start[], d_an0c_start[];extern unsigned char d_an1_start[], d_an1c_start[];
 extern unsigned char d_an2_start[], d_an2c_start[];
 extern unsigned char d_an3_start[], d_an3c_start[];
 extern unsigned char d_an4_start[], d_an4c_start[];
@@ -1838,10 +1902,17 @@ static void load_map030(void) {
         if (npcs[i].prio == 1)
             npc_solid[npcs[i].ty * MAP_W + npcs[i].tx] = 1;
     }
+}
 
 
-    font_px = d_font_start;
-    memcpy(font_cl, d_fontc_start, sizeof(font_cl));
+static void load_ui(void) {
+    face_t8[0] = d_face1_start;
+    face_cl[0] = (unsigned int *)d_face1c_start;
+    face_t8[1] = d_face2_start;
+    face_cl[1] = (unsigned int *)d_face2c_start;
+    face_t8[2] = d_face3_start;
+    face_cl[2] = (unsigned int *)d_face3c_start;
+    font_px = d_font_start;    memcpy(font_cl, d_fontc_start, sizeof(font_cl));
     font_adv = d_fontadv_start;
     btl_actor_names_init();
 
@@ -1875,8 +1946,340 @@ static void diag_color(unsigned int c, const char *label, void *fbp0, void *fbp1
 }
 #endif
 
+static void apply_save_state(const SaveState *st) {
+    int i;
+    memcpy(mit.sw, st->sw, sizeof(mit.sw));
+    memcpy(mit.var, st->var, sizeof(mit.var));
+    for (i = 0; i < FH_MAX_ITEMS; i++)
+        mit.inv_item[i] = st->inv_item[i];
+    for (i = 0; i < FH_MAX_WEAPONS; i++)
+        mit.inv_weap[i] = st->inv_weap[i];
+    for (i = 0; i < FH_MAX_ARMORS; i++)
+        mit.inv_arm[i] = st->inv_arm[i];
+    memcpy(mit.askill, st->askill, sizeof(mit.askill));
+    mit_equip_init_done = 1;
+    mit.gold = st->gold;
+    player.x = st->px;
+    player.y = st->py;
+    player.dir = st->dir;
+    if (st->character >= 0 && st->character < 4)
+        current_character = st->character;
+    {
+        CharacterDef *cd = &characters[current_character];
+        player_set_sprite(&player, cd->sprite_data,
+                          (unsigned int *)cd->clut_data, 480, 440, 0);
+    }
+    audio_set_master(st->audio_vol[0]);
+    audio_set_bus(0, st->audio_vol[1]);
+    audio_set_bus(1, st->audio_vol[2]);
+    audio_set_bus(2, st->audio_vol[3]);
+    audio_set_bus(3, st->audio_vol[4]);
+}
+
+
 static int dbg_open = 0, dbg_sel = 0, dbg_top = 0, dbg_count = 0;
 static char dbg_text[2048];
+
+
+static const int menu_actor_ids[4] = {1, 5, 4, 3};
+static int mnu_open = 0, mnu_mode = 0, mnu_cmd = 0, mnu_actor = 0;
+static int mnu_row = 0, mnu_top = 0, mnu_col = 0, mnu_slot = 0;
+static MenuActor mnu_actors[4];
+static BtListRow mnu_rows[64];
+static int mnu_nrows;
+static int mnu_preview[8];
+
+
+static int menu_aid(void) {
+    if (mnu_actor < 0 || mnu_actor > 3) mnu_actor = 0;
+    return menu_actor_ids[mnu_actor];
+}
+
+
+static void menu_known(int aid, int *out, int cap) {
+    int n = 0, k, q, dup;
+    int cls = 0, lv = 1;
+    out[n++] = 40;
+    out[n++] = 11;
+    for (k = 0; ACTOR_CLS[k].id; k++) {
+        if (ACTOR_CLS[k].id == aid) {
+            cls = ACTOR_CLS[k].cls;
+            break;
+        }
+    }
+    for (k = 0; ACTOR_DB[k].id; k++) {
+        if (ACTOR_DB[k].id == aid) {
+            lv = ACTOR_DB[k].level;
+            break;
+        }
+    }
+    for (k = 0; CLASS_LEARN[k].cls && n < cap; k++) {
+        if (CLASS_LEARN[k].cls != cls || CLASS_LEARN[k].lv > lv) continue;
+        dup = 0;
+        for (q = 0; q < n; q++) {
+            if (out[q] == CLASS_LEARN[k].sk) {
+                dup = 1;
+                break;
+            }
+        }
+        if (!dup) out[n++] = CLASS_LEARN[k].sk;
+    }
+    if (aid >= 0 && aid < FH_MAX_ACTORS) {
+        for (k = 1; k < FH_MAX_SKILLS && n < cap; k++) {
+            int sr;
+            if (!mit.askill[aid][k]) continue;
+            dup = 0;
+            for (q = 0; q < n; q++) {
+                if (out[q] == k) {
+                    dup = 1;
+                    break;
+                }
+            }
+            if (dup) continue;
+            sr = btl_skillrow(k);
+            if (sr >= 0 &&
+                (SKILL_DB[sr].occ == 0 || SKILL_DB[sr].occ == 1))
+                out[n++] = k;
+        }
+    }
+}
+
+
+static void menu_actor_row(int i) {
+    int aid = menu_actor_ids[i], r = 0, f = 0;
+    MenuActor *a = &mnu_actors[i];
+    while (ACTOR_NAMES[r].id && ACTOR_NAMES[r].id != aid) r++;
+    while (ACTOR_DB[f].id && ACTOR_DB[f].id != aid) f++;
+    a->name = ACTOR_NAMES[r].id ? ACTOR_NAMES[r].nm : "?";
+    a->level = ACTOR_DB[f].id ? ACTOR_DB[f].level : 1;
+    a->mhp = actor_param(aid, 0);
+    a->hp = a->mhp;
+    a->mmp = actor_param(aid, 1);
+    a->mp = a->mmp;
+    a->face_sheet = 0;
+    a->face_cell = 0;
+    for (int k = 0; ACTOR_FACE[k].id; k++) {
+        if (ACTOR_FACE[k].id == aid) {
+            a->face_sheet = ACTOR_FACE[k].sheet;
+            a->face_cell = ACTOR_FACE[k].cell;
+            break;
+        }
+    }
+    if (a->face_sheet < 0 || a->face_sheet > 2) a->face_sheet = 0;
+}
+
+
+static void menu_rebuild_actors(void) {
+    for (int i = 0; i < 4; i++) menu_actor_row(i);
+}
+
+
+static void menu_build_items(void) {
+    mnu_nrows = 0;
+    for (int k = 0; ITEM_DB[k].id && mnu_nrows < 64; k++) {
+        int id = ITEM_DB[k].id;
+        if (id < 0 || id >= FH_MAX_ITEMS) continue;
+        if (mit.inv_item[id] <= 0) continue;
+        snprintf(mnu_rows[mnu_nrows].text, sizeof(mnu_rows[0].text),
+                 "%s x%d", ITEM_DB[k].nm, mit.inv_item[id]);
+        mnu_rows[mnu_nrows].color = 0xffffffff;
+        mnu_nrows++;
+    }
+}
+
+
+static void menu_build_skills(void) {
+    int known[24], n = 0;
+    menu_known(menu_aid(), known, 24);
+    mnu_nrows = 0;
+    for (int i = 0; i < n && mnu_nrows < 64; i++) {
+        int sr = btl_skillrow(known[i]);
+        if (sr < 0) continue;
+        snprintf(mnu_rows[mnu_nrows].text, sizeof(mnu_rows[0].text),
+                 "%s %d", SKILL_DB[sr].nm, SKILL_DB[sr].mp);
+        mnu_rows[mnu_nrows].color = 0xffffffff;
+        mnu_nrows++;
+    }
+}
+
+
+static const char *menu_slot_name(int s) {
+    static const char *names[5] = {"Weapon", "Shield", "Head", "Body",
+                                   "Accessory"};
+    return s >= 0 && s < 5 ? names[s] : "?";
+}
+
+
+static const char *menu_item_name(int id, int slot) {
+    int k;
+    if (id <= 0) return "Empty";
+    if (slot == 0) {
+        for (k = 0; WEAPON_DB[k].id; k++) {
+            if (WEAPON_DB[k].id == id) return WEAPON_DB[k].nm;
+        }
+    } else {
+        for (k = 0; ARMOR_DB[k].id; k++) {
+            if (ARMOR_DB[k].id == id) return ARMOR_DB[k].nm;
+        }
+    }
+    return "?";
+}
+
+
+static void menu_build_slots(void) {
+    int aid = menu_aid();
+    mnu_nrows = 0;
+    for (int s = 0; s < 5; s++) {
+        snprintf(mnu_rows[s].text, sizeof(mnu_rows[0].text), "%s: %s",
+                 menu_slot_name(s),
+                 menu_item_name(actor_eq_id(aid, s), s));
+        mnu_rows[s].color = 0xffffffff;
+        mnu_nrows++;
+    }
+    for (int p = 0; p < 8; p++) mnu_preview[p] = actor_param(aid, p);
+}
+
+
+static void menu_build_candidates(void) {
+    int aid = menu_aid(), s = mnu_slot;
+    mnu_nrows = 0;
+    snprintf(mnu_rows[0].text, sizeof(mnu_rows[0].text), "Remove");
+    mnu_rows[0].color = 0xffffffff;
+    mnu_nrows = 1;
+    if (s == 0) {
+        for (int k = 0; WEAPON_DB[k].id && mnu_nrows < 64; k++) {
+            int id = WEAPON_DB[k].id;
+            if (id < 0 || id >= FH_MAX_WEAPONS) continue;
+            if (mit.inv_weap[id] <= 0) continue;
+            snprintf(mnu_rows[mnu_nrows].text,
+                     sizeof(mnu_rows[0].text), "%s x%d", WEAPON_DB[k].nm,
+                     mit.inv_weap[id]);
+            mnu_rows[mnu_nrows].color = 0xffffffff;
+            mnu_nrows++;
+        }
+    } else {
+        for (int k = 0; ARMOR_DB[k].id && mnu_nrows < 64; k++) {
+            int id = ARMOR_DB[k].id;
+            if (id < 0 || id >= FH_MAX_ARMORS) continue;
+            if (ARMOR_DB[k].etype != s + 1) continue;
+            if (mit.inv_arm[id] <= 0) continue;
+            snprintf(mnu_rows[mnu_nrows].text,
+                     sizeof(mnu_rows[0].text), "%s x%d", ARMOR_DB[k].nm,
+                     mit.inv_arm[id]);
+            mnu_rows[mnu_nrows].color = 0xffffffff;
+            mnu_nrows++;
+        }
+    }
+}
+
+
+static void menu_preview_slot(int eq[5]) {
+    int aid = menu_aid(), r = 0, s, k;
+    while (ACTOR_DB[r].id && ACTOR_DB[r].id != aid) r++;
+    if (!ACTOR_DB[r].id) return;
+    {
+        int base[8] = {ACTOR_DB[r].mhp, ACTOR_DB[r].mmp, ACTOR_DB[r].atk,
+                       ACTOR_DB[r].def, ACTOR_DB[r].mat, ACTOR_DB[r].mdf,
+                       ACTOR_DB[r].agi, ACTOR_DB[r].luk};
+        for (int p = 0; p < 8; p++) {
+            int v = base[p];
+            for (s = 0; s < 5; s++) {
+                int id = eq[s];
+                if (id <= 0) continue;
+                if (s == 0) {
+                    for (k = 0; WEAPON_DB[k].id; k++) {
+                        if (WEAPON_DB[k].id == id) {
+                            v += WEAPON_DB[k].p[p];
+                            break;
+                        }
+                    }
+                } else {
+                    for (k = 0; ARMOR_DB[k].id; k++) {
+                        if (ARMOR_DB[k].id == id) {
+                            v += ARMOR_DB[k].p[p];
+                            break;
+                        }
+                    }
+                }
+            }
+            mnu_preview[p] = v;
+        }
+    }
+}
+
+
+static int menu_candidate_id(int row) {
+    int aid = menu_aid(), s = mnu_slot, n = 0;
+    if (row <= 0) return 0;
+    if (s == 0) {
+        for (int k = 0; WEAPON_DB[k].id; k++) {
+            int id = WEAPON_DB[k].id;
+            if (id < 0 || id >= FH_MAX_WEAPONS) continue;
+            if (mit.inv_weap[id] <= 0) continue;
+            if (++n == row) return id;
+        }
+    } else {
+        for (int k = 0; ARMOR_DB[k].id; k++) {
+            int id = ARMOR_DB[k].id;
+            if (id < 0 || id >= FH_MAX_ARMORS) continue;
+            if (ARMOR_DB[k].etype != s + 1) continue;
+            if (mit.inv_arm[id] <= 0) continue;
+            if (++n == row) return id;
+        }
+    }
+    return -1;
+}
+
+
+static void menu_apply_equip(void) {
+    int aid = menu_aid(), s = mnu_slot;
+    int want = menu_candidate_id(mnu_row);
+    int old;
+    if (want < 0 || aid < 0 || aid >= FH_MAX_ACTORS) return;
+    old = mit.equip[aid][s];
+    if (old == want) return;
+    if (old > 0) {
+        if (s == 0) {
+            if (old < FH_MAX_WEAPONS && mit.inv_weap[old] < 99)
+                mit.inv_weap[old]++;
+        } else {
+            if (old < FH_MAX_ARMORS && mit.inv_arm[old] < 99)
+                mit.inv_arm[old]++;
+        }
+    }
+    if (want > 0) {
+        if (s == 0) {
+            if (want >= FH_MAX_WEAPONS || mit.inv_weap[want] <= 0) return;
+            mit.inv_weap[want]--;
+        } else {
+            if (want >= FH_MAX_ARMORS || mit.inv_arm[want] <= 0) return;
+            mit.inv_arm[want]--;
+        }
+    }
+    mit.equip[aid][s] = want;
+}
+
+
+static void collect_save_state(SaveState *st) {
+    int i;
+    memset(st, 0, sizeof(*st));
+    st->map = cur_map;
+    st->px = player.x;
+    st->py = player.y;
+    st->dir = player.dir;
+    st->character = current_character;
+    st->gold = mit.gold;
+    memcpy(st->sw, mit.sw, sizeof(st->sw));
+    memcpy(st->var, mit.var, sizeof(st->var));
+    for (i = 0; i < FH_MAX_ITEMS; i++)
+        st->inv_item[i] = mit.inv_item[i] > 99 ? 99 : mit.inv_item[i];
+    for (i = 0; i < FH_MAX_WEAPONS; i++)
+        st->inv_weap[i] = mit.inv_weap[i] > 99 ? 99 : mit.inv_weap[i];
+    for (i = 0; i < FH_MAX_ARMORS; i++)
+        st->inv_arm[i] = mit.inv_arm[i] > 99 ? 99 : mit.inv_arm[i];
+    memcpy(st->askill, mit.askill, sizeof(st->askill));
+    audio_get_vol(st->audio_vol);
+}
 
 
 static void dbg_try_open(void) {
@@ -1901,7 +2304,7 @@ static void dbg_draw(void) {
     int n = 0, rows = 24, i;
     n += snprintf(dbg_text + n, sizeof(dbg_text) - n,
                   "BATTLE DEBUG (%d troops)\n"
-                  "UP/DN move CIRCLE fight CROSS close\n", dbg_count);
+                  "UP/DN move CIRCLE fight CROSS close TRIANGLE save\n", dbg_count);
     if (dbg_sel < dbg_top) dbg_top = dbg_sel;
     if (dbg_sel >= dbg_top + rows) dbg_top = dbg_sel - rows + 1;
     for (i = 0; i < rows && dbg_top + i < dbg_count; i++) {
@@ -1939,15 +2342,94 @@ int main(int argc, char *argv[]) {
 #ifdef DIAG_STAGES
     diag_color(0xffff0000, "gu-init\n", fbp0, fbp1);
 #endif
+    load_ui();
+    audio_init();
+
+    InputState input = {0};
+
+
+    {
+        const char *tcmds[3] = {"New Game", "Continue", "Options"};
+        const char *ocmds[8];
+        char obuf[5][24];
+        int title_cmd = 0, in_options = 0, opt_cur = 0;
+        int opt_vol[5] = {100, 100, 100, 100, 100};
+        int can_continue = save_exists();
+        audio_play_bgm("fear_and_hunger", 90, 100);
+        for (;;) {
+            input_update(&input);
+            if (!in_options) {
+                if (input_pressed(&input, PSP_CTRL_UP)) {
+                    do {
+                        title_cmd = (title_cmd + 2) % 3;
+                    } while (title_cmd == 1 && !can_continue);
+                }
+                if (input_pressed(&input, PSP_CTRL_DOWN)) {
+                    do {
+                        title_cmd = (title_cmd + 1) % 3;
+                    } while (title_cmd == 1 && !can_continue);
+                }
+                if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                    if (title_cmd == 2) {
+                        in_options = 1;
+                        opt_cur = 0;
+                    } else if (title_cmd == 0 || can_continue) {
+                        break;
+                    }
+                }
+                render_title((unsigned int *)d_title_start, tcmds, 3,
+                             title_cmd, can_continue);
+            } else {
+                static const char *onames[5] = {"Master", "BGM", "BGS",
+                                                "ME", "SE"};
+                int i;
+                if (input_pressed(&input, PSP_CTRL_UP) && opt_cur > 0)
+                    opt_cur--;
+                if (input_pressed(&input, PSP_CTRL_DOWN) && opt_cur < 4)
+                    opt_cur++;
+                if (input_pressed(&input, PSP_CTRL_LEFT) &&
+                    opt_vol[opt_cur] > 0) {
+                    opt_vol[opt_cur] -= 20;
+                    if (opt_vol[opt_cur] < 0) opt_vol[opt_cur] = 0;
+                }
+                if (input_pressed(&input, PSP_CTRL_RIGHT) &&
+                    opt_vol[opt_cur] < 100) {
+                    opt_vol[opt_cur] += 20;
+                    if (opt_vol[opt_cur] > 100) opt_vol[opt_cur] = 100;
+                }
+                if (input_pressed(&input, PSP_CTRL_CIRCLE) ||
+                    input_pressed(&input, PSP_CTRL_CROSS))
+                    in_options = 0;
+                audio_set_master(opt_vol[0]);
+                audio_set_bus(0, opt_vol[1]);
+                audio_set_bus(1, opt_vol[2]);
+                audio_set_bus(2, opt_vol[3]);
+                audio_set_bus(3, opt_vol[4]);
+                for (i = 0; i < 5; i++) {
+                    snprintf(obuf[i], sizeof(obuf[i]), "%s %d", onames[i],
+                             opt_vol[i]);
+                    ocmds[i] = obuf[i];
+                }
+                render_title((unsigned int *)d_title_start, ocmds, 5,
+                             opt_cur, 1);
+            }
+            sceDisplayWaitVblankStart();
+            fbp0 = sceGuSwapBuffers();
+        }
+        if (title_cmd == 1 && can_continue) {
+            SaveState st;
+            if (save_load_state(&st) == 0)
+                apply_save_state(&st);
+        }
+        audio_play_bgm("", 0, 0);
+    }
     load_map030();
 #ifdef DIAG_STAGES
     diag_color(0xff00ff00, "data-loaded\n", fbp0, fbp1);
 #endif
-    audio_init();
     audio_play_bgs("god_of_the_depths", 90, 100, 0);
 
 
-    InputState input = {0};
     int cam_x = player.x - SCR_W / 2;
     int cam_y = player.y - SCR_H / 2;
 
@@ -2012,7 +2494,7 @@ int main(int argc, char *argv[]) {
         if (talk_cool > 0) talk_cool--;
         if (input_pressed(&input, PSP_CTRL_CIRCLE) && !player.moving &&
             talk_cool == 0 && !talk_lock && !battle_mode && !dbg_open &&
-            btl_enc_t == 0) {
+            !mnu_open && btl_enc_t == 0) {
             int ptx = player.x / TILE, pty = player.y / TILE;
             int dx = 0, dy = 0;
             switch (player.dir) {
@@ -2183,7 +2665,136 @@ int main(int argc, char *argv[]) {
                 if (movie_play(mp) < 0)
                     dbg_note("movie missing");
             }
-            if (!dbg_open) {
+            if (input_pressed(&input, PSP_CTRL_TRIANGLE) && !dbg_open &&
+                !mnu_open && btl_enc_t == 0) {
+                mnu_open = 1;
+                mnu_mode = 0;
+                mnu_cmd = 0;
+                mnu_actor = current_character;
+                init_mit_equip();
+                menu_rebuild_actors();
+            }
+            if (mnu_open) {
+                if (mnu_mode == 0) {
+                    if (input_pressed(&input, PSP_CTRL_UP) && mnu_cmd > 0)
+                        mnu_cmd--;
+                    if (input_pressed(&input, PSP_CTRL_DOWN) &&
+                        mnu_cmd < 3)
+                        mnu_cmd++;
+                    if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                        mnu_row = 0;
+                        mnu_top = 0;
+                        if (mnu_cmd == 0) {
+                            mnu_mode = 1;
+                            menu_build_items();
+                        } else if (mnu_cmd == 1) {
+                            mnu_mode = 2;
+                            menu_build_skills();
+                        } else if (mnu_cmd == 2) {
+                            mnu_mode = 3;
+                            mnu_col = 0;
+                            menu_build_slots();
+                        } else {
+                            int p;
+                            mnu_mode = 5;
+                            for (p = 0; p < 8; p++)
+                                mnu_preview[p] =
+                                    actor_param(menu_aid(), p);
+                        }
+                    }
+                    if (input_pressed(&input, PSP_CTRL_CROSS))
+                        mnu_open = 0;
+                } else if (mnu_mode == 1 || mnu_mode == 2) {
+                    if (input_pressed(&input, PSP_CTRL_UP) &&
+                        mnu_row > 0) {
+                        mnu_row--;
+                        if (mnu_row < mnu_top) mnu_top = mnu_row;
+                    }
+                    if (input_pressed(&input, PSP_CTRL_DOWN) &&
+                        mnu_row < mnu_nrows - 1) {
+                        mnu_row++;
+                        if (mnu_row > mnu_top + 8)
+                            mnu_top = mnu_row - 8;
+                    }
+                    if (input_pressed(&input, PSP_CTRL_CROSS)) {
+                        mnu_mode = 0;
+                        mnu_row = 0;
+                        mnu_top = 0;
+                    }
+                } else if (mnu_mode == 3) {
+                    if (input_pressed(&input, PSP_CTRL_UP) && mnu_row > 0)
+                        mnu_row--;
+                    if (input_pressed(&input, PSP_CTRL_DOWN) &&
+                        mnu_row < 4)
+                        mnu_row++;
+                    if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                        mnu_slot = mnu_row;
+                        mnu_row = 0;
+                        mnu_top = 0;
+                        mnu_col = 1;
+                        mnu_mode = 4;
+                        menu_build_candidates();
+                        {
+                            int eq[5], s, want;
+                            for (s = 0; s < 5; s++)
+                                eq[s] = actor_eq_id(menu_aid(), s);
+                            want = menu_candidate_id(0);
+                            eq[mnu_slot] = want >= 0 ? want :
+                                           eq[mnu_slot];
+                            menu_preview_slot(eq);
+                        }
+                    }
+                    if (input_pressed(&input, PSP_CTRL_CROSS)) {
+                        mnu_mode = 0;
+                        mnu_row = 0;
+                        mnu_col = 0;
+                    }
+                } else if (mnu_mode == 4) {
+                    if (input_pressed(&input, PSP_CTRL_UP) &&
+                        mnu_row > 0) {
+                        mnu_row--;
+                        if (mnu_row < mnu_top) mnu_top = mnu_row;
+                    }
+                    if (input_pressed(&input, PSP_CTRL_DOWN) &&
+                        mnu_row < mnu_nrows - 1) {
+                        mnu_row++;
+                        if (mnu_row > mnu_top + 8)
+                            mnu_top = mnu_row - 8;
+                    }
+                    if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
+                        menu_apply_equip();
+                        mnu_mode = 3;
+                        mnu_col = 0;
+                        menu_build_slots();
+                    }
+                    if (input_pressed(&input, PSP_CTRL_CROSS)) {
+                        mnu_mode = 3;
+                        mnu_col = 0;
+                        menu_build_slots();
+                    }
+                    {
+                        int eq[5], s, want;
+                        for (s = 0; s < 5; s++)
+                            eq[s] = actor_eq_id(menu_aid(), s);
+                        want = menu_candidate_id(mnu_row);
+                        eq[mnu_slot] = want >= 0 ? want :
+                                       eq[mnu_slot];
+                        menu_preview_slot(eq);
+                    }
+                } else if (mnu_mode == 5) {
+                    if (input_pressed(&input, PSP_CTRL_LEFT)) {
+                        mnu_actor = (mnu_actor + 3) % 4;
+                        menu_rebuild_actors();
+                    }
+                    if (input_pressed(&input, PSP_CTRL_RIGHT)) {
+                        mnu_actor = (mnu_actor + 1) % 4;
+                        menu_rebuild_actors();
+                    }
+                    if (input_pressed(&input, PSP_CTRL_CROSS))
+                        mnu_mode = 0;
+                }
+            }
+            if (!dbg_open && !mnu_open) {
                 if (input_pressed(&input, PSP_CTRL_SELECT)) dbg_try_open();
             } else {
                 if (input_pressed(&input, PSP_CTRL_UP) && dbg_sel > 0)
@@ -2192,6 +2803,14 @@ int main(int argc, char *argv[]) {
                     dbg_sel < dbg_count - 1)
                     dbg_sel++;
                 if (input_pressed(&input, PSP_CTRL_CROSS)) dbg_open = 0;
+                if (input_pressed(&input, PSP_CTRL_TRIANGLE)) {
+                    SaveState st;
+                    collect_save_state(&st);
+                    if (save_store_state(&st) == 0)
+                        dbg_note("saved");
+                    else
+                        dbg_note("save failed");
+                }
                 if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                     int tr = tblob_id(dbg_sel);
                     dbg_open = 0;
@@ -2737,7 +3356,7 @@ int main(int argc, char *argv[]) {
                 btl_start(btl_enc_tick, btl_enc_char, btl_enc_troop);
         }
         btl_enc_flash = btl_enc_t > 20 ? 255 * (btl_enc_t - 20) / 40 : 0;
-        player_update(&player, (dbg_open || btl_enc_t > 0) ? 0 : input.buttons,
+        player_update(&player, (dbg_open || mnu_open || btl_enc_t > 0) ? 0 : input.buttons,
                       (uint16_t*)map_passability,
                       MAP_W, MAP_H, npc_solid);
 
@@ -2745,7 +3364,7 @@ int main(int argc, char *argv[]) {
         if (!player.moving && player.x == pre_px && player.y == pre_py) {
             unsigned int held = input.buttons &
                 (PSP_CTRL_UP | PSP_CTRL_DOWN | PSP_CTRL_LEFT | PSP_CTRL_RIGHT);
-            if (held && !dbg_open) {
+            if (held && !dbg_open && !mnu_open) {
                 int dx = 0, dy = 0;
                 switch (player.dir) {
                     case 0: dy = 1; break;
@@ -2795,6 +3414,15 @@ int main(int argc, char *argv[]) {
                     npc_draw, 15, fhl, nfhl);
 
 
+        if (mnu_open) {
+            int mc = mnu_mode == 0 ? mnu_cmd : mnu_row;
+            sceGuStart(GU_DIRECT, gu_list);
+            render_menu(mnu_mode, mc, mnu_actors, 4, mnu_actor,
+                        mnu_rows, mnu_nrows, mnu_row, mnu_top,
+                        mnu_preview, face_t8, face_cl);
+            sceGuFinish();
+            sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
+        }
         if (dbg_open) {
             dbg_draw();
         } else if (dbg_err_t > 0) {

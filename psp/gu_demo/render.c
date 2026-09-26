@@ -526,6 +526,82 @@ void render_frame(int cam_x, int cam_y,
 
 
 static void skin_box(int x0, int y0, int x1, int y1, unsigned int fill,
+                     int frame);
+static void battle_text(const char *s, float x, float y, unsigned int col,
+                        TVert **vpp);
+static float battle_text_w(const char *s);
+
+void render_title(unsigned int *card, const char *cmds[8], int ncmds,
+                  int cursor, int can_continue) {
+    int i;
+    sceGuStart(GU_DIRECT, gu_list_ptr);
+    sceGuClearColor(0xff000000);
+    sceGuClear(GU_COLOR_BUFFER_BIT);
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuTexMode(GU_PSM_8888, 0, 0, 0);
+    sceGuTexImage(0, 512, 272, 512, card);
+    sceGuTexFlush();
+    sceGuTexSync();
+    {
+        TVert *v = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        v[0].u = 16; v[0].v = 0; v[0].color = 0xffffffff;
+        v[0].x = 0; v[0].y = 0; v[0].z = 0.0f;
+        v[1].u = 496; v[1].v = 272; v[1].color = 0xffffffff;
+        v[1].x = (float)SCR_W; v[1].y = (float)SCR_H; v[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, v);
+    }
+    sceGuDisable(GU_TEXTURE_2D);
+    skin_box(170, 178, 310, 178 + 6 + ncmds * 22 + 12, 0xc8343c42, 1);
+    {
+        int pulse = (render_ticks / 12) % 2;
+        unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+        skin_box(174, 186 + cursor * 22, 306, 186 + cursor * 22 + 24,
+                 hc, 0);
+    }
+    if (font_px) {
+        sceGuEnable(GU_BLEND);
+        sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+        sceGuEnable(GU_ALPHA_TEST);
+        sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+        sceGuEnable(GU_TEXTURE_2D);
+        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+        sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+        sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+        sceGuTexScale(1.0f, 1.0f);
+        sceGuTexOffset(0.0f, 0.0f);
+        sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+        sceGuClutLoad(32, font_cl);
+        sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+        sceGuTexImage(0, 512, 512, 512, font_px);
+        sceGuTexFlush();
+        sceGuTexSync();
+        TVert *v = (TVert *)sceGuGetMemory(
+            (ncmds * 20 + 48) * 2 * 2 * sizeof(TVert));
+        TVert *vp = v;
+        for (i = 0; i < ncmds; i++) {
+            float tw = battle_text_w(cmds[i]);
+            unsigned int col = (i == 1 && !can_continue) ? 0xff808080 :
+                                                           0xffffffff;
+            battle_text(cmds[i], 240.0f - tw * 0.5f, 188.0f + (float)i * 22,
+                        col, &vp);
+        }
+        if (vp > v)
+            sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
+        sceGuDisable(GU_ALPHA_TEST);
+        sceGuDisable(GU_BLEND);
+        sceGuDisable(GU_TEXTURE_2D);
+    }
+    sceGuFinish();
+    sceGuSync(GU_SYNC_FINISH, GU_SYNC_WHAT_DONE);
+}
+
+
+static void skin_box(int x0, int y0, int x1, int y1, unsigned int fill,
                      int frame) {
     sceGuDisable(GU_TEXTURE_2D);
     if (fill >> 24) {
@@ -1171,6 +1247,198 @@ static float battle_text_w(const char *s) {
         w += msg_adv(cp);
     }
     return w;
+}
+
+
+static void draw_face(unsigned char *t8, unsigned int *cl, int cell,
+                      float x, float y, float size) {
+    float u = (float)((cell % 4) * 72), v = (float)((cell / 4) * 72);
+    TVert *f;
+    if (!t8 || !cl) return;
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuClutLoad(32, cl);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+    sceGuTexImage(0, 512, 256, 512, t8);
+    sceGuTexFlush();
+    sceGuTexSync();
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    f = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+    f[0].u = u; f[0].v = v; f[0].color = 0xffffffff;
+    f[0].x = x; f[0].y = y; f[0].z = 0.0f;
+    f[1].u = u + 72; f[1].v = v + 72; f[1].color = 0xffffffff;
+    f[1].x = x + size; f[1].y = y + size; f[1].z = 0.0f;
+    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, f);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuDisable(GU_BLEND);
+    sceGuDisable(GU_TEXTURE_2D);
+}
+
+
+void render_menu(int mode, int cursor,
+                 const MenuActor *actors, int nactors, int cur_actor,
+                 const BtListRow *rows, int nrows, int rowcur, int rowtop,
+                 const int *preview,
+                 unsigned char **face_t8, unsigned int **face_cl) {
+    static const char *mcmds[4] = {"Item", "Skill", "Equip", "Status"};
+    static const char *pnames[8] = {"MHP", "MMP", "ATK", "DEF",
+                                    "MAT", "MDF", "AGI", "LUK"};
+    int pulse = (render_ticks / 12) % 2;
+    unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+    int i, r, total = 64;
+    TVert *v, *vp;
+    if (mode == 0) {
+        for (i = 0; i < 4; i++) total += 12;
+        for (r = 0; r < nactors && r < 4; r++) total += 64;
+    } else if (mode == 1 || mode == 2 || mode == 4) {
+        for (r = rowtop; r < nrows && r < rowtop + 9; r++)
+            total += (int)strlen(rows[r].text) + 2;
+        if (!nrows) total += 16;
+    } else {
+        for (r = 0; r < nrows && r < 5; r++)
+            total += (int)strlen(rows[r].text) + 2;
+        total += 8 * 12;
+        if (mode == 5) total += 64;
+    }
+    {
+        TVert *d = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+        sceGuDisable(GU_TEXTURE_2D);
+        sceGuDisable(GU_ALPHA_TEST);
+        sceGuEnable(GU_BLEND);
+        sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0,
+                       0);
+        d[0].u = 0; d[0].v = 0; d[0].color = 0xa0000000;
+        d[0].x = 0; d[0].y = 0; d[0].z = 0.0f;
+        d[1].u = 0; d[1].v = 0; d[1].color = 0xa0000000;
+        d[1].x = (float)SCR_W; d[1].y = (float)SCR_H; d[1].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, d);
+    }
+    if (mode == 0) {
+        skin_box(8, 96, 150, 208, 0xc8343c42, 1);
+        skin_box(10, 102 + cursor * 24, 148, 102 + cursor * 24 + 26, hc,
+                 0);
+        skin_box(160, 64, 472, 264, 0xc8343c42, 1);
+        for (r = 0; r < nactors && r < 4; r++) {
+            const MenuActor *a = &actors[r];
+            draw_face(face_t8[a->face_sheet], face_cl[a->face_sheet],
+                      a->face_cell, 168.0f, 72.0f + (float)r * 48, 36.0f);
+        }
+    } else if (mode == 1 || mode == 2 || mode == 4) {
+        int shown = nrows - rowtop;
+        if (shown > 9) shown = 9;
+        if (shown < 0) shown = 0;
+        skin_box(8, 40, 472, 264, 0xc8343c42, 1);
+        for (r = 0; r < shown; r++) {
+            if (rowtop + r == rowcur)
+                skin_box(12, 46 + (float)r * 22, 468,
+                         46 + (float)r * 22 + 24, hc, 0);
+        }
+    } else {
+        skin_box(8, 64, 226, 64 + 5 * 24 + 16, 0xc8343c42, 1);
+        for (r = 0; r < nrows && r < 5; r++) {
+            if (mode == 3 && r == rowcur)
+                skin_box(12, 70 + (float)r * 24, 222,
+                         70 + (float)r * 24 + 26, hc, 0);
+        }
+        skin_box(236, 64, 472, 64 + 8 * 22 + 16, 0xc8343c42, 1);
+        if (mode == 5) {
+            const MenuActor *a = &actors[cur_actor < nactors ? cur_actor
+                                                             : 0];
+            draw_face(face_t8[a->face_sheet], face_cl[a->face_sheet],
+                      a->face_cell, 24.0f, 56.0f, 72.0f);
+        }
+    }
+    if (!font_px) return;
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuClutLoad(32, font_cl);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+    sceGuTexImage(0, 512, 512, 512, font_px);
+    sceGuTexFlush();
+    sceGuTexSync();
+    v = (TVert *)sceGuGetMemory((size_t)total * 2 * 2 * sizeof(TVert));
+    vp = v;
+    if (mode == 0) {
+        for (i = 0; i < 4; i++)
+            battle_text(mcmds[i], 30.0f, 104.0f + (float)i * 24,
+                        0xffffffff, &vp);
+        for (r = 0; r < nactors && r < 4; r++) {
+            const MenuActor *a = &actors[r];
+            float ry = 72.0f + (float)r * 48;
+            char lv[16], hp[32], mp[32];
+            unsigned int nc = r == cur_actor ? 0xffffff9b : 0xffffffff;
+            snprintf(lv, sizeof(lv), "Lv %d", a->level);
+            snprintf(hp, sizeof(hp), "HP %d/%d", a->hp, a->mhp);
+            snprintf(mp, sizeof(mp), "MP %d/%d", a->mp, a->mmp);
+            battle_text(a->name, 210.0f, ry, nc, &vp);
+            battle_text(lv, 330.0f, ry, 0xffffffff, &vp);
+            battle_text(hp, 210.0f, ry + 20.0f, MSG_PAL[16], &vp);
+            battle_text(mp, 340.0f, ry + 20.0f, MSG_PAL[16], &vp);
+        }
+    } else if (mode == 1 || mode == 2 || mode == 4) {
+        int shown = nrows - rowtop;
+        int k;
+        if (shown > 9) shown = 9;
+        if (shown < 0) shown = 0;
+        if (!nrows)
+            battle_text("Nothing here.", 30.0f, 60.0f, 0xff808080, &vp);
+        for (k = 0; k < shown; k++) {
+            float ry = 48.0f + (float)k * 22;
+            battle_text(rows[rowtop + k].text, 30.0f, ry,
+                        rows[rowtop + k].color, &vp);
+        }
+    } else if (mode == 3) {
+        for (r = 0; r < nrows && r < 5; r++) {
+            float ry = 72.0f + (float)r * 24;
+            battle_text(rows[r].text, 30.0f, ry, rows[r].color, &vp);
+        }
+        for (i = 0; i < 8; i++) {
+            char pb[32];
+            float ry = 72.0f + (float)i * 22;
+            snprintf(pb, sizeof(pb), "%s %d", pnames[i],
+                     preview ? preview[i] : 0);
+            battle_text(pb, 260.0f, ry, 0xffffffff, &vp);
+        }
+    } else if (mode == 5) {
+        const MenuActor *a = &actors[cur_actor < nactors ? cur_actor : 0];
+        char lv[48], hp[48], mp[48];
+        battle_text(a->name, 110.0f, 60.0f, 0xffffffff, &vp);
+        snprintf(lv, sizeof(lv), "Lv %d", a->level);
+        battle_text(lv, 110.0f, 84.0f, 0xffffffff, &vp);
+        snprintf(hp, sizeof(hp), "HP %d/%d", a->hp, a->mhp);
+        snprintf(mp, sizeof(mp), "MP %d/%d", a->mp, a->mmp);
+        battle_text(hp, 110.0f, 108.0f, 0xffffffff, &vp);
+        battle_text(mp, 280.0f, 108.0f, 0xffffffff, &vp);
+        for (i = 0; i < 8; i++) {
+            char pb[32];
+            float ry = 148.0f + (float)i * 13;
+            snprintf(pb, sizeof(pb), "%s %d", pnames[i],
+                     preview ? preview[i] : 0);
+            battle_text(pb, 30.0f, ry, 0xffffffff, &vp);
+        }
+    }
+    if (vp > v)
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuDisable(GU_BLEND);
+    sceGuDisable(GU_TEXTURE_2D);
 }
 
 

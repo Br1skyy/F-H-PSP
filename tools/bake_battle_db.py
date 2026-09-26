@@ -252,6 +252,62 @@ def main() -> None:
         L.append(f'    {{{x["id"]},"{x.get("name", "")[:31]}"}},')
     L.append('    {0,""},');
     L.append('};')
+    L.append('static const struct { int id, cls; } ACTOR_CLS[] = {')
+    for x in actors:
+        if not x:
+            continue
+        L.append('    {%d,%d},' % (x['id'], x.get('classId', 1)))
+    L.append('    {0,0},');
+    L.append('};')
+    L.append('static const struct { int id, sheet, cell; } ACTOR_FACE[] = {')
+    for x in actors:
+        if not x:
+            continue
+        fn = str(x.get('faceName', ''))
+        sheet = 0
+        for i, tag in enumerate(('Actor1', 'Actor2', 'Actor3')):
+            if tag in fn:
+                sheet = i
+                break
+        L.append('    {%d,%d,%d},' % (
+            x['id'], sheet, int(x.get('faceIndex', 0))))
+    L.append('    {0,0,0},');
+    L.append('};')
+    L.append('static const struct { int id, eq[5]; } ACTOR_EQ[] = {')
+    for x in actors:
+        if not x:
+            continue
+        eq = list(x.get('equips', []))[:5] + [0] * 5
+        L.append('    {%d,{%s}},' % (
+            x['id'], ','.join(str(int(v or 0)) for v in eq[:5])))
+    L.append('    {0,{0}},');
+    L.append('};')
+    weapons = json.load(open(game / 'Weapons.json', encoding='utf-8'))
+    L.append('static const struct { int id, etype, price, icon;'
+             ' int p[8]; char nm[40]; } WEAPON_DB[] = {')
+    for x in weapons:
+        if not x:
+            continue
+        pp = list(x.get('params', []))[:8] + [0] * 8
+        L.append('    {%d,%d,%d,%d,{%s},"%s"},' % (
+            x['id'], x.get('etypeId', 1), x.get('price', 0),
+            x.get('iconIndex', 0), ','.join(str(int(v)) for v in pp[:8]),
+            x.get('name', '')[:39].replace('"', '')))
+    L.append('    {0},');
+    L.append('};')
+    armors = json.load(open(game / 'Armors.json', encoding='utf-8'))
+    L.append('static const struct { int id, etype, price, icon;'
+             ' int p[8]; char nm[40]; } ARMOR_DB[] = {')
+    for x in armors:
+        if not x:
+            continue
+        pp = list(x.get('params', []))[:8] + [0] * 8
+        L.append('    {%d,%d,%d,%d,{%s},"%s"},' % (
+            x['id'], x.get('etypeId', 2), x.get('price', 0),
+            x.get('iconIndex', 0), ','.join(str(int(v)) for v in pp[:8]),
+            x.get('name', '')[:39].replace('"', '')))
+    L.append('    {0},');
+    L.append('};')
     L.append('static const struct { const char *name; int w, h, tw, th,'
              ' stride; } BACK_DB[] = {')
     for cat in ('battlebacks1', 'battlebacks2'):

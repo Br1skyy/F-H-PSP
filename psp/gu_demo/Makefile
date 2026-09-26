@@ -1,5 +1,5 @@
 TARGET = fh_demo
-OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o battle_blob.o movie.o audio.o tremor_block.o tremor_codebook.o tremor_floor0.o tremor_floor1.o tremor_info.o tremor_mapping0.o tremor_mdct.o tremor_registry.o tremor_res012.o tremor_sharedbook.o tremor_synthesis.o tremor_vorbisfile.o tremor_window.o ogg_bitwise.o ogg_framing.o \
+OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o battle_blob.o movie.o audio.o save.o tremor_block.o tremor_codebook.o tremor_floor0.o tremor_floor1.o tremor_info.o tremor_mapping0.o tremor_mdct.o tremor_registry.o tremor_res012.o tremor_sharedbook.o tremor_synthesis.o tremor_vorbisfile.o tremor_window.o ogg_bitwise.o ogg_framing.o \
        d_a1.o d_b.o d_e.o d_ib.o d_d.o \
        d_a1c.o d_bc.o d_ec.o d_ibc.o d_dc.o \
        d_layers.o d_pass.o d_high.o \
@@ -8,7 +8,8 @@ OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o b
        d_flame.o d_flamec.o d_creat.o d_creatc.o \
        d_mobj.o d_mobjc.o d_ghost.o d_ghostc.o d_guard1.o d_guard1c.o \
        d_font.o d_fontc.o d_fontadv.o \
-       d_win.o d_winc.o \
+       d_win.o d_winc.o d_title.o \
+       d_face1.o d_face1c.o d_face2.o d_face2c.o d_face3.o d_face3c.o \
        d_tmerc.o d_tmercc.o d_toutl.o d_toutlc.o \
        d_tpriest.o d_tpriestc.o d_tknight.o d_tknightc.o \
        d_form.o \
@@ -114,6 +115,20 @@ d_fontc.o: data/font.clut
 	bin2o -i data/font.clut d_fontc.o d_fontc
 d_win.o: data/window.t8
 	bin2o -i data/window.t8 d_win.o d_win
+d_title.o: data/title.rgba
+	bin2o -i data/title.rgba d_title.o d_title
+d_face1.o: data/face_Actor1.t8
+	bin2o -i data/face_Actor1.t8 d_face1.o d_face1
+d_face1c.o: data/face_Actor1.clut
+	bin2o -i data/face_Actor1.clut d_face1c.o d_face1c
+d_face2.o: data/face_Actor2.t8
+	bin2o -i data/face_Actor2.t8 d_face2.o d_face2
+d_face2c.o: data/face_Actor2.clut
+	bin2o -i data/face_Actor2.clut d_face2c.o d_face2c
+d_face3.o: data/face_Actor3.t8
+	bin2o -i data/face_Actor3.t8 d_face3.o d_face3
+d_face3c.o: data/face_Actor3.clut
+	bin2o -i data/face_Actor3.clut d_face3c.o d_face3c
 d_winc.o: data/window.clut
 	bin2o -i data/window.clut d_winc.o d_winc
 d_bv0a.o: data/bv_Actor1_1a.t8

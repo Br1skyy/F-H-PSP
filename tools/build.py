@@ -108,6 +108,7 @@ HEADER_DEPS = {
                  'interp_rt.h', 'text_rt.h'],
     'input.o': ['input.c', 'input.h'],
     'movie.o': ['movie.c', 'movie.h'],
+    'save.o': ['save.c', 'save.h'],
     'audio.o': ['audio.c', 'audio.h'],
     'tremor_all.o': ['../../runtime/tremor_all.c'],
     'audio.o': ['audio.c', 'audio.h'],

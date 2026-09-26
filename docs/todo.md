@@ -20,6 +20,9 @@
 - Select-button debug menu that starts any troop
 - `tools/build.py`, a portable builder that makes a byte-identical
   EBOOT with no make or sh, plus `make dist` filling `Build/`
+- Title screen (card art, New Game, Continue, Options with volumes),
+  main menu (Item, Skill, Equip, Status with faces), working
+  equipment changes with stat preview, and Memory Stick saves
 
 ## In progress
 
@@ -29,7 +32,7 @@
 
 ## Next
 
-- Title screen, menus, equipment, saves, shops
+- Menu item and skill use, shops, formation (off in the original)
 - Map events beyond talk (doors, footsteps, and 200 other Map030
   triggers), then more maps
 - Defeat routing: 301 win/lose branches, map transfers, game over

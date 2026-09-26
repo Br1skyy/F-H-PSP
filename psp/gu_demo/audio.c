@@ -22,6 +22,14 @@ static int au_bus_gain(int bus) {
     return au_master * au_bus[bus] / 100;
 }
 
+void audio_get_vol(int out[5]) {
+    out[0] = au_master;
+    out[1] = au_bus[0];
+    out[2] = au_bus[1];
+    out[3] = au_bus[2];
+    out[4] = au_bus[3];
+}
+
 typedef struct {
     int kind;
     FILE *f;

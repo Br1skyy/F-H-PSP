@@ -174,6 +174,10 @@ def run_bakers(game, map_name, data):
         (['tools/bake_higher.py', '--map', map_name, '--game',
           f'{game}/data'],
          ['map030/higher.bin']),
+        (['tools/bake_title.py', str(game)],
+         ['title.rgba']),
+        (['tools/bake_faces.py', str(game)],
+         ['face_Actor1.t8', 'face_Actor2.t8', 'face_Actor3.t8']),
     ]
     for cmd, outputs in jobs:
         if all((data / o).exists() for o in outputs):

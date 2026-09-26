@@ -21,6 +21,7 @@ void audio_pop_bgs(void);
 void audio_forget(FhInterp *it);
 void audio_set_master(int vol);
 void audio_set_bus(int bus, int vol);
+void audio_get_vol(int out[5]);
 void audio_status(char *out, int cap);
 
 #endif

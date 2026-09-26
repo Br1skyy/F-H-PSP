@@ -118,6 +118,20 @@ typedef struct {
     int icon;
 } BtListRow;
 
+void render_title(unsigned int *card, const char *cmds[8], int ncmds,
+                  int cursor, int can_continue);
+
+typedef struct {
+    const char *name;
+    int level, hp, mhp, mp, mmp;
+    int face_sheet, face_cell;
+} MenuActor;
+
+void render_menu(int mode, int cursor,
+                 const MenuActor *actors, int nactors, int cur_actor,
+                 const BtListRow *rows, int nrows, int rowcur, int rowtop,
+                 const int *preview,
+                 unsigned char **face_t8, unsigned int **face_cl);
 void render_battle(const BtFoeDraw *foes, int nfoes,
                    const BtPopup *pops, int npops,
                    const char *actor_name, int hp, int mhp, int mp, int mmp,
