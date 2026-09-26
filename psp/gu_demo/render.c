@@ -1161,8 +1161,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    const BtPopup *pops, int npops,
                    const char *actor_name, int hp, int mhp, int mp, int mmp,
                    const char *cmds[], int ncmds, int cursor, int show_cmds,
-                   const char *targets[], int ntargets, int tcursor,
-                   int show_targets, const char *log0, const char *log1,
+                   const char *log0, const char *log1,
                    unsigned char *actor_t8a, unsigned int *actor_cla,
                    unsigned char *actor_t8b, unsigned int *actor_clb,
                    int actor_ccol, int actor_crow, int actor_sx,
@@ -1319,11 +1318,6 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         if (nn > 5) nn = 5;
         skin_box(8, 156, 142, 162 + (nn - 1) * 18 + 38, 0xc8343c42, 1);
     }
-    int en_rows = 0;
-    if (show_targets && ntargets > 0) {
-        en_rows = ntargets > 7 ? 7 : ntargets;
-        skin_box(296, 8, 472, 8 + en_rows * 22 + 28, 0xc8343c42, 1);
-    }
 
 
     {
@@ -1335,16 +1329,11 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         if (show_list && lrows && lcursor >= 0 && lcursor < nlrows)
             skin_box(10, 162 + lcursor * 20, 140, 162 + lcursor * 20 + 22,
                      hc, 0);
-        if (show_targets && tcursor >= 0 && tcursor < en_rows)
-            skin_box(298, 20 + tcursor * 22, 470, 20 + tcursor * 22 + 24,
-                     hc, 0);
     }
 
 
     int cmdtotal = (int)strlen(actor_name) + 24;
     for (int i = 0; i < ncmds; i++) cmdtotal += (int)strlen(cmds[i]) + 2;
-    int targtotal = 0;
-    for (int i = 0; i < ntargets; i++) targtotal += (int)strlen(targets[i]) + 2;
     int poptotal = npops * 8;
     int loglen = 0;
     if (log0) loglen += (int)strlen(log0);
@@ -1357,7 +1346,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
 
 
     TVert *v = (TVert *)sceGuGetMemory(
-        (cmdtotal + targtotal + poptotal + loglen + listtotal + 48) * 2 * 2 *
+        (cmdtotal + poptotal + loglen + listtotal + 48) * 2 * 2 *
         sizeof(TVert));
     TVert *vp = v;
 
@@ -1431,16 +1420,6 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                   (((unsigned int)(255.0f * k)) << 24);
             float py = (float)pops[i].y - (1.0f - k) * 24.0f;
             battle_text(buf, (float)pops[i].x, py, col, &vp);
-        }
-
-
-        if (show_targets && ntargets > 0) {
-            for (int i = 0; i < en_rows && i < ntargets; i++) {
-                float cy = 22.0f + (float)i * 22.0f;
-                const char *nm = (targets[i] && targets[i][0]) ? targets[i]
-                                                               : "?";
-                battle_text(nm, 314.0f, cy, 0xffffffff, &vp);
-            }
         }
 
 

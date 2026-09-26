@@ -2558,24 +2558,10 @@ int main(int argc, char *argv[]) {
                 draws[i].alive =
                     btl.f[1 + i].alive || btl_collapse[i] > 0;
             }
-            const char *targets[BT_MAX_FOES];
-            int ntgt = 0;
-            for (int i = 0; i < btl.n_foes; i++) {
-                if (!btl.f[1 + i].alive) continue;
-                int r = 0;
-                while (FOE_DB[r].id && FOE_DB[r].id != btl.f[1 + i].ref) r++;
-                targets[ntgt++] = FOE_DB[r].id ? FOE_DB[r].name : "?";
-            }
             char st_name[32];
             snprintf(st_name, sizeof(st_name), "%s",
                      characters[current_character].name);
 
-            int tcursor = 0, seen = 0;
-            for (int i = 0; i < btl.n_foes; i++) {
-                if (!btl.f[1 + i].alive) continue;
-                if (i == btl_tgt) tcursor = seen;
-                seen++;
-            }
             sceGuStart(GU_DIRECT, gu_list);
             sceGuClearColor(0xff000000);
             sceGuClear(GU_COLOR_BUFFER_BIT);
@@ -2641,10 +2627,7 @@ int main(int argc, char *argv[]) {
                          btl.f[0].hp, btl.f[0].maxhp, btl.f[0].mp,
                          btl.f[0].maxmp,
                          acmds, 4, btl_cmd,
-                         btl_phase == 0 && !btl_ev_active, targets, ntgt,
-                         tcursor,
-                         (btl_phase == 1 || btl_phase == 7) &&
-                             !btl_ev_active,
+                         btl_phase == 0 && !btl_ev_active,
                          btl_log_t[0] > 0 ? btl_log[0] : NULL,
                          btl_log_t[1] > 0 ? btl_log[1] : NULL,
                          bv_t8a[current_character], bv_cla[current_character],
