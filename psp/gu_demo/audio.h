@@ -14,5 +14,6 @@ void audio_fade_bgs(int frames);
 void audio_stop_se(void);
 void audio_push_bgm(void);
 void audio_pop_bgm(void);
+void audio_status(char *out, int cap);
 
 #endif

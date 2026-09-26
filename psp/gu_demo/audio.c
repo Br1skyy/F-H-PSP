@@ -1,6 +1,7 @@
 #include "audio.h"
 #include <pspkernel.h>
 #include <pspaudio.h>
+#include <pspiofilemgr.h>
 #include <stdio.h>
 #include <string.h>
 #include "tremor/ivorbiscodec.h"
@@ -10,6 +11,10 @@
 #define AU_CHUNK 1024
 #define AU_SE_N 8
 #define AU_CACHE_FRAMES 2048
+
+static int au_mix_count;
+static int au_last_err;
+static char au_err_at[48];
 
 typedef struct {
     int kind;
@@ -45,6 +50,17 @@ static void au_gains(AVoice *v, int *lg, int *rg) {
     if (r < 0) r = 0;
     *lg = g * l / 100;
     *rg = g * r / 100;
+}
+
+static void au_trace(const char *msg, int v) {
+    SceUID fd = sceIoOpen("ms0:/fh_audio.txt",
+                          PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND, 0777);
+    if (fd >= 0) {
+        char b[128];
+        int n = snprintf(b, sizeof(b), "%s %d\n", msg, v);
+        sceIoWrite(fd, b, n > 0 ? (SceSize)n : 0);
+        sceIoClose(fd);
+    }
 }
 
 static int au_wav_open(AVoice *v, const char *path) {
@@ -171,9 +187,14 @@ static int au_voice_sample(AVoice *v, int *l, int *r) {
 
 static void au_stream_fill(AVoice *v, const char *path, int loop) {
     FILE *f = fopen(path, "rb");
-    if (!f)
+    if (!f) {
+        au_last_err = -101;
+        snprintf(au_err_at, sizeof(au_err_at), "open %-36s", path);
         return;
+    }
     if (ov_open(f, &v->vf, NULL, 0) < 0) {
+        au_last_err = -102;
+        snprintf(au_err_at, sizeof(au_err_at), "ovopen %-34s", path);
         fclose(f);
         return;
     }
@@ -293,13 +314,15 @@ static int au_thread(SceSize args, void *argp) {
             }
         }
         for (i = 0; i < AU_CHUNK * 2; i++) {
-            int v = acc[i] >> 8;
-            if (v < -32768) v = -32768;
-            if (v > 32767) v = 32767;
-            out[i] = (short)v;
+            int s = acc[i] >> 8;
+            if (s < -32768) s = -32768;
+            if (s > 32767) s = 32767;
+            out[i] = (short)s;
         }
         sceKernelSignalSema(au_sema, 1);
         sceAudioOutputBlocking(au_ch, PSP_AUDIO_VOLUME_MAX, out);
+        if ((++au_mix_count & 255) == 0)
+            au_trace("mix", au_mix_count);
     }
     return 0;
 }
@@ -308,12 +331,20 @@ void audio_init(void) {
     au_sema = sceKernelCreateSema("fh_audio", 0, 1, 1, 0);
     au_ch = sceAudioChReserve(PSP_AUDIO_NEXT_CHANNEL, AU_CHUNK,
                               PSP_AUDIO_FORMAT_STEREO);
+    au_trace("init sema/ch", (int)au_sema * 1000 + au_ch);
     if (au_ch >= 0) {
         SceUID th = sceKernelCreateThread("fh_audio", au_thread, 0x12,
                                           128 * 1024, 0, 0);
+        au_trace("init thread", (int)th);
         if (th >= 0)
             sceKernelStartThread(th, 0, 0);
     }
+}
+
+void audio_status(char *out, int cap) {
+    snprintf(out, cap, "mix=%d err=%d@%s bgm=%d bgs=%d",
+             au_mix_count, au_last_err, au_err_at,
+             au_bgm.active, au_bgs.active);
 }
 
 static void au_se_alloc(const char *name, int vol, int pitch, int pan) {
@@ -333,8 +364,11 @@ static void au_se_alloc(const char *name, int vol, int pitch, int pan) {
     {
         AVoice tmp;
         memset(&tmp, 0, sizeof(tmp));
-        if (au_wav_open(&tmp, path) != 0)
+        if (au_wav_open(&tmp, path) != 0) {
+            au_last_err = -103;
+            snprintf(au_err_at, sizeof(au_err_at), "wav %-37s", path);
             return;
+        }
         au_se[slot] = tmp;
     }
     au_se[slot].kind = 1;

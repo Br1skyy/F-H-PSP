@@ -2779,15 +2779,17 @@ int main(int argc, char *argv[]) {
                     data_n = tblob_count();
             }
             if (frames == 0 || frames - last_debug_update >= 30) {
+                char ast[64];
+                audio_status(ast, sizeof(ast));
                 if (data_n >= 0)
                     snprintf(debug_text, sizeof(debug_text),
-                             "F&H: %s | fps:%d | data:ok(%d)",
+                             "F&H: %s | fps:%d | data:ok(%d) %s",
                              characters[current_character].name, fps,
-                             data_n);
+                             data_n, ast);
                 else
                     snprintf(debug_text, sizeof(debug_text),
-                             "F&H: %s | fps:%d | data:MISSING",
-                             characters[current_character].name, fps);
+                             "F&H: %s | fps:%d | data:MISSING %s",
+                             characters[current_character].name, fps, ast);
                 last_debug_update = frames;
             }
             render_debug_text(debug_text);
