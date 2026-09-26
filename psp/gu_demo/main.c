@@ -1959,6 +1959,11 @@ static void apply_save_state(const SaveState *st) {
     memcpy(mit.askill, st->askill, sizeof(mit.askill));
     mit_equip_init_done = 1;
     mit.gold = st->gold;
+    if (st->party_n > 0 && st->party_n <= FH_MAX_PARTY) {
+        mit.party_n = st->party_n;
+        for (int i = 0; i < st->party_n; i++)
+            mit.party[i] = st->party[i];
+    }
     player.x = st->px;
     player.y = st->py;
     player.dir = st->dir;
@@ -1981,7 +1986,6 @@ static int dbg_open = 0, dbg_sel = 0, dbg_top = 0, dbg_count = 0;
 static char dbg_text[2048];
 
 
-static const int menu_actor_ids[4] = {1, 5, 4, 3};
 static int mnu_open = 0, mnu_mode = 0, mnu_cmd = 0, mnu_actor = 0;
 static int mnu_row = 0, mnu_top = 0, mnu_col = 0, mnu_slot = 0;
 static MenuActor mnu_actors[4];
@@ -1991,8 +1995,16 @@ static int mnu_preview[8];
 
 
 static int menu_aid(void) {
-    if (mnu_actor < 0 || mnu_actor > 3) mnu_actor = 0;
-    return menu_actor_ids[mnu_actor];
+    if (mit.party_n <= 0) return 1;
+    if (mnu_actor < 0 || mnu_actor >= mit.party_n) mnu_actor = 0;
+    return mit.party[mnu_actor];
+}
+
+
+static int menu_nactors(void) {
+    if (mit.party_n < 1) return 1;
+    if (mit.party_n > 4) return 4;
+    return mit.party_n;
 }
 
 
@@ -2046,7 +2058,8 @@ static void menu_known(int aid, int *out, int cap) {
 
 
 static void menu_actor_row(int i) {
-    int aid = menu_actor_ids[i], r = 0, f = 0;
+    int aid = (i >= 0 && i < mit.party_n) ? mit.party[i] : 1;
+    int r = 0, f = 0;
     MenuActor *a = &mnu_actors[i];
     while (ACTOR_NAMES[r].id && ACTOR_NAMES[r].id != aid) r++;
     while (ACTOR_DB[f].id && ACTOR_DB[f].id != aid) f++;
@@ -2072,7 +2085,6 @@ static void menu_actor_row(int i) {
 static void menu_rebuild_actors(void) {
     for (int i = 0; i < 4; i++) menu_actor_row(i);
 }
-
 
 static void menu_build_items(void) {
     mnu_nrows = 0;
@@ -2278,6 +2290,9 @@ static void collect_save_state(SaveState *st) {
     for (i = 0; i < FH_MAX_ARMORS; i++)
         st->inv_arm[i] = mit.inv_arm[i] > 99 ? 99 : mit.inv_arm[i];
     memcpy(st->askill, mit.askill, sizeof(st->askill));
+    st->party_n = mit.party_n;
+    for (int i = 0; i < 16; i++)
+        st->party[i] = i < mit.party_n ? mit.party[i] : 0;
     audio_get_vol(st->audio_vol);
 }
 
@@ -2427,6 +2442,11 @@ int main(int argc, char *argv[]) {
 #ifdef DIAG_STAGES
     diag_color(0xff00ff00, "data-loaded\n", fbp0, fbp1);
 #endif
+    init_mit_equip();
+    if (mit.party_n <= 0) {
+        mit.party[0] = 1;
+        mit.party_n = 1;
+    }
     audio_play_bgs("god_of_the_depths", 90, 100, 0);
 
 
@@ -2670,7 +2690,7 @@ int main(int argc, char *argv[]) {
                 mnu_open = 1;
                 mnu_mode = 0;
                 mnu_cmd = 0;
-                mnu_actor = current_character;
+                mnu_actor = 0;
                 init_mit_equip();
                 menu_rebuild_actors();
             }
@@ -2782,12 +2802,13 @@ int main(int argc, char *argv[]) {
                         menu_preview_slot(eq);
                     }
                 } else if (mnu_mode == 5) {
+                    int nact = menu_nactors();
                     if (input_pressed(&input, PSP_CTRL_LEFT)) {
-                        mnu_actor = (mnu_actor + 3) % 4;
+                        mnu_actor = (mnu_actor + nact - 1) % nact;
                         menu_rebuild_actors();
                     }
                     if (input_pressed(&input, PSP_CTRL_RIGHT)) {
-                        mnu_actor = (mnu_actor + 1) % 4;
+                        mnu_actor = (mnu_actor + 1) % nact;
                         menu_rebuild_actors();
                     }
                     if (input_pressed(&input, PSP_CTRL_CROSS))
@@ -3417,7 +3438,7 @@ int main(int argc, char *argv[]) {
         if (mnu_open) {
             int mc = mnu_mode == 0 ? mnu_cmd : mnu_row;
             sceGuStart(GU_DIRECT, gu_list);
-            render_menu(mnu_mode, mc, mnu_actors, 4, mnu_actor,
+            render_menu(mnu_mode, mc, mnu_actors, menu_nactors(), mnu_actor,
                         mnu_rows, mnu_nrows, mnu_row, mnu_top,
                         mnu_preview, face_t8, face_cl);
             sceGuFinish();

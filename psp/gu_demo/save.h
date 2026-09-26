@@ -4,10 +4,11 @@
 #include "../../runtime/interp.h"
 
 #define FH_SAVE_MAGIC 0x48465356u
-#define FH_SAVE_VERSION 1u
+#define FH_SAVE_VERSION 2u
 
 typedef struct {
     int map, px, py, dir, character, gold;
+    int party_n, party[16];
     unsigned char sw[FH_MAX_SWITCHES];
     int var[FH_MAX_VARS];
     unsigned char inv_item[FH_MAX_ITEMS];

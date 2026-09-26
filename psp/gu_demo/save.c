@@ -28,6 +28,8 @@ int save_store_state(const SaveState *st) {
     fwrite(&st->dir, 4, 1, f);
     fwrite(&st->character, 4, 1, f);
     fwrite(&st->gold, 4, 1, f);
+    fwrite(&st->party_n, 4, 1, f);
+    fwrite(st->party, 4, 16, f);
     fwrite(st->sw, 1, sizeof(st->sw), f);
     fwrite(st->var, 4, FH_MAX_VARS, f);
     fwrite(st->inv_item, 1, sizeof(st->inv_item), f);
@@ -58,6 +60,8 @@ int save_load_state(SaveState *st) {
         fread(&st->dir, 4, 1, f) != 1 ||
         fread(&st->character, 4, 1, f) != 1 ||
         fread(&st->gold, 4, 1, f) != 1 ||
+        fread(&st->party_n, 4, 1, f) != 1 ||
+        fread(st->party, 4, 16, f) != 16 ||
         fread(st->sw, 1, sizeof(st->sw), f) != sizeof(st->sw) ||
         fread(st->var, 4, FH_MAX_VARS, f) != FH_MAX_VARS ||
         fread(st->inv_item, 1, sizeof(st->inv_item), f) !=
