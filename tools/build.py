@@ -212,7 +212,7 @@ def main() -> None:
         (dist / 'data').mkdir(exist_ok=True)
         for name in ('troops.blob', 'skillce.blob'):
             shutil.copy2(data / name, dist / 'data' / name)
-        for sub in ('enemies', 'battlebacks', 'movies', 'audio'):
+        for sub in ('enemies', 'battlebacks', 'busts', 'movies', 'audio'):
             if (data / sub).exists():
                 shutil.copytree(data / sub, dist / 'data' / sub,
                                 dirs_exist_ok=True)

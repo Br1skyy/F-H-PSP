@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bake the message-window skin to swizzled T8 + CLUT."""
 import argparse
+import json
 import pathlib
 import struct
 import sys
@@ -30,6 +31,22 @@ def main() -> None:
     im = Image.open(args.src).convert('RGBA')
     w, h = im.size
     assert (w, h) == (192, 192), f'unexpected skin size {w}x{h}'
+    try:
+        game = pathlib.Path(args.src).parents[2]
+        tone = json.loads(
+            (game / 'data/System.json').read_text())['windowTone']
+        tr, tg, tb = int(tone[0]), int(tone[1]), int(tone[2])
+    except Exception:
+        tr = tg = tb = 0
+    if tr or tg or tb:
+        px = im.load()
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = px[x, y]
+                px[x, y] = (max(0, min(255, r + tr)),
+                            max(0, min(255, g + tg)),
+                            max(0, min(255, b + tb)), a)
+        print(f'applied windowTone [{tr},{tg},{tb}]')
     alpha = im.getchannel('A')
     mask = alpha.point(lambda a: 0 if a < 128 else 255, mode='L')
     rgb = im.convert('RGB').quantize(colors=255, method=Image.MEDIANCUT)

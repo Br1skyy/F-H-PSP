@@ -29,6 +29,14 @@ static const unsigned int MSG_PAL[32] = {
     0xff40100a, 0xff60e060, 0xffe060a0, 0xffff80c0,
 };
 
+
+/* Window background: skin bg (66,60,52) under the game's windowTone
+   [-68,-68,-68] bakes down to pure black; alpha 192 is MV's standard
+   back opacity. Cursor colors are the skin cursor similarly toned. */
+#define WIN_BG 0xc0000000
+#define WIN_HI0 0xb019112a
+#define WIN_HI1 0xd0261c42
+
 #define NX (SCR_W / TILE + 2)
 #define NY (SCR_H / TILE + 2)
 
@@ -564,11 +572,11 @@ void render_title(unsigned char *card, unsigned int *card_cl,
     sceGuDisable(GU_ALPHA_TEST);
     sceGuDisable(GU_TEXTURE_2D);
     if (vals) {
-        skin_box(120, 58, 360, 58 + 6 + ncmds * 22 + 12, 0xc8343c42,
+        skin_box(120, 58, 360, 58 + 6 + ncmds * 22 + 12, WIN_BG,
                  1);
         {
             int pulse = (render_ticks / 12) % 2;
-            unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+            unsigned int hc = pulse ? WIN_HI1 : WIN_HI0;
             skin_box(124, 66 + cursor * 22, 356,
                      66 + cursor * 22 + 24, hc, 0);
         }
@@ -600,11 +608,11 @@ void render_title(unsigned char *card, unsigned int *card_cl,
         }
         sceGuDisable(GU_BLEND);
     } else {
-        skin_box(170, 178, 310, 178 + 6 + ncmds * 22 + 12, 0xc8343c42,
+        skin_box(170, 178, 310, 178 + 6 + ncmds * 22 + 12, WIN_BG,
                  1);
         {
             int pulse = (render_ticks / 12) % 2;
-            unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+            unsigned int hc = pulse ? WIN_HI1 : WIN_HI0;
             skin_box(174, 186 + cursor * 22, 306, 186 + cursor * 22 + 24,
                      hc, 0);
         }
@@ -963,7 +971,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     if (bg != 2)
-        skin_box(x0, y0, x1, y1, (bg == 1) ? 0xa0000000 : 0xc8343c42,
+        skin_box(x0, y0, x1, y1, (bg == 1) ? 0xa0000000 : WIN_BG,
                  bg == 0);
 
 
@@ -972,7 +980,7 @@ void render_message_window(const FhInterp *mit, int msg_ended, int cursor,
         for (int k = 0; msg_name[k]; k++)
             nw += msg_adv((unsigned char)msg_name[k]);
         int nx0 = x0, nx1 = x0 + (int)nw, ny1 = y0 + 6, ny0 = ny1 - 32;
-        skin_box(nx0, ny0, nx1, ny1, 0xc8343c42, 1);
+        skin_box(nx0, ny0, nx1, ny1, WIN_BG, 1);
     }
 
 
@@ -1316,6 +1324,15 @@ static float battle_text_w(const char *s) {
 }
 
 
+static void menu_clip(char *dst, size_t cap, const char *src, float maxw) {
+    size_t n = strlen(src);
+    if (n >= cap) n = cap - 1;
+    memcpy(dst, src, n);
+    dst[n] = 0;
+    while (n > 0 && battle_text_w(dst) > maxw) dst[--n] = 0;
+}
+
+
 static void draw_face(unsigned char *t8, unsigned int *cl, int cell,
                       float x, float y, float size) {
     float u = (float)((cell % 4) * 72), v = (float)((cell / 4) * 72);
@@ -1349,16 +1366,115 @@ static void draw_face(unsigned char *t8, unsigned int *cl, int cell,
 }
 
 
+static void draw_bust(unsigned char *t8, unsigned int *cl,
+                      float x, float y, float w, float h) {
+    TVert *f;
+    if (!t8 || !cl || w <= 0.0f || h <= 0.0f) return;
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuClutLoad(32, cl);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+    sceGuTexImage(0, 128, 256, 128, t8);
+    sceGuTexFlush();
+    sceGuTexSync();
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    f = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+    f[0].u = 0; f[0].v = 0; f[0].color = 0xffffffff;
+    f[0].x = x; f[0].y = y; f[0].z = 0.0f;
+    f[1].u = 91; f[1].v = 180; f[1].color = 0xffffffff;
+    f[1].x = x + w; f[1].y = y + h; f[1].z = 0.0f;
+    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, f);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuDisable(GU_BLEND);
+    sceGuDisable(GU_TEXTURE_2D);
+}
+
+
+static void draw_gauge(float x, float y, float w, float h, float rate,
+                       unsigned int c1, unsigned int c2) {
+    TVert *b;
+    float fw;
+    (void)c2;
+    if (rate < 0.0f) rate = 0.0f;
+    if (rate > 1.0f) rate = 1.0f;
+    fw = w * rate;
+    sceGuDisable(GU_TEXTURE_2D);
+    sceGuDisable(GU_ALPHA_TEST);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+    b = (TVert *)sceGuGetMemory(4 * sizeof(TVert));
+    b[0].u = 0; b[0].v = 0; b[0].color = 0xff181818;
+    b[0].x = x; b[0].y = y; b[0].z = 0.0f;
+    b[1].u = 0; b[1].v = 0; b[1].color = 0xff181818;
+    b[1].x = x + w; b[1].y = y + h; b[1].z = 0.0f;
+    if (fw > 0.5f) {
+        b[2].u = 0; b[2].v = 0; b[2].color = c1;
+        b[2].x = x; b[2].y = y; b[2].z = 0.0f;
+        b[3].u = 0; b[3].v = 0; b[3].color = c1;
+        b[3].x = x + fw; b[3].y = y + h; b[3].z = 0.0f;
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 4, 0, b);
+    } else {
+        sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, b);
+    }
+}
+
+
+static void menu_icon_setup(void) {
+    if (!icon_t8) return;
+    sceGuEnable(GU_TEXTURE_2D);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexWrap(GU_CLAMP, GU_CLAMP);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+    sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
+    sceGuClutLoad(32, icon_cl);
+    sceGuTexMode(GU_PSM_T8, 0, 0, 1);
+    sceGuTexImage(0, 256, 512, 256, icon_t8);
+    sceGuTexFlush();
+    sceGuTexSync();
+    sceGuEnable(GU_ALPHA_TEST);
+    sceGuAlphaFunc(GU_GREATER, 0, 0xff);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
+}
+
+
+static void draw_icon_at(int idx, float x, float y, float size) {
+    TVert *q;
+    if (idx < 0 || !icon_t8) return;
+    q = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
+    q[0].u = (float)((idx % 16) * 16);
+    q[0].v = (float)((idx / 16) * 16);
+    q[0].color = 0xffffffff;
+    q[0].x = x; q[0].y = y; q[0].z = 0.0f;
+    q[1].u = q[0].u + 16.0f;
+    q[1].v = q[0].v + 16.0f;
+    q[1].color = 0xffffffff;
+    q[1].x = x + size; q[1].y = y + size; q[1].z = 0.0f;
+    sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, q);
+}
+
+
 void render_menu(int mode, int cursor,
                  const MenuActor *actors, int nactors, int cur_actor,
                  const BtListRow *rows, int nrows, int rowcur, int rowtop,
                  const int *preview,
                  unsigned char **face_t8, unsigned int **face_cl) {
     static const char *mcmds[4] = {"Item", "Skill", "Equip", "Status"};
+    static const int mcmd_icons[4] = {1, 4, 2, 5};
     static const char *pnames[8] = {"MHP", "MMP", "ATK", "DEF",
                                     "MAT", "MDF", "AGI", "LUK"};
     int pulse = (render_ticks / 12) % 2;
-    unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+    unsigned int hc = pulse ? WIN_HI1 : WIN_HI0;
     int i, r, total = 64;
     TVert *v, *vp;
     if (mode == 0) {
@@ -1388,33 +1504,78 @@ void render_menu(int mode, int cursor,
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, d);
     }
     if (mode == 0) {
-        skin_box(8, 96, 150, 208, 0xc8343c42, 1);
-        skin_box(10, 102 + cursor * 24, 148, 102 + cursor * 24 + 26, hc,
+        int ncol = nactors < 1 ? 1 : (nactors > 4 ? 4 : nactors);
+        float colw = 328.0f / (float)ncol;
+        skin_box(8, 96, 136, 208, WIN_BG, 1);
+        skin_box(10, 102 + cursor * 24, 134, 102 + cursor * 24 + 26, hc,
                  0);
-        skin_box(160, 64, 472, 264, 0xc8343c42, 1);
-        for (r = 0; r < nactors && r < 4; r++) {
+        skin_box(144, 8, 472, 264, WIN_BG, 1);
+        for (r = 0; r < ncol; r++) {
             const MenuActor *a = &actors[r];
-            draw_face(face_t8[a->face_sheet], face_cl[a->face_sheet],
-                      a->face_cell, 168.0f, 72.0f + (float)r * 48, 36.0f);
+            float cx = 144.0f + (float)r * colw;
+            float bw = colw - 10.0f;
+            float bh, bx;
+            if (bw > 110.0f) bw = 110.0f;
+            bh = bw * 180.0f / 91.0f;
+            if (bh > 128.0f) {
+                bh = 128.0f;
+                bw = bh * 91.0f / 180.0f;
+            }
+            bx = cx + (colw - bw) * 0.5f;
+            if (a->bust >= 0 && a->bust < 4 && bust_t8[a->bust])
+                draw_bust(bust_t8[a->bust], bust_cl[a->bust], bx, 16.0f,
+                          bw, bh);
+            else
+                draw_face(face_t8[a->face_sheet], face_cl[a->face_sheet],
+                          a->face_cell, bx, 16.0f, bw);
+            {
+                float gx = cx + 5.0f;
+                float gw = colw - 10.0f;
+                float hpr = a->mhp > 0 ? (float)a->hp / (float)a->mhp
+                                       : 0.0f;
+                float mpr = a->mmp > 0 ? (float)a->mp / (float)a->mmp
+                                       : 0.0f;
+                draw_gauge(gx, 194.0f, gw, 6.0f, hpr, 0xff40cc66,
+                           0xff40cc66);
+                draw_gauge(gx, 216.0f, gw, 6.0f, mpr, 0xff4c78ff,
+                           0xff4c78ff);
+                draw_gauge(gx, 238.0f, gw, 6.0f,
+                           (float)a->exprate / 1000.0f, 0xfff0c041,
+                           0xfff0c041);
+            }
         }
+        menu_icon_setup();
+        for (i = 0; i < 4; i++)
+            draw_icon_at(mcmd_icons[i], 16.0f, 103.0f + (float)i * 24,
+                         16.0f);
+        for (r = 0; r < ncol; r++) {
+            const MenuActor *a = &actors[r];
+            float cx = 144.0f + (float)r * colw;
+            for (int k = 0; k < a->nst && k < 6; k++)
+                draw_icon_at(a->sticon[k], cx + 5.0f + (float)k * 14.0f,
+                             164.0f, 12.0f);
+        }
+        sceGuDisable(GU_ALPHA_TEST);
+        sceGuDisable(GU_BLEND);
+        sceGuDisable(GU_TEXTURE_2D);
     } else if (mode == 1 || mode == 2 || mode == 4) {
         int shown = nrows - rowtop;
         if (shown > 9) shown = 9;
         if (shown < 0) shown = 0;
-        skin_box(8, 40, 472, 264, 0xc8343c42, 1);
+        skin_box(8, 40, 472, 264, WIN_BG, 1);
         for (r = 0; r < shown; r++) {
             if (rowtop + r == rowcur)
                 skin_box(12, 46 + (float)r * 22, 468,
                          46 + (float)r * 22 + 24, hc, 0);
         }
     } else {
-        skin_box(8, 64, 226, 64 + 5 * 24 + 16, 0xc8343c42, 1);
+        skin_box(8, 64, 226, 64 + 5 * 24 + 16, WIN_BG, 1);
         for (r = 0; r < nrows && r < 5; r++) {
             if (mode == 3 && r == rowcur)
                 skin_box(12, 70 + (float)r * 24, 222,
                          70 + (float)r * 24 + 26, hc, 0);
         }
-        skin_box(236, 64, 472, 64 + 8 * 22 + 16, 0xc8343c42, 1);
+        skin_box(236, 64, 472, 64 + 8 * 22 + 16, WIN_BG, 1);
         if (mode == 5) {
             const MenuActor *a = &actors[cur_actor < nactors ? cur_actor
                                                              : 0];
@@ -1442,21 +1603,34 @@ void render_menu(int mode, int cursor,
     v = (TVert *)sceGuGetMemory((size_t)total * 2 * 2 * sizeof(TVert));
     vp = v;
     if (mode == 0) {
+        int ncol = nactors < 1 ? 1 : (nactors > 4 ? 4 : nactors);
+        float colw = 328.0f / (float)ncol;
         for (i = 0; i < 4; i++)
-            battle_text(mcmds[i], 30.0f, 99.0f + (float)i * 24,
+            battle_text(mcmds[i], 38.0f, 99.0f + (float)i * 24,
                         0xffffffff, &vp);
-        for (r = 0; r < nactors && r < 4; r++) {
+        for (r = 0; r < ncol; r++) {
             const MenuActor *a = &actors[r];
-            float ry = 72.0f + (float)r * 48;
-            char lv[16], hp[32], mp[32];
+            float cx = 144.0f + (float)r * colw;
+            float gw = colw - 10.0f;
+            char line[48], clip[48];
+            float vw;
             unsigned int nc = r == cur_actor ? 0xffffff9b : 0xffffffff;
-            snprintf(lv, sizeof(lv), "Lv %d", a->level);
-            snprintf(hp, sizeof(hp), "HP %d/%d", a->hp, a->mhp);
-            snprintf(mp, sizeof(mp), "MP %d/%d", a->mp, a->mmp);
-            battle_text(a->name, 210.0f, ry, nc, &vp);
-            battle_text(lv, 330.0f, ry, 0xffffffff, &vp);
-            battle_text(hp, 210.0f, ry + 20.0f, MSG_PAL[16], &vp);
-            battle_text(mp, 340.0f, ry + 20.0f, MSG_PAL[16], &vp);
+            menu_clip(clip, sizeof(clip), a->name, gw);
+            battle_text(clip, cx + 5.0f, 148.0f, nc, &vp);
+            snprintf(line, sizeof(line), "HP %d/%d", a->hp, a->mhp);
+            menu_clip(clip, sizeof(clip), line, gw);
+            battle_text(clip, cx + 5.0f, 180.0f, 0xffffffff, &vp);
+            snprintf(line, sizeof(line), "MP %d/%d", a->mp, a->mmp);
+            menu_clip(clip, sizeof(clip), line, gw);
+            battle_text(clip, cx + 5.0f, 202.0f, 0xffffffff, &vp);
+            if (a->expnext > 0)
+                snprintf(line, sizeof(line), "Hunger %d", a->expnext);
+            else
+                snprintf(line, sizeof(line), "Hunger MAX");
+            menu_clip(clip, sizeof(clip), line, gw);
+            vw = battle_text_w(clip);
+            battle_text(clip, cx + 5.0f + gw - vw, 224.0f, 0xfff0c041,
+                        &vp);
         }
     } else if (mode == 1 || mode == 2 || mode == 4) {
         int shown = nrows - rowtop;
@@ -1467,13 +1641,15 @@ void render_menu(int mode, int cursor,
             battle_text("Nothing here.", 30.0f, 55.0f, 0xff808080, &vp);
         for (k = 0; k < shown; k++) {
             float ry = 42.0f + (float)k * 22;
-            battle_text(rows[rowtop + k].text, 30.0f, ry,
+            float tx = rows[rowtop + k].icon >= 0 ? 52.0f : 30.0f;
+            battle_text(rows[rowtop + k].text, tx, ry,
                         rows[rowtop + k].color, &vp);
         }
     } else if (mode == 3) {
         for (r = 0; r < nrows && r < 5; r++) {
             float ry = 67.0f + (float)r * 24;
-            battle_text(rows[r].text, 30.0f, ry, rows[r].color, &vp);
+            float tx = rows[r].icon >= 0 ? 52.0f : 30.0f;
+            battle_text(rows[r].text, tx, ry, rows[r].color, &vp);
         }
         for (i = 0; i < 8; i++) {
             char pb[32];
@@ -1502,6 +1678,31 @@ void render_menu(int mode, int cursor,
     }
     if (vp > v)
         sceGuDrawArray(GU_SPRITES, TVERT_FMT, (int)(vp - v), 0, v);
+    if ((mode == 1 || mode == 2 || mode == 4) && icon_t8) {
+        int shown = nrows - rowtop;
+        if (shown > 9) shown = 9;
+        if (shown < 0) shown = 0;
+        menu_icon_setup();
+        for (int k = 0; k < shown; k++) {
+            if (rows[rowtop + k].icon < 0) continue;
+            draw_icon_at(rows[rowtop + k].icon, 30.0f,
+                         43.0f + (float)k * 22, 16.0f);
+        }
+        sceGuDisable(GU_ALPHA_TEST);
+        sceGuDisable(GU_BLEND);
+        sceGuDisable(GU_TEXTURE_2D);
+    }
+    if (mode == 3 && icon_t8) {
+        menu_icon_setup();
+        for (int k = 0; k < nrows && k < 5; k++) {
+            if (rows[k].icon < 0) continue;
+            draw_icon_at(rows[k].icon, 30.0f, 68.0f + (float)k * 24,
+                         16.0f);
+        }
+        sceGuDisable(GU_ALPHA_TEST);
+        sceGuDisable(GU_BLEND);
+        sceGuDisable(GU_TEXTURE_2D);
+    }
     sceGuDisable(GU_ALPHA_TEST);
     sceGuDisable(GU_BLEND);
     sceGuDisable(GU_TEXTURE_2D);
@@ -1663,25 +1864,25 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
 
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    skin_box(150, 216, 472, 268, 0xc8343c42, 1);
+    skin_box(150, 216, 472, 268, WIN_BG, 1);
     if (show_cmds || show_list) {
         int nn = show_cmds ? ncmds : nlrows;
         if (nn < 1) nn = 1;
         if (nn > 5) nn = 5;
-        skin_box(8, 156, 142, 162 + (nn - 1) * 20 + 40, 0xc8343c42, 1);
+        skin_box(8, 156, 142, 162 + (nn - 1) * 20 + 40, WIN_BG, 1);
     }
     if (tgt_name && tgt_name[0])
-        skin_box(8, 8, 472, 48, 0xc8343c42, 1);
+        skin_box(8, 8, 472, 48, WIN_BG, 1);
     if (gab && gab[0] && gab_alpha > 0) {
         int ga = gab_alpha > 200 ? 200 : gab_alpha;
-        unsigned int fill = ((unsigned)ga << 24) | 0x00343c42;
+        unsigned int fill = ((unsigned)ga << 24) | 0x00000000;
         skin_box(8, 104, 472, 144, fill, 1);
     }
 
 
     {
         int pulse = (render_ticks / 12) % 2;
-        unsigned int hc = pulse ? 0xd0281c26 : 0xb0281c26;
+        unsigned int hc = pulse ? WIN_HI1 : WIN_HI0;
         if (show_cmds && cursor >= 0 && cursor < ncmds)
             skin_box(10, 162 + cursor * 20, 140, 162 + cursor * 20 + 22,
                      hc, 0);

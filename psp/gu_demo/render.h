@@ -126,7 +126,15 @@ typedef struct {
     const char *name;
     int level, hp, mhp, mp, mmp;
     int face_sheet, face_cell;
+    int bust;
+    int exprate;
+    int expnext;
+    int nst;
+    int sticon[6];
 } MenuActor;
+
+extern unsigned char *bust_t8[4];
+extern unsigned int *bust_cl[4];
 
 void render_menu(int mode, int cursor,
                  const MenuActor *actors, int nactors, int cur_actor,

@@ -1733,6 +1733,8 @@ unsigned char *anim_t8[8];
 unsigned int anim_cl[8][256] __attribute__((aligned(16)));
 unsigned char *icon_t8;
 unsigned int icon_cl[256] __attribute__((aligned(16)));
+unsigned char *bust_t8[4];
+unsigned int *bust_cl[4];
 
 
 static unsigned char *bv_t8a[4], *bv_t8b[4];
@@ -2095,11 +2097,91 @@ static void menu_actor_row(int i) {
         }
     }
     if (a->face_sheet < 0 || a->face_sheet > 2) a->face_sheet = 0;
+    a->bust = i;
+    a->exprate = 0;
+    a->expnext = 0;
+    if (aid >= 0 && aid < FH_MAX_ACTORS) {
+        long base = bt_exp_for(a->level, 19, 38, 50, 10);
+        long next = bt_exp_for(a->level + 1, 19, 38, 50, 10);
+        long cur = mit.exp_[aid];
+        if (next > base) {
+            long got = cur - base;
+            if (got < 0) got = 0;
+            if (got > next - base) got = next - base;
+            a->exprate = (int)(1000 * got / (next - base));
+            a->expnext = (int)(next - cur);
+            if (a->expnext < 0) a->expnext = 0;
+        }
+    }
+    a->nst = 0;
+    if (aid >= 0 && aid < FH_MAX_ACTORS) {
+        for (int st = 0; st < FH_MAX_STATES && a->nst < 6; st++) {
+            int icon = -1;
+            if (!mit.astate[aid][st]) continue;
+            for (int k = 0; STATE_ICON[k].st; k++) {
+                if (STATE_ICON[k].st == st) {
+                    icon = STATE_ICON[k].icon;
+                    break;
+                }
+            }
+            if (icon >= 0) a->sticon[a->nst++] = icon;
+        }
+    }
+}
+
+
+#define BUST_TW 128
+#define BUST_TH 256
+
+static unsigned char mnu_bust_mem[4][BUST_TW * BUST_TH]
+    __attribute__((aligned(16)));
+static unsigned int mnu_bust_cl[4][256] __attribute__((aligned(16)));
+
+
+static void menu_load_bust(int slot, int sheet, int cell) {
+    char pb[96], cb[96];
+    SceUID f1, f2;
+    bust_t8[slot] = 0;
+    bust_cl[slot] = 0;
+    if (sheet < 0 || sheet > 2 || cell < 0 || cell > 7) return;
+    snprintf(pb, sizeof(pb), "data/busts/bust_Actor%d_%d.t8", sheet + 1,
+             cell + 1);
+    snprintf(cb, sizeof(cb), "data/busts/bust_Actor%d_%d.clut",
+             sheet + 1, cell + 1);
+    f1 = sceIoOpen(pb, PSP_O_RDONLY, 0777);
+    if (f1 < 0) return;
+    if (sceIoRead(f1, mnu_bust_mem[slot], BUST_TW * BUST_TH) !=
+        BUST_TW * BUST_TH) {
+        sceIoClose(f1);
+        return;
+    }
+    sceIoClose(f1);
+    f2 = sceIoOpen(cb, PSP_O_RDONLY, 0777);
+    if (f2 < 0) return;
+    if (sceIoRead(f2, mnu_bust_cl[slot], 1024) != 1024) {
+        sceIoClose(f2);
+        return;
+    }
+    sceIoClose(f2);
+    sceKernelDcacheWritebackInvalidateRange(mnu_bust_mem[slot],
+                                            BUST_TW * BUST_TH);
+    sceKernelDcacheWritebackInvalidateRange(mnu_bust_cl[slot], 1024);
+    bust_t8[slot] = mnu_bust_mem[slot];
+    bust_cl[slot] = mnu_bust_cl[slot];
 }
 
 
 static void menu_rebuild_actors(void) {
     for (int i = 0; i < 4; i++) menu_actor_row(i);
+    for (int i = 0; i < 4; i++) {
+        if (i < mit.party_n)
+            menu_load_bust(i, mnu_actors[i].face_sheet,
+                           mnu_actors[i].face_cell);
+        else {
+            bust_t8[i] = 0;
+            bust_cl[i] = 0;
+        }
+    }
 }
 
 static void menu_build_items(void) {
@@ -2111,6 +2193,7 @@ static void menu_build_items(void) {
         snprintf(mnu_rows[mnu_nrows].text, sizeof(mnu_rows[0].text),
                  "%s x%d", ITEM_DB[k].nm, mit.inv_item[id]);
         mnu_rows[mnu_nrows].color = 0xffffffff;
+        mnu_rows[mnu_nrows].icon = ITEM_DB[k].icon;
         mnu_nrows++;
     }
 }
@@ -2126,6 +2209,7 @@ static void menu_build_skills(void) {
         snprintf(mnu_rows[mnu_nrows].text, sizeof(mnu_rows[0].text),
                  "%s %d", SKILL_DB[sr].nm, SKILL_DB[sr].mp);
         mnu_rows[mnu_nrows].color = 0xffffffff;
+        mnu_rows[mnu_nrows].icon = SKILL_DB[sr].icon;
         mnu_nrows++;
     }
 }
@@ -2154,6 +2238,22 @@ static const char *menu_item_name(int id, int slot) {
 }
 
 
+static int menu_item_icon(int id, int slot) {
+    int k;
+    if (id <= 0) return -1;
+    if (slot == 0) {
+        for (k = 0; WEAPON_DB[k].id; k++) {
+            if (WEAPON_DB[k].id == id) return WEAPON_DB[k].icon;
+        }
+    } else {
+        for (k = 0; ARMOR_DB[k].id; k++) {
+            if (ARMOR_DB[k].id == id) return ARMOR_DB[k].icon;
+        }
+    }
+    return -1;
+}
+
+
 static void menu_build_slots(void) {
     int aid = menu_aid();
     mnu_nrows = 0;
@@ -2162,6 +2262,7 @@ static void menu_build_slots(void) {
                  menu_slot_name(s),
                  menu_item_name(actor_eq_id(aid, s), s));
         mnu_rows[s].color = 0xffffffff;
+        mnu_rows[s].icon = menu_item_icon(actor_eq_id(aid, s), s);
         mnu_nrows++;
     }
     for (int p = 0; p < 8; p++) mnu_preview[p] = actor_param(aid, p);
@@ -2173,6 +2274,7 @@ static void menu_build_candidates(void) {
     mnu_nrows = 0;
     snprintf(mnu_rows[0].text, sizeof(mnu_rows[0].text), "Remove");
     mnu_rows[0].color = 0xffffffff;
+    mnu_rows[0].icon = -1;
     mnu_nrows = 1;
     if (s == 0) {
         for (int k = 0; WEAPON_DB[k].id && mnu_nrows < 64; k++) {
@@ -2183,6 +2285,7 @@ static void menu_build_candidates(void) {
                      sizeof(mnu_rows[0].text), "%s x%d", WEAPON_DB[k].nm,
                      mit.inv_weap[id]);
             mnu_rows[mnu_nrows].color = 0xffffffff;
+            mnu_rows[mnu_nrows].icon = WEAPON_DB[k].icon;
             mnu_nrows++;
         }
     } else {
@@ -2195,6 +2298,7 @@ static void menu_build_candidates(void) {
                      sizeof(mnu_rows[0].text), "%s x%d", ARMOR_DB[k].nm,
                      mit.inv_arm[id]);
             mnu_rows[mnu_nrows].color = 0xffffffff;
+            mnu_rows[mnu_nrows].icon = ARMOR_DB[k].icon;
             mnu_nrows++;
         }
     }
@@ -2835,7 +2939,7 @@ int main(int argc, char *argv[]) {
             }
             if (!dbg_open && !mnu_open && btl_enc_t == 0) {
                 if (input_pressed(&input, PSP_CTRL_SELECT)) dbg_try_open();
-            } else {
+            } else if (dbg_open) {
                 if (input_pressed(&input, PSP_CTRL_UP) && dbg_sel > 0)
                     dbg_sel--;
                 if (input_pressed(&input, PSP_CTRL_DOWN) &&

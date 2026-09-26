@@ -178,6 +178,10 @@ def run_bakers(game, map_name, data):
          ['title.rgba']),
         (['tools/bake_faces.py', str(game)],
          ['face_Actor1.t8', 'face_Actor2.t8', 'face_Actor3.t8']),
+        (['tools/bake_busts.py', str(game)],
+         [f'busts/bust_Actor{n}_{i}.t8'
+          for n in (1, 2) for i in range(1, 9)] +
+         ['busts/bust_Actor3_1.t8']),
     ]
     for cmd, outputs in jobs:
         if all((data / o).exists() for o in outputs):
