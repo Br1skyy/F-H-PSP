@@ -24,6 +24,7 @@ typedef struct {
     OggVorbis_File vf;
     int stream_open;
     long stream_total;
+    int fail_streak;
     short cache[AU_CACHE_FRAMES * 2];
     long cache_start;
     int cache_n;
@@ -116,9 +117,8 @@ static int au_wav_open(AVoice *v, const char *path) {
 
 static int au_cache_fill(AVoice *v, long frame) {
     long want = frame;
-    int need = AU_CACHE_FRAMES;
     if (want < v->cache_start ||
-        want + need > v->cache_start + v->cache_n) {
+        want >= v->cache_start + v->cache_n) {
         if (v->kind == 1) {
             long byte = v->d_off + want * 2L * v->ch;
             long left = v->d_len - (byte - v->d_off);
@@ -192,6 +192,7 @@ static void au_stream_fill(AVoice *v, const char *path, int loop) {
         snprintf(au_err_at, sizeof(au_err_at), "open %-36s", path);
         return;
     }
+    setvbuf(f, NULL, _IOFBF, 65536);
     if (ov_open(f, &v->vf, NULL, 0) < 0) {
         au_last_err = -102;
         snprintf(au_err_at, sizeof(au_err_at), "ovopen %-34s", path);
@@ -298,7 +299,8 @@ static int au_thread(SceSize args, void *argp) {
                         }
                     }
                     if (!au_voice_sample(v, &l, &r)) {
-                        if (v->loop && v->stream_open) {
+                        if (v->loop && v->stream_open &&
+                            ++v->fail_streak < 4) {
                             ov_raw_seek(&v->vf, 0);
                             v->cache_start = 0;
                             v->cache_n = 0;
@@ -308,6 +310,7 @@ static int au_thread(SceSize args, void *argp) {
                         au_stream_stop(v);
                         break;
                     }
+                    v->fail_streak = 0;
                     acc[s * 2] += (l * v->lg >> 8) * g >> 8;
                     acc[s * 2 + 1] += (r * v->rg >> 8) * g >> 8;
                 }
