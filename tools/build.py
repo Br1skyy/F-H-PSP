@@ -106,7 +106,7 @@ HEADER_DEPS = {
     'render.o': ['render.c', 'render.h', 'anim_data.h', 'map_runtime.h',
                  'interp_rt.h', 'text_rt.h'],
     'input.o': ['input.c', 'input.h'],
-    'map_runtime.o': ['map_runtime.c', 'map_runtime.h',
+    'movie.o': ['movie.c', 'movie.h'],    'map_runtime.o': ['map_runtime.c', 'map_runtime.h',
                       '../../runtime/map.h'],
     'interp_rt.o': ['interp_rt.c', 'interp_rt.h',
                     '../../runtime/interp.h'],
@@ -199,7 +199,7 @@ def main() -> None:
         (dist / 'data').mkdir(exist_ok=True)
         for name in ('troops.blob', 'skillce.blob'):
             shutil.copy2(data / name, dist / 'data' / name)
-        for sub in ('enemies', 'battlebacks'):
+        for sub in ('enemies', 'battlebacks', 'movies'):
             if (data / sub).exists():
                 shutil.copytree(data / sub, dist / 'data' / sub,
                                 dirs_exist_ok=True)

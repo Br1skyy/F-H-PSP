@@ -11,6 +11,7 @@
 
 #include "render.h"
 #include "input.h"
+#include "movie.h"
 #include "map_runtime.h"
 #include "interp_rt.h"
 #include "text_rt.h"
@@ -2142,6 +2143,13 @@ int main(int argc, char *argv[]) {
 
 
         if (!battle_mode && !msg_mode) {
+            if (mit.movie[0]) {
+                char mp[96];
+                snprintf(mp, sizeof(mp), "data/movies/%s.mp4", mit.movie);
+                mit.movie[0] = 0;
+                if (movie_play(mp) < 0)
+                    dbg_note("movie missing");
+            }
             if (!dbg_open) {
                 if (input_pressed(&input, PSP_CTRL_SELECT)) dbg_try_open();
             } else {

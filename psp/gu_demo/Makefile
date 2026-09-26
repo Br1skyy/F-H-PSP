@@ -1,5 +1,5 @@
 TARGET = fh_demo
-OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o battle_blob.o \
+OBJS = main.o render.o input.o map_runtime.o interp_rt.o text_rt.o player_rt.o battle_rt.o battle_blob.o movie.o \
        d_a1.o d_b.o d_e.o d_ib.o d_d.o \
        d_a1c.o d_bc.o d_ec.o d_ibc.o d_dc.o \
        d_layers.o d_pass.o d_high.o \
@@ -27,7 +27,7 @@ ASFLAGS = $(CFLAGS)
 
 LIBDIR =
 LDFLAGS =
-LIBS = -lpspgu -lpspctrl -lpspdisplay -lpspge -lpsprtc -lpspdebug -lm
+LIBS = -lpspgu -lpspctrl -lpspdisplay -lpspge -lpsprtc -lpspdebug -lpspmpeg -lpsputility -lm
 
 EXTRA_TARGETS = EBOOT.PBP
 PSP_EBOOT_TITLE = F&H Port
@@ -251,4 +251,5 @@ dist: EBOOT.PBP
 		cp -f data/troops.blob data/skillce.blob $(DISTDIR)/data/ 2>/dev/null; \
 		cp -rf data/enemies $(DISTDIR)/data/ 2>/dev/null; \
 		cp -rf data/battlebacks $(DISTDIR)/data/ 2>/dev/null; \
+		cp -rf data/movies $(DISTDIR)/data/ 2>/dev/null; \
 	fi
