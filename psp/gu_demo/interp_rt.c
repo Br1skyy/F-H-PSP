@@ -21,10 +21,13 @@ void fh_interp_init(FhInterp *it, const FhCmd *list, int len) {
 static void emit_text(FhInterp *it, const char *s) {
     if (!s) return;
     int n = (int)strlen(s);
+    if (it->text_len > 0 && it->text[it->text_len - 1] != '\n') {
+        if (it->text_len + 1 >= FH_TEXT_CAP) return;
+        it->text[it->text_len++] = '\n';
+    }
     if (it->text_len + n + 1 >= FH_TEXT_CAP) return;
     memcpy(it->text + it->text_len, s, (size_t)n);
     it->text_len += n;
-    it->text[it->text_len++] = '\n';
     it->text[it->text_len] = '\0';
 }
 

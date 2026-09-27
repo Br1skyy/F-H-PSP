@@ -4,7 +4,7 @@
 #include "../../runtime/interp.h"
 
 #define FH_SAVE_MAGIC 0x48465356u
-#define FH_SAVE_VERSION 2u
+#define FH_SAVE_VERSION 3u
 
 typedef struct {
     int map, px, py, dir, character, gold;
@@ -16,6 +16,9 @@ typedef struct {
     unsigned char inv_arm[FH_MAX_ARMORS];
     unsigned char askill[FH_MAX_ACTORS][FH_MAX_SKILLS];
     int audio_vol[5];
+    int equip[FH_MAX_ACTORS][8];
+    int exp_[FH_MAX_ACTORS];
+    int level[FH_MAX_ACTORS];
 } SaveState;
 
 int save_exists(void);

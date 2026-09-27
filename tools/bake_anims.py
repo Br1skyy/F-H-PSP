@@ -39,13 +39,14 @@ def next_pow2(n: int) -> int:
     return p
 
 
-def bake_one(src: pathlib.Path, dst: pathlib.Path, key: str) -> None:
+def bake_one(src: pathlib.Path, dst: pathlib.Path, key: str,
+             scale: float = SCALE) -> None:
     raw = src.read_bytes()
     if src.suffix == '.rpgmvp':
         raw = decrypt_blob(raw, key)
     im = Image.open(io.BytesIO(raw)).convert('RGBA')
     w, h = im.size
-    tw, th = max(16, int(w * SCALE)), max(8, int(h * SCALE))
+    tw, th = max(16, int(w * scale)), max(8, int(h * scale))
     im = im.resize((tw, th), Image.LANCZOS)
     alpha = im.getchannel('A')
     mask = alpha.point(lambda a: 0 if a < 128 else 255, mode='L')

@@ -13,6 +13,7 @@ typedef struct {
     int step_count;
     int moving;
     int move_speed;
+    int dash;
 
 
     int anim_pattern;

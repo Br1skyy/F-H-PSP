@@ -24,4 +24,7 @@ void input_update(InputState *state);
 
 #define input_held(state, btn) ((state)->buttons & (btn))
 
+
+int input_repeat(InputState *state, unsigned int btn);
+
 #endif

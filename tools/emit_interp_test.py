@@ -954,7 +954,7 @@ def main():
         varitems = sorted(e['var'].items())
         H.append(f'static const int {t["name"]}_var[][2] = {{{",".join(f"{{{k},{v}}}" for k, v in varitems) or "{0,0}"}}};')
         H.append(f'static const int {t["name"]}_varn = {len(varitems)};')
-        H.append(f'static const char *{t["name"]}_text = {cstr("".join(l + chr(10) for l in e["text"]))};')
+        H.append(f'static const char *{t["name"]}_text = {cstr(chr(10).join(e["text"]))};')
         H.append(f'static const int {t["name"]}_waits = {e["waits"]};')
         H.append(f'static const int {t["name"]}_unknown = {e["unknown"]};')
         H.append(f'static const int {t["name"]}_init_branch = {t["branch"]};')
@@ -1002,7 +1002,7 @@ def main():
             if 0 <= k < 451:
                 _vars[k] = v
         H.append(f'static const char *{t["name"]}_dec = '
-                 f'{cstr(py_decode(chr(10).join(e["text"]) + (chr(10) if e["text"] else ""), _vars, actnames, e["party"], currency))};')
+                 f'{cstr(py_decode(chr(10).join(e["text"]), _vars, actnames, e["party"], currency))};')
         H.append(f'static const int {t["name"]}_ev = {t.get("ev_id", 0)};')
         H.append(f'static const int {t["name"]}_onmap = {t.get("on_map", 0)};')
         H.append(f'static const int {t["name"]}_transp = {e["transparent"]};')

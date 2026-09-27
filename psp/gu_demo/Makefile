@@ -235,7 +235,7 @@ battle_blob.o: ../../runtime/battle_blob.c ../../runtime/battle_blob.h
 	$(CC) $(CFLAGS) -I../../runtime -c $< -o $@
 tremor_%.o: ../../runtime/tremor/%.c
 	$(CC) $(CFLAGS) -w -I../../runtime -I../../runtime/tremor -c $< -o $@
-ogg_%.o: ../../runtime/ogg/%.c
+ogg_%.o: ../../runtime/ogg/ogg_%.c
 	$(CC) $(CFLAGS) -w -I../../runtime -I../../runtime/tremor -c $< -o $@
 audio.o: audio.c audio.h
 	$(CC) $(CFLAGS) -I../../runtime -I../../runtime/tremor -c $< -o $@

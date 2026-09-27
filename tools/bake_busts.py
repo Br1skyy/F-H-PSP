@@ -4,8 +4,9 @@
 The Galv BustMenu layout draws one bust per party member, named after
 the actor's face: pictures/<FaceName>_<FaceIndex+1>. Only the base
 sheets referenced by Actors.json faces are baked (L/R variants are
-unused by actor data). Output lands in psp/gu_demo/data/busts/ and is
-streamed at menu time like enemy art.
+unused by actor data). Baked at full scale for portrait quality;
+output lands in psp/gu_demo/data/busts/ and is streamed at menu time
+like enemy art.
 
 Usage (from the repo root):
     python3 tools/bake_busts.py "Fear & Hunger_WIN/www"
@@ -39,7 +40,7 @@ def main() -> None:
         if not src.exists():
             print(f'{fn}_{idx}: missing, skipping')
             continue
-        bake_one(src, out / f'bust_{fn}_{idx}', key)
+        bake_one(src, out / f'bust_{fn}_{idx}', key, scale=1.0)
         n += 1
     print(f'baked {n} busts into {out}')
 

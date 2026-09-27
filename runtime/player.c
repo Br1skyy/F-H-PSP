@@ -77,7 +77,8 @@ int player_update(Player *p, unsigned int buttons, const uint16_t *passability,
 
     if (p->moving) {
 
-        p->move_acc += 1.5f;
+        float rate = p->dash ? 3.0f : 1.5f;
+        p->move_acc += rate;
         int step = (int)p->move_acc;
         p->move_acc -= (float)step;
         p->step_count += step;
@@ -89,7 +90,7 @@ int player_update(Player *p, unsigned int buttons, const uint16_t *passability,
         }
 
 
-        p->anim_count += 1.5f;
+        p->anim_count += rate;
         if (p->anim_count >= 15.0f) {
             p->anim_count = 0.0f;
             p->anim_pattern = (p->anim_pattern + 1) % 4;

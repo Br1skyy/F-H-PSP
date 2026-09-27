@@ -37,6 +37,9 @@ int save_store_state(const SaveState *st) {
     fwrite(st->inv_arm, 1, sizeof(st->inv_arm), f);
     fwrite(st->askill, 1, sizeof(st->askill), f);
     fwrite(st->audio_vol, 4, 5, f);
+    fwrite(st->equip, 4, sizeof(st->equip) / 4, f);
+    fwrite(st->exp_, 4, FH_MAX_ACTORS, f);
+    fwrite(st->level, 4, FH_MAX_ACTORS, f);
     fclose(f);
     return 0;
 }
@@ -75,6 +78,19 @@ int save_load_state(SaveState *st) {
         fread(st->audio_vol, 4, 5, f) != 5) {
         fclose(f);
         return -1;
+    }
+    if (ver >= 3) {
+        if (fread(st->equip, 4, sizeof(st->equip) / 4, f) !=
+                sizeof(st->equip) / 4 ||
+            fread(st->exp_, 4, FH_MAX_ACTORS, f) != FH_MAX_ACTORS ||
+            fread(st->level, 4, FH_MAX_ACTORS, f) != FH_MAX_ACTORS) {
+            fclose(f);
+            return -1;
+        }
+    } else {
+        memset(st->equip, 0, sizeof(st->equip));
+        memset(st->exp_, 0, sizeof(st->exp_));
+        memset(st->level, 0, sizeof(st->level));
     }
     fclose(f);
     return 0;

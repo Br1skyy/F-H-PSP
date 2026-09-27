@@ -30,12 +30,13 @@ static const unsigned int MSG_PAL[32] = {
 };
 
 
-/* Window background: skin bg (66,60,52) under the game's windowTone
-   [-68,-68,-68] bakes down to pure black; alpha 192 is MV's standard
-   back opacity. Cursor colors are the skin cursor similarly toned. */
+/* Window background: MV stretches skin rect (0,0,96,96) and applies
+   the game's windowTone [-68,-68,-68] to the background only, which
+   bakes (66,60,52) down to pure black; alpha 192 is MV's standard
+   back opacity. Frame and cursor keep original skin colors. */
 #define WIN_BG 0xc0000000
-#define WIN_HI0 0xb019112a
-#define WIN_HI1 0xd0261c42
+#define WIN_HI0 0xc95d556e
+#define WIN_HI1 0xe06e657e
 
 #define NX (SCR_W / TILE + 2)
 #define NY (SCR_H / TILE + 2)
@@ -798,7 +799,7 @@ static void msg_emit_word(const unsigned int *w, int n) {
     }
     if (ww > MSG_TEXT_W) {
 
-        msg_newrow();
+        if (msg_px > 0.0f) msg_newrow();
         for (int k = 0; k < n; k++) {
             unsigned int cp = w[k];
             if (cp >= 256 || cp < 32 || (cp >= 127 && cp < 160)) cp = '?';
@@ -834,7 +835,7 @@ static void msg_text_cb(const char *ptr, int len, void *ud) {
     while (i < len && n < 255) {
         unsigned char c = (unsigned char)ptr[i];
         if (c == '\n') {
-            msg_newrow();
+            tmp[n++] = '\n';
             i++;
         } else if ((c & 0x80) == 0) {
             tmp[n++] = c;
@@ -851,12 +852,18 @@ static void msg_text_cb(const char *ptr, int len, void *ud) {
 
     int k = 0;
     while (k < n) {
+        if (tmp[k] == '\n') {
+            msg_newrow();
+            k++;
+            continue;
+        }
         while (k < n && tmp[k] == ' ') {
             if (msg_px > 0.0f) msg_put(' ');
             k++;
         }
+        if (k < n && tmp[k] == '\n') continue;
         int w0 = k;
-        while (k < n && tmp[k] != ' ') k++;
+        while (k < n && tmp[k] != ' ' && tmp[k] != '\n') k++;
         if (k > w0) msg_emit_word(tmp + w0, k - w0);
     }
 }
@@ -1379,7 +1386,7 @@ static void draw_bust(unsigned char *t8, unsigned int *cl,
     sceGuClutMode(GU_PSM_8888, 0, 0xff, 0);
     sceGuClutLoad(32, cl);
     sceGuTexMode(GU_PSM_T8, 0, 0, 1);
-    sceGuTexImage(0, 128, 256, 128, t8);
+    sceGuTexImage(0, 256, 512, 256, t8);
     sceGuTexFlush();
     sceGuTexSync();
     sceGuEnable(GU_ALPHA_TEST);
@@ -1389,7 +1396,7 @@ static void draw_bust(unsigned char *t8, unsigned int *cl,
     f = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
     f[0].u = 0; f[0].v = 0; f[0].color = 0xffffffff;
     f[0].x = x; f[0].y = y; f[0].z = 0.0f;
-    f[1].u = 91; f[1].v = 180; f[1].color = 0xffffffff;
+    f[1].u = 182; f[1].v = 360; f[1].color = 0xffffffff;
     f[1].x = x + w; f[1].y = y + h; f[1].z = 0.0f;
     sceGuDrawArray(GU_SPRITES, TVERT_FMT, 2, 0, f);
     sceGuDisable(GU_ALPHA_TEST);
@@ -1506,8 +1513,8 @@ void render_menu(int mode, int cursor,
     if (mode == 0) {
         int ncol = nactors < 1 ? 1 : (nactors > 4 ? 4 : nactors);
         float colw = 328.0f / (float)ncol;
-        skin_box(8, 96, 136, 208, WIN_BG, 1);
-        skin_box(10, 102 + cursor * 24, 134, 102 + cursor * 24 + 26, hc,
+        skin_box(8, 8, 136, 120, WIN_BG, 1);
+        skin_box(10, 14 + cursor * 24, 134, 14 + cursor * 24 + 26, hc,
                  0);
         skin_box(144, 8, 472, 264, WIN_BG, 1);
         for (r = 0; r < ncol; r++) {
@@ -1517,19 +1524,19 @@ void render_menu(int mode, int cursor,
             float bh, bx;
             if (bw > 110.0f) bw = 110.0f;
             bh = bw * 180.0f / 91.0f;
-            if (bh > 128.0f) {
-                bh = 128.0f;
+            if (bh > 116.0f) {
+                bh = 116.0f;
                 bw = bh * 91.0f / 180.0f;
             }
             bx = cx + (colw - bw) * 0.5f;
-            skin_box((int)bx, 16, (int)(bx + bw), (int)(16.0f + bh),
+            skin_box((int)bx, 28, (int)(bx + bw), (int)(28.0f + bh),
                      0x00000000, 1);
             if (a->bust >= 0 && a->bust < 4 && bust_t8[a->bust])
-                draw_bust(bust_t8[a->bust], bust_cl[a->bust], bx, 16.0f,
+                draw_bust(bust_t8[a->bust], bust_cl[a->bust], bx, 28.0f,
                           bw, bh);
             else
                 draw_face(face_t8[a->face_sheet], face_cl[a->face_sheet],
-                          a->face_cell, bx, 16.0f, bw);
+                          a->face_cell, bx, 28.0f, bw);
             {
                 float gx = cx + 5.0f;
                 float gw = colw - 10.0f;
@@ -1548,7 +1555,7 @@ void render_menu(int mode, int cursor,
         }
         menu_icon_setup();
         for (i = 0; i < 4; i++)
-            draw_icon_at(mcmd_icons[i], 16.0f, 103.0f + (float)i * 24,
+            draw_icon_at(mcmd_icons[i], 16.0f, 15.0f + (float)i * 24,
                          16.0f);
         for (r = 0; r < ncol; r++) {
             const MenuActor *a = &actors[r];
@@ -1575,9 +1582,9 @@ void render_menu(int mode, int cursor,
         {
             const MenuActor *a = &actors[cur_actor < nactors ? cur_actor
                                                              : 0];
-            skin_box(24, 56, 96, 128, 0x00000000, 1);
+            skin_box(28, 62, 92, 126, 0x00000000, 1);
             draw_face(face_t8[a->face_sheet], face_cl[a->face_sheet],
-                      a->face_cell, 24.0f, 56.0f, 72.0f);
+                      a->face_cell, 28.0f, 62.0f, 64.0f);
         }
     } else {
         skin_box(8, 64, 226, 64 + 5 * 24 + 16, WIN_BG, 1);
@@ -1611,7 +1618,7 @@ void render_menu(int mode, int cursor,
         int ncol = nactors < 1 ? 1 : (nactors > 4 ? 4 : nactors);
         float colw = 328.0f / (float)ncol;
         for (i = 0; i < 4; i++)
-            battle_text(mcmds[i], 38.0f, 99.0f + (float)i * 24,
+            battle_text(mcmds[i], 38.0f, 11.0f + (float)i * 24,
                         0xffffffff, &vp);
         for (r = 0; r < ncol; r++) {
             const MenuActor *a = &actors[r];
@@ -1727,7 +1734,8 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                    int sel_foe, const int *flash, const int *collapse,
                    const BtListRow *lrows, int nlrows, int lcursor,
                    int show_list, const int *st_icons, int nst_icons,
-                   const char *tgt_name, const char *gab, int gab_alpha) {
+                   const char *tgt_name, const char *gab, int gab_alpha,
+                   int show_ui) {
 
 
     sceGuDisable(GU_TEXTURE_2D);
@@ -1870,7 +1878,12 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
 
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    skin_box(150, 216, 472, 268, WIN_BG, 1);
+    if (!show_ui) {
+        show_cmds = 0;
+        show_list = 0;
+    }
+    if (show_ui)
+        skin_box(150, 216, 472, 268, WIN_BG, 1);
     if (show_cmds || show_list) {
         int nn = show_cmds ? ncmds : nlrows;
         if (nn < 1) nn = 1;
@@ -1882,7 +1895,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     if (gab && gab[0] && gab_alpha > 0) {
         int ga = gab_alpha > 200 ? 200 : gab_alpha;
         unsigned int fill = ((unsigned)ga << 24) | 0x00000000;
-        skin_box(8, 104, 472, 144, fill, 1);
+        skin_box(8, 150, 472, 190, fill, 1);
     }
 
 
@@ -1927,7 +1940,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
     sceGuDisable(GU_ALPHA_TEST);
     sceGuEnable(GU_BLEND);
     sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
-    {
+    if (show_ui) {
         struct { int v, max, x0, x1; } gs[2] = {
             {hp, mhp, 218, 298},
             {mp, mmp, 382, 462},
@@ -1999,13 +2012,15 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             unsigned int hcol = 0xffffffff;
             if (hp <= 0) hcol = 0xff2020ff;
             else if (mhp > 0 && hp * 4 < mhp) hcol = 0xff7bdcdc;
-            battle_text(actor_name, 158.0f, 222.0f, 0xffffffff, &vp);
-            battle_text("Body", 158.0f, 240.0f, MSG_PAL[16], &vp);
-            battle_text(hpb, 298.0f - battle_text_w(hpb), 240.0f, hcol,
-                        &vp);
-            battle_text("Mind", 322.0f, 240.0f, MSG_PAL[16], &vp);
-            battle_text(mpb, 462.0f - battle_text_w(mpb), 240.0f,
-                        0xffffffff, &vp);
+            if (show_ui) {
+                battle_text(actor_name, 158.0f, 222.0f, 0xffffffff, &vp);
+                battle_text("Body", 158.0f, 240.0f, MSG_PAL[16], &vp);
+                battle_text(hpb, 298.0f - battle_text_w(hpb), 240.0f,
+                            hcol, &vp);
+                battle_text("Mind", 322.0f, 240.0f, MSG_PAL[16], &vp);
+                battle_text(mpb, 462.0f - battle_text_w(mpb), 240.0f,
+                            0xffffffff, &vp);
+            }
         }
         if (show_cmds) {
             for (int i = 0; i < ncmds; i++) {
@@ -2021,10 +2036,17 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             }
         }
         for (int i = 0; i < npops; i++) {
-
+            if (pops[i].ttl <= 0) continue;
             float k = pops[i].max > 0 ? (float)pops[i].ttl / (float)pops[i].max : 0.0f;
             float ox = (float)((i % 3) - 1) * 14.0f;
             float oy = (float)(i / 3) * 18.0f;
+            int stack = 0;
+            for (int j = 0; j < i; j++) {
+                if (pops[j].ttl > 0 && pops[j].x == pops[i].x &&
+                    pops[j].y == pops[i].y)
+                    stack++;
+            }
+            oy -= (float)stack * 20.0f;
             if (k < 0.0f) k = 0.0f;
             char buf[16];
             unsigned int col;
@@ -2064,7 +2086,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                 k = 46;
             }
             line[k] = 0;
-            battle_text(line, 24.0f, 108.0f, gc, &vp);
+            battle_text(line, 24.0f, 154.0f, gc, &vp);
         }
         if (log0 && log0[0])
             battle_text(log0, 12.0f, tgt_name && tgt_name[0] ? 52.0f : 10.0f,
@@ -2101,7 +2123,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
             for (const char *p = actor_name; *p; p++)
                 nx += msg_adv((unsigned char)*p);
             nx += 6.0f;
-            for (int i = 0; i < nst_icons && i < 3; i++) {
+            for (int i = 0; show_ui && i < nst_icons && i < 3; i++) {
                 int idx = st_icons[i];
                 if (idx < 0) continue;
                 TVert *q = (TVert *)sceGuGetMemory(2 * sizeof(TVert));
