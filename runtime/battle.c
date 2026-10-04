@@ -268,6 +268,8 @@ static int roll_chance(Bt *bt, double chance) {
 void bt_apply_fx(Bt *bt, BtF *sub, BtF *tgt, const BtFx *fx, int nfx,
                  int certain, int is_item, double pha,
                  int *reserved, int *nres) {
+    (void)reserved;  /* kept for API compatibility; not used yet */
+    (void)nres;
 
     double luk = 1.0 + ((double)sub->luk - (double)tgt->luk) * 0.001;
     if (luk < 0.0) luk = 0.0;

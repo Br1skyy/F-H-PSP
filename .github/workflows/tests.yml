@@ -1,0 +1,16 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pc-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Tests that need game-derived data are skipped automatically.
+      - name: Engine tests
+        run: tests/run_tests.sh
+      - name: Python tools compile
+        run: python3 -m compileall -q tools

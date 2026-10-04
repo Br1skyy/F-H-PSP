@@ -91,6 +91,13 @@ Copy everything in `Build/` to `PSP/GAME/<NAME>/` on the stick.
 
 Plain gcc, from the repo root. Run them before changing engine code.
 
+Quickest way: `tests/run_tests.sh` builds and runs all of them. Tests
+that need generated game data are skipped (not failed) when it is
+missing. Pass names to run a subset, e.g. `tests/run_tests.sh map battle`.
+CI runs the same script on every push.
+
+The individual commands, if you want them:
+
 ```bash
 gcc -Wall -O2 -I runtime -o /tmp/test_battle tests/test_battle.c runtime/battle.c -lm && /tmp/test_battle
 gcc -Wall -O2 -I runtime -I . -o /tmp/test_interp tests/test_interp.c runtime/interp.c runtime/text.c && /tmp/test_interp
