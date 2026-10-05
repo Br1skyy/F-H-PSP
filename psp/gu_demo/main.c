@@ -650,6 +650,7 @@ static void btl_ev_sync(void) {
                 f->luk = FOE_DB[r].luk;
                 f->hit = FOE_DB[r].hit;
                 f->eva = FOE_DB[r].eva;
+                f->mev = FOE_DB[r].mev;
                 for (int e = 0; e < BT_ERATE_N; e++)
                     f->erate[e] = FOE_DB[r].er[e];
                 f->atk_elem = FOE_DB[r].elem;
@@ -1242,6 +1243,7 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
     a->luk = actor_param(want, 7);
     a->hit = ACTOR_DB[row].hit;
     a->eva = ACTOR_DB[row].eva;
+    a->mev = ACTOR_DB[row].mev;
     a->cri = ACTOR_DB[row].cri;
     a->cev = 0.0;
     a->pdr = a->mdr = a->grd = 1.0;
@@ -1273,6 +1275,7 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
         f->luk = FOE_DB[r].luk;
         f->hit = FOE_DB[r].hit;
         f->eva = FOE_DB[r].eva;
+        f->mev = FOE_DB[r].mev;
         f->cri = 0.0;
         f->cev = 0.0;
         f->pdr = f->mdr = f->grd = 1.0;
@@ -1284,6 +1287,9 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
     }
     btl.turn = 1;
     bt_srand(&btl, (unsigned)(tick & 0xffffffffu));
+    /* State accuracy traits (Weakness/Blindness from dismemberment pages). */
+    btl.state_xp = STATE_XP;
+    btl.n_state_xp = STATE_XP_N;
     btl_rng = (unsigned)(tick & 0xffffffffu);
     if (!btl_rng) btl_rng = 1u;
 
@@ -1486,7 +1492,9 @@ static void btl_pop_at(int x, int y, int value, int kind) {
             btl_pops[i].y = y;
             btl_pops[i].value = value;
             btl_pops[i].kind = kind;
-            btl_pops[i].ttl = btl_pops[i].max = 45;
+            /* Misses were easy to miss under multi-hit attacks: leave the
+               MISS callout up about twice as long as damage numbers. */
+            btl_pops[i].ttl = btl_pops[i].max = (kind == 1) ? 90 : 45;
             return;
         }
     }
@@ -1606,8 +1614,10 @@ static void btl_do_use(BtF *sub, const BtSkill *sk, const BtFx *fx, int nfx,
 
             int px = 240, py = 200;
             if (tgt == &btl.f[0]) {
+                /* Over the actor's upper half: the old (156,70) sat inside
+                   the gab band whenever event dialogue was up. */
                 px = 156;
-                py = 70;
+                py = 120;
             } else if (!foe_side) {
                 float fx_, fy_;
                 btl_foe_xy((int)(tgt - &btl.f[1]), &fx_, &fy_);
@@ -2785,6 +2795,25 @@ int main(int argc, char *argv[]) {
 
     while (!exit_request) {
         input_update(&input);
+        /* MV button snapshot for conditional-branch button checks
+           (111/11) in map and battle events. 'shift' is the mash key in
+           grab minigames (salmonsnake SNATCH, guard SNAP NECK, ...);
+           SQUARE is free in both modes so it carries shift. */
+        {
+            unsigned int b = 0, held = input.buttons;
+            if (held & PSP_CTRL_CIRCLE) b |= FH_BTN_OK;
+            if (held & PSP_CTRL_CROSS) b |= FH_BTN_CANCEL;
+            if (held & PSP_CTRL_SQUARE) b |= FH_BTN_SHIFT;
+            if (held & PSP_CTRL_TRIANGLE) b |= FH_BTN_CONTROL;
+            if (held & PSP_CTRL_LTRIGGER) b |= FH_BTN_PAGEUP;
+            if (held & PSP_CTRL_RTRIGGER) b |= FH_BTN_PAGEDOWN;
+            if (held & PSP_CTRL_UP) b |= FH_BTN_UP;
+            if (held & PSP_CTRL_DOWN) b |= FH_BTN_DOWN;
+            if (held & PSP_CTRL_LEFT) b |= FH_BTN_LEFT;
+            if (held & PSP_CTRL_RIGHT) b |= FH_BTN_RIGHT;
+            mit.buttons = b;
+            tit.buttons = b;
+        }
 
 
         if ((mit.sw[501] ? 1 : 0) != torch_lit) {
@@ -3736,13 +3765,26 @@ int main(int argc, char *argv[]) {
                         tgt_name = FOE_DB[r].name;
                 }
             }
+            /* One top element at a time: the event message window (drawn
+               right after) wins, then the target bar, then gab, then the
+               combat log. Anything else is boxes stacked over the foes
+               with popups landing in the same pixels. */
+            int msg_open = btl_ev_active &&
+                           (tit.text_len > 0 || tit.await_choice);
+            const char *tgt2 = (!msg_open) ? tgt_name : NULL;
+            const char *gab2 = (!msg_open && !tgt2 && btl_gab[0])
+                                   ? btl_gab : NULL;
+            const char *bl0 = (!msg_open && !tgt2 &&
+                               btl_log_t[0] > 0) ? btl_log[0] : NULL;
+            const char *bl1 = (!msg_open && !tgt2 &&
+                               btl_log_t[1] > 0) ? btl_log[1] : NULL;
             render_battle(draws, btl.n_foes, btl_pops, 8, st_name,
                          btl.f[0].hp, btl.f[0].maxhp, btl.f[0].mp,
                          btl.f[0].maxmp,
                          acmds, 4, btl_cmd,
                          btl_phase == 0 && !btl_ev_active,
-                         btl_log_t[0] > 0 ? btl_log[0] : NULL,
-                         btl_log_t[1] > 0 ? btl_log[1] : NULL,
+                         bl0,
+                         bl1,
                          bv_t8a[char_bvslot(current_character)],
                          bv_cla[char_bvslot(current_character)],
                          bv_t8b[char_bvslot(current_character)],
@@ -3754,11 +3796,11 @@ int main(int argc, char *argv[]) {
                          100 +
                              ((btl_pose_t > 0 && !btl_loop) ? 16 : 0),
                          214 - 112,
-                         sel_foe, btl_flash, btl_collapse,
-                         lrows, nlrows, lcur, show_list,
-                         st_icons, nst_icons, tgt_name,
-                         btl_gab[0] ? btl_gab : NULL, btl_gab_a,
-                         btl_ui_on);
+                          sel_foe, btl_flash, btl_collapse,
+                          lrows, nlrows, lcur, show_list,
+                          st_icons, nst_icons, tgt2,
+                          gab2, btl_gab_a,
+                          btl_ui_on);
 
             render_battle_anims(draws, btl.n_foes);
 

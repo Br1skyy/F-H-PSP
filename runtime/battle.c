@@ -9,10 +9,53 @@ unsigned bt_randn(Bt *bt, unsigned n) {
 
     bt->rng = bt->rng * 1664525u + 1013904223u;
     if (n == 0) return 0;
-    return (unsigned)(((bt->rng >> 16) * (uint64_t)n) >> 16) % n;
+    /* Full-range multiply-high: the old ((rng>>16)*n)>>16 never produced
+       values above ~999984 for n=1000000, shaving the top of every
+       hit/escape roll. */
+    return (unsigned)(((uint64_t)bt->rng * (uint64_t)n) >> 32);
 }
 
-int bt_stat(const BtF *f, int param_id) {
+/* Sum of code-22 trait adjustments from the fighter's current states.
+   kind: 0 = HIT, 1 = EVA, 2 = MEV, 3 = CRI, 4 = CEV. MV sums traits from
+   every source (actor/class/equips/states, or the enemy block); the static
+   sources are already baked into BtF, this adds the dynamic state part. */
+static double bt_state_adj(const Bt *bt, const BtF *f, int kind) {
+    if (!bt || !bt->state_xp || bt->n_state_xp <= 0) return 0.0;
+    double adj = 0.0;
+    for (int s = 0; s < f->nstates; s++) {
+        int sid = f->states[s];
+        for (int i = 0; i < bt->n_state_xp; i++) {
+            if (bt->state_xp[i].id != sid) continue;
+            adj += kind == 0 ? bt->state_xp[i].hit
+                 : kind == 1 ? bt->state_xp[i].eva
+                 : kind == 2 ? bt->state_xp[i].mev
+                 : kind == 3 ? bt->state_xp[i].cri : bt->state_xp[i].cev;
+            break;
+        }
+    }
+    return adj;
+}
+
+/* Product of state rate traits: kind 0 = PDR (23/6), 1 = MDR (23/7),
+   2..6 = param rates (21/2..6: atk,def,mat,mdf,agi). Anything else is 1. */
+static double bt_state_rate(const Bt *bt, const BtF *f, int kind) {
+    if (!bt || !bt->state_xp || bt->n_state_xp <= 0) return 1.0;
+    double rate = 1.0;
+    for (int s = 0; s < f->nstates; s++) {
+        int sid = f->states[s];
+        for (int i = 0; i < bt->n_state_xp; i++) {
+            if (bt->state_xp[i].id != sid) continue;
+            if (kind == 0) rate *= bt->state_xp[i].pdr;
+            else if (kind == 1) rate *= bt->state_xp[i].mdr;
+            else if (kind >= 2 && kind <= 6)
+                rate *= bt->state_xp[i].prate[kind - 2];
+            break;
+        }
+    }
+    return rate;
+}
+
+int bt_statx(const Bt *bt, const BtF *f, int param_id) {
     int base;
     switch (param_id) {
         case 2: base = f->atk; break;
@@ -23,14 +66,18 @@ int bt_stat(const BtF *f, int param_id) {
         case 7: base = f->luk; break;
         default: return 0;
     }
-    int v = bt_param(base, 0, 1.0, f->buff[param_id]);
+    int v = bt_param(base, 0, bt_state_rate(bt, f, param_id), f->buff[param_id]);
     return v < 1 ? 1 : v;
 }
 
-static double stat_of(const BtF *f, int arg) {
+int bt_stat(const BtF *f, int param_id) {
+    return bt_statx(NULL, f, param_id);
+}
+
+static double stat_of(const Bt *bt, const BtF *f, int arg) {
     switch (arg) {
         case 0: case 1: case 2: case 3: case 4: case 5:
-            return (double)bt_stat(f, arg + 2);
+            return (double)bt_statx(bt, f, arg + 2);
         case 6: return (double)f->hp;
         case 7: return (double)f->mp;
         case 8: return (double)f->maxhp;
@@ -41,7 +88,7 @@ static double stat_of(const BtF *f, int arg) {
 }
 
 double bt_vm(const BtIns *p, int n, const BtF *a, const BtF *b,
-             const int32_t *vars, const unsigned char *sw) {
+             const int32_t *vars, const unsigned char *sw, const Bt *bst) {
     double st[32];
     int sp = 0;
     /* A malformed program returns 0 instead of touching memory outside st[]. */
@@ -65,8 +112,8 @@ double bt_vm(const BtIns *p, int n, const BtF *a, const BtF *b,
             case 11: NEED(2); sp--; st[sp - 1] = st[sp - 1] != st[sp] ? 1.0 : 0.0; break;
             case 12: NEED(2); sp--; st[sp - 1] = (st[sp - 1] != 0.0 && st[sp] != 0.0) ? 1.0 : 0.0; break;
             case 13: NEED(2); sp--; st[sp - 1] = (st[sp - 1] != 0.0 || st[sp] != 0.0) ? 1.0 : 0.0; break;
-            case 14: ROOM(); st[sp++] = stat_of(a, arg); break;
-            case 15: ROOM(); st[sp++] = stat_of(b, arg); break;
+            case 14: ROOM(); st[sp++] = stat_of(bst, a, arg); break;
+            case 15: ROOM(); st[sp++] = stat_of(bst, b, arg); break;
             case 16: {
                 NEED(1);
                 double ix = st[sp - 1];
@@ -183,9 +230,10 @@ void bt_round_end(Bt *bt) {
 }
 
 
-static double eval_formula(const BtSkill *sk, const BtF *a, const BtF *b,
-                           const int32_t *vars, const unsigned char *sw) {
-    double v = bt_vm(sk->prog, sk->nins, a, b, vars, sw);
+static double eval_formula(const Bt *bt, const BtSkill *sk, const BtF *a,
+                            const BtF *b, const int32_t *vars,
+                            const unsigned char *sw) {
+    double v = bt_vm(sk->prog, sk->nins, a, b, vars, sw, bt);
     if (!(v >= 0.0) && !(v <= 0.0)) return 0.0;
     if (v < 0.0) v = 0.0;
     if (sk->dmg_type == 3 || sk->dmg_type == 4) v = -v;
@@ -216,11 +264,11 @@ int bt_strike(Bt *bt, const BtSkill *sk, BtF *sub, BtF *tgt,
     double succ = (double)(sk->success < 0 ? 0 : sk->success > 100 ? 100 : sk->success) / 100.0;
     double hit = succ, eva = 0.0;
     if (sk->hit_type == 1) {
-        hit = succ * sub->hit;
-        eva = tgt->eva;
+        hit = succ * (sub->hit + bt_state_adj(bt, sub, 0));
+        eva = tgt->eva + bt_state_adj(bt, tgt, 1);
     } else if (sk->hit_type == 2) {
         hit = succ;
-        eva = 0.0;
+        eva = tgt->mev + bt_state_adj(bt, tgt, 2);   /* MV itemEva: magical rolls vs MEV */
     }
     if (bt_randn(bt, 1000000) >= (unsigned)(hit * 1000000.0)) {
         *missed = 1;
@@ -233,14 +281,24 @@ int bt_strike(Bt *bt, const BtSkill *sk, BtF *sub, BtF *tgt,
 
     int dmg = 0;
     if (sk->dmg_type > 0) {
-        if (sk->crit && bt_randn(bt, 1000000) <
-            (unsigned)((sub->cri * (1.0 - tgt->cev)) * 1000000.0))
+        /* Clamped: a negative crit chance (e.g. 'No criticals!' CEV over
+           100%) means no crit, never an unsigned wraparound into always. */
+        double crit_ch = (sub->cri + bt_state_adj(bt, sub, 3)) *
+                         (1.0 - (tgt->cev + bt_state_adj(bt, tgt, 4)));
+        if (sk->crit && crit_ch > 0.0 &&
+            bt_randn(bt, 1000000) < (unsigned)(crit_ch * 1000000.0))
             *crit = 1;
-        double base = eval_formula(sk, sub, tgt, vars, sw);
+        double base = eval_formula(bt, sk, sub, tgt, vars, sw);
         double value = base * element_rate(sk, sub, tgt);
-        if (sk->hit_type == 1) value *= tgt->pdr;
-        if (sk->hit_type == 2) value *= tgt->mdr;
-        if (*crit) value *= 3.0;
+        if (sk->hit_type == 1) value *= tgt->pdr * bt_state_rate(bt, tgt, 0);
+        if (sk->hit_type == 2) value *= tgt->mdr * bt_state_rate(bt, tgt, 1);
+        /* Yanfly CriticalControl (active plugin): mult x1.5 plus a flat
+           1.5 x attacker's LUK, not the vanilla MV x3. bonus is 0 here --
+           no combat skill/state carries crit-damage notetags. */
+        if (*crit) {
+            double lk = (double)bt_statx(bt, sub, 7);
+            value = value * 1.5 + (value >= 0.0 ? 1.0 : -1.0) * 1.5 * lk;
+        }
 
         {
             double amp = value >= 0.0 ? value : -value;
@@ -324,7 +382,7 @@ void bt_apply_fx(Bt *bt, BtF *sub, BtF *tgt, const BtFx *fx, int nfx,
     (void)reserved;  /* kept for API compatibility; not used yet */
     (void)nres;
 
-    double luk = 1.0 + ((double)bt_stat(sub, 7) - (double)bt_stat(tgt, 7)) * 0.001;
+    double luk = 1.0 + ((double)bt_statx(bt, sub, 7) - (double)bt_statx(bt, tgt, 7)) * 0.001;
     if (luk < 0.0) luk = 0.0;
     for (int k = 0; k < nfx; k++) {
         switch (fx[k].code) {
@@ -472,8 +530,8 @@ int bt_order(Bt *bt, int *out, int max) {
         while (j >= 0) {
             int a = idx[j];
             int swap = 0;
-            if (bt_stat(&bt->f[t], 6) != bt_stat(&bt->f[a], 6))
-                swap = bt_stat(&bt->f[t], 6) > bt_stat(&bt->f[a], 6);
+            if (bt_statx(bt,&bt->f[t], 6) != bt_statx(bt,&bt->f[a], 6))
+                swap = bt_statx(bt,&bt->f[t], 6) > bt_statx(bt,&bt->f[a], 6);
             else
                 swap = !bt->f[t].is_foe && bt->f[a].is_foe;
             if (!swap) break;
@@ -489,10 +547,10 @@ int bt_order(Bt *bt, int *out, int max) {
         int pn = 0, fn = 0;
         for (int i = 0; i < c; i++) {
             if (bt->f[idx[i]].is_foe) {
-                fa += bt_stat(&bt->f[idx[i]], 6);
+                fa += bt_statx(bt,&bt->f[idx[i]], 6);
                 fn++;
             } else {
-                pa += bt_stat(&bt->f[idx[i]], 6);
+                pa += bt_statx(bt,&bt->f[idx[i]], 6);
                 pn++;
             }
         }
@@ -501,7 +559,7 @@ int bt_order(Bt *bt, int *out, int max) {
             fa /= fn;
             for (int i = 0; i < c && m < max; i++) {
                 double opp = bt->f[idx[i]].is_foe ? pa : fa;
-                if ((double)bt_stat(&bt->f[idx[i]], 6) > opp * 1.5) out[m++] = idx[i];
+                if ((double)bt_statx(bt,&bt->f[idx[i]], 6) > opp * 1.5) out[m++] = idx[i];
             }
         }
     }
@@ -519,7 +577,7 @@ int bt_order_act(Bt *bt, const int *spd, int *out, int max) {
     for (int i = 0; i < n && c < max; i++) {
         if (!bt->f[i].alive) continue;
         idx[c] = i;
-        int agi = bt_stat(&bt->f[i], 6);
+        int agi = bt_statx(bt,&bt->f[i], 6);
         int j = 5 + agi / 4;
         if (j < 1) j = 1;
         key[c] = agi + (int)bt_randn(bt, (unsigned)j) +
@@ -551,10 +609,10 @@ int bt_order_act(Bt *bt, const int *spd, int *out, int max) {
         int pn = 0, fn = 0;
         for (int i = 0; i < c; i++) {
             if (bt->f[idx[i]].is_foe) {
-                fa += bt_stat(&bt->f[idx[i]], 6);
+                fa += bt_statx(bt,&bt->f[idx[i]], 6);
                 fn++;
             } else {
-                pa += bt_stat(&bt->f[idx[i]], 6);
+                pa += bt_statx(bt,&bt->f[idx[i]], 6);
                 pn++;
             }
         }
@@ -563,7 +621,7 @@ int bt_order_act(Bt *bt, const int *spd, int *out, int max) {
             fa /= fn;
             for (int i = 0; i < c && m < max; i++) {
                 double opp = bt->f[idx[i]].is_foe ? pa : fa;
-                if ((double)bt_stat(&bt->f[idx[i]], 6) > opp * 1.5) out[m++] = idx[i];
+                if ((double)bt_statx(bt,&bt->f[idx[i]], 6) > opp * 1.5) out[m++] = idx[i];
             }
         }
     }

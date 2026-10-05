@@ -30,10 +30,28 @@ static void emit_text(FhInterp *it, const char *s) {
     it->text_len += n;
     it->text[it->text_len] = '\0';
 }
-
 static int eval_111(const FhInterp *it, const FhCmd *c) {
 
 
+
+    if (c->op == 11) {
+        /* MV conditional-branch Button: true while held. The name arrives
+           in c->s (the baker stores it as the command string). */
+        static const struct { const char *nm; unsigned bit; } BTNS[] = {
+            {"ok", FH_BTN_OK}, {"cancel", FH_BTN_CANCEL},
+            {"shift", FH_BTN_SHIFT}, {"control", FH_BTN_CONTROL},
+            {"pageup", FH_BTN_PAGEUP}, {"pagedown", FH_BTN_PAGEDOWN},
+            {"up", FH_BTN_UP}, {"down", FH_BTN_DOWN},
+            {"left", FH_BTN_LEFT}, {"right", FH_BTN_RIGHT},
+            {0, 0},
+        };
+        if (c->s) {
+            for (int i = 0; BTNS[i].nm; i++)
+                if (!strcmp(BTNS[i].nm, c->s))
+                    return (it->buttons & BTNS[i].bit) != 0;
+        }
+        return 0;
+    }
     if (c->op == 8) {
         int id = c->p[0];
         if (id < 0 || id >= FH_MAX_ITEMS) return 0;
@@ -669,9 +687,9 @@ int fh_interp_step(FhInterp *it) {
             case 111:
 
 
-                if (c->op == 11) { it->unknown++; it->pc = c->jump; break; }
                 if ((c->op > 1 && c->op != 4 && c->op != 5 && c->op != 8 &&
-                     c->op != 9 && c->op != 10 && c->op != 13)) it->unknown++; else {
+                     c->op != 9 && c->op != 10 && c->op != 11 &&
+                     c->op != 13)) it->unknown++; else {
                     int r = eval_111(it, c);
                     if (c->indent < 16) it->branchv[c->indent] = r;
                     it->pc = r ? it->pc + 1 : c->jump;

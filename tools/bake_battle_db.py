@@ -35,8 +35,9 @@ def main() -> None:
         if not c:
             continue
         cid = int(c['id'])
-        L.append(f'    /* class {cid} {c.get("name", "")} */')
-        L.append('    {')
+        if cid < 1 or cid > maxcid:
+            continue
+        L.append(f'    [{cid}] = {{ /* class {cid} {c.get("name", "")} */')
         for p in range(8):
             vals = [int(v) for v in c['params'][p][:100]]
             rows = []
@@ -51,7 +52,10 @@ def main() -> None:
     for c in classes:
         if not c:
             continue
-        L.append(f'    {{{",".join(str(v) for v in c["expParams"])}}}, /* {c["id"]} */')
+        cid = int(c['id'])
+        if cid < 1 or cid > maxcid:
+            continue
+        L.append(f'    [{cid}] = {{{",".join(str(v) for v in c["expParams"])}}}, /* {cid} */')
     L.append('};')
     L.append('static const struct { int id, exp, gold; } TROOP_RW[] = {')
     for t in troops:
@@ -82,7 +86,7 @@ def main() -> None:
         return 1
 
     L.append('static const struct { int id, mhp, atk, def, mat, mdf, agi,'
-             ' luk, exp, gold, elem; double hit, eva, er[8];'
+             ' luk, exp, gold, elem; double hit, eva, mev, er[8];'
              ' const char *name, *art; int w, h, tw, th, stride; }'
              ' FOE_DB[] = {')
     for x in enemies:
@@ -103,6 +107,7 @@ def main() -> None:
             f'    {{{x["id"]},{p[0]},{p[2]},{p[3]},{p[4]},{p[5]},{p[6]},'
             f'{p[7]},{x.get("exp") or 0},{x.get("gold") or 0},'
             f'{tfirst(ts, 31)},{tsum(ts, 22, 0):g},{tsum(ts, 22, 1):g},'
+            f'{tsum(ts, 22, 4):g},'
             f'{{{",".join(f"{v:g}" for v in er)}}},'
             f'"{nm}","{art}",{aw},{ah},{atw},{ath},{ast}}},')
     L.append('};')
@@ -228,7 +233,7 @@ def main() -> None:
         return plus, xt, er, elem
 
     L.append('static const struct { int id, level, mhp, mmp, atk, def, mat,'
-             ' mdf, agi, luk, elem, exp; double hit, eva, cri, er[8]; }'
+             ' mdf, agi, luk, elem, exp; double hit, eva, mev, cri, er[8]; }'
              ' ACTOR_DB[] = {')
     for x in actors:
         if not x:
@@ -245,13 +250,15 @@ def main() -> None:
                 cxt[t['dataId']] = cxt.get(t['dataId'], 0.0) + t['value']
         hit = cxt.get(0, 0.0) + xt.get(0, 0.0)
         eva = cxt.get(1, 0.0) + xt.get(1, 0.0)
+        mev = cxt.get(4, 0.0) + xt.get(4, 0.0)
         cri = cxt.get(2, 0.0) + xt.get(2, 0.0)
-        stats = [cl['params'][p][lv - 1] + plus[p] for p in range(8)]
+        stats = [cl['params'][p][lv] + plus[p] if lv < len(cl['params'][p])
+                 else cl['params'][p][-1] + plus[p] for p in range(8)]
         er8 = [er.get(e, 1.0) for e in range(8)]
         L.append(
             f'    {{{x["id"]},{lv},{stats[0]},{stats[1]},{stats[2]},'
             f'{stats[3]},{stats[4]},{stats[5]},{stats[6]},{stats[7]},'
-            f'{elem},{exp_cur},{hit:g},{eva:g},{cri:g},'
+            f'{elem},{exp_cur},{hit:g},{eva:g},{mev:g},{cri:g},'
             f'{{{",".join(f"{v:g}" for v in er8)}}}}},')
     L.append('    {0},');
     L.append('};')
@@ -272,6 +279,41 @@ def main() -> None:
         L.append(f'    {{{x["id"]},{x.get("iconIndex", 0)}}},')
     L.append('    {0,0},');
     L.append('};')
+    # State combat traits (MV traits): code 22 xparams (0=HIT,1=EVA,4=MEV,
+    # 2=CRI,3=CEV, additive), code 23 sparams (6=PDR,7=MDR, multiplicative),
+    # code 21 params (2..6=atk,def,mat,mdf,agi, multiplicative). These are the
+    # dynamic half of accuracy/offense -- the static half is baked into
+    # FOE_DB/ACTOR_DB. Dismemberment works through this table: cutting the
+    # guard's legs puts Weakness (EVA/MEV -0.95, PDR x1.5) on the head.
+    xp_rows = []
+    for x in states:
+        if not x:
+            continue
+        ts = x.get('traits', [])
+        def tsum21(code, did):
+            return sum(t['value'] for t in ts
+                       if t['code'] == code and t['dataId'] == did)
+        def tprod(code, did):
+            r = 1.0
+            for t in ts:
+                if t['code'] == code and t['dataId'] == did:
+                    r *= t['value']
+            return r
+        h, e, m = tsum21(22, 0), tsum21(22, 1), tsum21(22, 4)
+        cr, ce = tsum21(22, 2), tsum21(22, 3)
+        pdr, mdr = tprod(23, 6), tprod(23, 7)
+        pr = [tprod(21, p) for p in range(2, 7)]
+        if h or e or m or cr or ce or pdr != 1.0 or mdr != 1.0 or \
+                any(v != 1.0 for v in pr):
+            xp_rows.append((x['id'], h, e, m, cr, ce, pdr, mdr, pr))
+    L.append('/* Requires battle.h (BtStateXp) included first. */')
+    L.append('static const BtStateXp STATE_XP[] = {')
+    for sid, h, e, m, cr, ce, pdr, mdr, pr in xp_rows:
+        L.append(f'    {{{sid},{h:g},{e:g},{m:g},{cr:g},{ce:g},'
+                 f'{pdr:g},{mdr:g},{{{",".join(f"{v:g}" for v in pr)}}}}},')
+    L.append('    {0,0,0,0,0,0,1,1,{1,1,1,1,1}},');
+    L.append('};')
+    L.append(f'static const int STATE_XP_N = {len(xp_rows)};')
     L.append('static const struct { int id; char nm[32]; } ACTOR_NAMES[] = {')
     for x in actors:
         if not x:

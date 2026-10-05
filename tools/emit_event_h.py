@@ -69,8 +69,10 @@ def emit_one(game, baked_jumps, map_name, ev_id, pg, sym):
             pp[0] = num(0)
         elif code == 111 and p:
             op = num(0)
-            assert op in (0, 1, 8), f'{sym}[{i}]: 111 type {op} not covered'
-            if op == 0:
+            assert op in (0, 1, 8, 11), f'{sym}[{i}]: 111 type {op} not covered'
+            if op == 11:
+                s = cstr(str(p[1]) if len(p) > 1 else '')
+            elif op == 0:
                 pp = [num(1), num(2)] + [0] * 8
             elif op == 1:
                 pp = [num(1), num(2), num(3), num(4)] + [0] * 6

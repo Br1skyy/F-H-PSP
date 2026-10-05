@@ -124,6 +124,7 @@ def to_cmd(c, jump):
             if int(p[2]) == 1 and len(p) > 3: s = str(p[3])
         elif op == 5: pp = [int(p[1]), int(p[2]), int(p[3]) if len(p) > 3 else 0, 0, 0, 0]
         elif op == 8: pp = [int(p[1]), 0, 0, 0, 0, 0]
+        elif op == 11: s = str(p[1]) if len(p) > 1 else ''
     elif code == 121 and len(p) >= 3: pp = [int(p[0]), int(p[1]), int(p[2]), 0, 0, 0]
     elif code == 122 and len(p) >= 5:
         op = int(p[2]); pp = [int(p[0]), int(p[1]), int(p[3]), int(p[4]) if not isinstance(p[4], str) else 0, int(p[5]) if len(p) > 5 and not isinstance(p[5], str) else 0, 0, 0, 0, 0, 0]

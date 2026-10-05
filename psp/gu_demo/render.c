@@ -1888,14 +1888,18 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
         int nn = show_cmds ? ncmds : nlrows;
         if (nn < 1) nn = 1;
         if (nn > 5) nn = 5;
-        skin_box(8, 156, 142, 162 + (nn - 1) * 20 + 40, WIN_BG, 1);
+        skin_box(8, 156, 142, 162 + (nn - 1) * 20 + 28, WIN_BG, 1);
     }
+    /* Top info is exclusive by construction (main.c passes at most one of
+       target name / gab / logs, and none while the event message window is
+       open): a single bar up top, never a wall of boxes over the foes, and
+       damage popups (y100+) never share pixels with boxed text again. */
     if (tgt_name && tgt_name[0])
-        skin_box(8, 8, 472, 48, WIN_BG, 1);
+        skin_box(8, 8, 472, 40, WIN_BG, 1);
     if (gab && gab[0] && gab_alpha > 0) {
         int ga = gab_alpha > 200 ? 200 : gab_alpha;
         unsigned int fill = ((unsigned)ga << 24) | 0x00000000;
-        skin_box(8, 150, 472, 190, fill, 1);
+        skin_box(8, 52, 472, 92, fill, 1);
     }
 
 
@@ -2068,7 +2072,7 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
 
         if (tgt_name && tgt_name[0]) {
             float tw = battle_text_w(tgt_name);
-            battle_text(tgt_name, (480.0f - tw) * 0.5f, 12.0f, 0xffffffff,
+            battle_text(tgt_name, (480.0f - tw) * 0.5f, 10.0f, 0xffffffff,
                         &vp);
         }
         if (gab && gab[0] && gab_alpha > 0) {
@@ -2086,13 +2090,16 @@ void render_battle(const BtFoeDraw *foes, int nfoes,
                 k = 46;
             }
             line[k] = 0;
-            battle_text(line, 24.0f, 154.0f, gc, &vp);
+            battle_text(line, 24.0f, 60.0f, gc, &vp);
         }
+        /* Combat log floats box-free over the top sliver (MV style): with a
+           target bar up, main.c hides the logs, so these fixed rows can
+           never sit under a box or a damage popup (y100+). */
         if (log0 && log0[0])
-            battle_text(log0, 12.0f, tgt_name && tgt_name[0] ? 52.0f : 10.0f,
+            battle_text(log0, 12.0f, 10.0f,
                         0xffffffff, &vp);
         if (log1 && log1[0])
-            battle_text(log1, 12.0f, tgt_name && tgt_name[0] ? 74.0f : 32.0f,
+            battle_text(log1, 12.0f, 32.0f,
                         0xffffffff, &vp);
 
 

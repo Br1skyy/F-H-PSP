@@ -50,6 +50,11 @@ Rules that have bitten us:
 - CLUTs must be 16 byte aligned.
 - Character sheets end up padded to 512x512 at stage time, never in
   `converted/`. Re-running the converter silently un-pads the cache.
+- Small or flat sprites (eyes, thin limbs) quantize to fewer than 255
+  colors and Pillow returns a short palette; the converter pads it out.
+  Before the fix, 191 images (salmon eye, mumbler limbs, ...) failed with
+  `ValueError` and were skipped, leaving invisible body parts. If a limb
+  is invisible, check `converted/enemies/<art>.meta.json` exists.
 
 ## 2. Stage data and build
 

@@ -65,6 +65,7 @@ static void seed_btl(int troop) {
     a->luk = ACTOR_DB[row].luk;
     a->hit = ACTOR_DB[row].hit;
     a->eva = ACTOR_DB[row].eva;
+    a->mev = ACTOR_DB[row].mev;
     a->cri = ACTOR_DB[row].cri;
     a->pdr = a->mdr = a->grd = 1.0;
     for (int i = 0; i < BT_ERATE_N; i++) a->erate[i] = ACTOR_DB[row].er[i];
@@ -90,6 +91,7 @@ static void seed_btl(int troop) {
         ff->luk = FOE_DB[r].luk;
         ff->hit = FOE_DB[r].hit;
         ff->eva = FOE_DB[r].eva;
+        ff->mev = FOE_DB[r].mev;
         ff->pdr = ff->mdr = ff->grd = 1.0;
         for (int e = 0; e < BT_ERATE_N; e++) ff->erate[e] = FOE_DB[r].er[e];
         ff->atk_elem = FOE_DB[r].elem;
@@ -98,6 +100,8 @@ static void seed_btl(int troop) {
     }
     bt.turn = 1;
     bt_srand(&bt, 1234);
+    bt.state_xp = STATE_XP;
+    bt.n_state_xp = STATE_XP_N;
     memset(Gsw, 0, sizeof(Gsw));
     memset(Gvar, 0, sizeof(Gvar));
     Gvar[4] = 2;
@@ -283,6 +287,12 @@ static void run_page(const TroopTab *t, int pgi, int *flags) {
         tit.emp[i] = bt.f[1 + i].mp;
         tit.emaxhp[i] = bt.f[1 + i].maxhp;
         tit.emaxmp[i] = bt.f[1 + i].maxmp;
+        /* Mirror btl_ev_seed: branches like [5,2,1,1] (limb has death)
+           read estate, so seed it from live fighter states. */
+        for (int s = 0; s < bt.f[1 + i].nstates; s++) {
+            int sid = bt.f[1 + i].states[s];
+            if (sid >= 0 && sid < FH_MAX_STATES) tit.estate[i][sid] = 1;
+        }
     }
     tit.ce_ids = t->ce_ids;
     tit.ce_lists = t->ce_lists;
@@ -504,6 +514,102 @@ int main(void) {
             CHECK(a2 == 0, "dismember: torso destroy wipes (%d alive)",
                   a2);
             CHECK(flags[7] != 0, "dismember: pg7 (TORSO DESTROYED) ran");
+        }
+    }
+
+
+    {
+        /* Limbs feed combat for every enemy, driven purely by data: killing
+           both legs flips switches 18+19, page 6 answers with Weakness (62)
+           on the head, and from then on the head can hardly evade while a
+           dead arm contributes no actions to the turn order. */
+        seed_btl(1);
+        Gsw[3155] = 1;
+        BtActorHp ac;
+        ac.id = 1; ac.hp = 100; ac.maxhp = 100;
+        int flags[16] = {0};
+        int pg = -1;
+        for (int i = 0; i < mrg_tab.npages; i++) {
+            if (bt_page_fire(&mrg_tab.cond[i], 0, 0, &bt.f[1], bt.n_foes,
+                             &ac, 1, Gsw)) { pg = i; break; }
+        }
+        CHECK(pg == 5, "limbs: setup page (%d)", pg);
+        run_page(&mrg_tab, 5, flags);
+
+        /* Sanity: with legs intact the head is evasive (eva 0.55). */
+        BtF *head = &bt.f[2];
+        int c, m, e, evas = 0;
+        bt_srand(&bt, 77);
+        for (int i = 0; i < 200; i++) {
+            head->hp = head->maxhp; head->alive = 1;
+            bt_strike(&bt, &sk_atk, &bt.f[0], head, NULL, NULL, &c, &m,
+                      &e);
+            evas += e;
+        }
+        CHECK(evas > 60, "limbs: intact head evades %d/200", evas);
+
+        /* Cut both legs (members 4 and 5). */
+        for (int leg = 4; leg <= 5; leg++) {
+            BtF *lg = &bt.f[1 + leg];
+            int guard = 0;
+            while (lg->alive && guard++ < 10) {
+                int cc, mm, ee;
+                bt_strike(&bt, &sk_atk, &bt.f[0], lg, NULL, NULL, &cc,
+                          &mm, &ee);
+            }
+            CHECK(!lg->alive, "limbs: leg %d cut", leg);
+        }
+        /* Run the turn-end pages: the dismember page must fire. */
+        for (int round = 0; round < 10; round++) {
+            ac.hp = bt.f[0].hp;
+            int p2 = -1;
+            for (int i = 0; i < mrg_tab.npages; i++) {
+                if (flags[i]) continue;
+                if (bt_page_fire(&mrg_tab.cond[i], 1, 1, &bt.f[1],
+                                 bt.n_foes, &ac, 1, Gsw)) {
+                    p2 = i;
+                    break;
+                }
+            }
+            if (p2 < 0) break;
+            run_page(&mrg_tab, p2, flags);
+            if (bt.over) break;
+        }
+        CHECK(bt_has_state(head, 62), "limbs: head weakened");
+        CHECK(Gsw[18] && Gsw[19], "limbs: leg switches on (%d/%d)",
+              Gsw[18], Gsw[19]);
+
+        /* Weakened head: eva 0.55-0.95 < 0, so zero evasions, exactly. */
+        evas = 0;
+        int misses = 0;
+        bt_srand(&bt, 77);
+        for (int i = 0; i < 200; i++) {
+            head->hp = head->maxhp; head->alive = 1;
+            bt_strike(&bt, &sk_atk, &bt.f[0], head, NULL, NULL, &c, &m,
+                      &e);
+            evas += e; misses += m;
+        }
+        CHECK(evas == 0, "limbs: weakened head evaded %d/200", evas);
+        CHECK(misses < 20, "limbs: weakened head missed %d/200",
+              misses);
+
+        /* A cut arm takes its attacks with it: kill member 3 (left arm,
+           the Hack attacker) and prove it never enters the turn order. */
+        BtF *arm = &bt.f[1 + 3];
+        {
+            int guard = 0;
+            while (arm->alive && guard++ < 10) {
+                int cc, mm, ee;
+                bt_strike(&bt, &sk_atk, &bt.f[0], arm, NULL, NULL, &cc,
+                          &mm, &ee);
+            }
+        }
+        CHECK(!arm->alive, "limbs: arm cut");
+        {
+            int out[12], md = bt_order_act(&bt, NULL, out, 12), seen = 0;
+            for (int i = 0; i < md; i++)
+                if (out[i] == 1 + 3) seen = 1;
+            CHECK(!seen, "limbs: dead arm not in order");
         }
     }
 

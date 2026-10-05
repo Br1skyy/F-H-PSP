@@ -37,11 +37,29 @@ typedef struct {
 typedef struct { int skill, rating, ctype, cp1, cp2; } BtAiAct;
 
 
+/* Per-state combat adjustments (MV traits).
+   The engine owns no game data: whoever owns the baked tables points the
+   battle at one (NULL = no state adjustments, the legacy behaviour).
+   This is how dismemberment feeds back into combat: troop pages put
+   Weakness (EVA/MEV -0.95, PDR x1.5) on the head once the legs are gone,
+   Blindness (HIT -0.75) on blinded attackers, and the strike/stat path
+   folds them in. Additive xparams use trait code 22 (0=HIT,1=EVA,4=MEV,
+   2=CRI,3=CEV); rates multiply trait code 23 (6=PDR,7=MDR) and code 21
+   (param ids 2..6: atk,def,mat,mdf,agi). */
+typedef struct {
+    int id;
+    double hit, eva, mev;
+    double cri, cev;
+    double pdr, mdr;
+    double prate[5];
+} BtStateXp;
+
+
 typedef struct {
     int is_foe, ref;
     int maxhp, hp, maxmp, mp;
     int atk, def, mat, mdf, agi, luk;
-    double hit, eva, cri, cev, pdr, mdr, grd;
+    double hit, eva, mev, cri, cev, pdr, mdr, grd;
     double erate[BT_ERATE_N];
     int atk_elem;
     int level;
@@ -63,6 +81,8 @@ typedef struct {
     int over;
     int exp_all, gold_all;
     double escape_ratio;
+    const BtStateXp *state_xp;
+    int n_state_xp;
 } Bt;
 
 
@@ -71,7 +91,7 @@ unsigned bt_randn(Bt *bt, unsigned n);
 
 
 double bt_vm(const BtIns *p, int n, const BtF *a, const BtF *b,
-             const int32_t *vars, const unsigned char *sw);
+             const int32_t *vars, const unsigned char *sw, const Bt *bst);
 
 
 int bt_prog_find(const unsigned char *blob, int kind, int id,
@@ -122,6 +142,10 @@ int bt_make_targets(Bt *bt, int user, int scope, int sel, int *out, int max);
 /* Parameter 2..7 (atk def mat mdf agi luk) with buff stage applied, rounded,
    never below 1 (MV Game_BattlerBase.param). */
 int bt_stat(const BtF *f, int param_id);
+
+/* Same, plus the battle's state param-rate traits (MV paramRate: code 21).
+   bt_stat is the legacy entry point (no battle context, no state rates). */
+int bt_statx(const Bt *bt, const BtF *f, int param_id);
 
 
 

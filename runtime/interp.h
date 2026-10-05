@@ -44,6 +44,22 @@ typedef struct {
     int await_choice;
     const char *choice_text;
     int choice_n;
+    /* Held-button snapshot for conditional-branch button checks (111/11):
+       MV names 'ok','cancel','shift','control','pageup','pagedown' and the
+       four dirs. The platform layer refreshes this every frame from held
+       input (MV Input.isPressed semantics); the interpreter never writes
+       it. Zero (e.g. PC test harnesses) means nothing held. */
+    unsigned int buttons;
+#define FH_BTN_OK       (1u << 0)
+#define FH_BTN_CANCEL   (1u << 1)
+#define FH_BTN_SHIFT    (1u << 2)
+#define FH_BTN_CONTROL  (1u << 3)
+#define FH_BTN_PAGEUP   (1u << 4)
+#define FH_BTN_PAGEDOWN (1u << 5)
+#define FH_BTN_UP       (1u << 6)
+#define FH_BTN_DOWN     (1u << 7)
+#define FH_BTN_LEFT     (1u << 8)
+#define FH_BTN_RIGHT    (1u << 9)
     char text[FH_TEXT_CAP];
     int text_len;
     int page_open;

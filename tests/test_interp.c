@@ -447,8 +447,52 @@ static void run_one(const char *name, const FhCmd *list, int len,
                      t##_parallax, t##_parallaxn, t##_locinfo, t##_vehloc, \
                      t##_vehin, t##_gather, t##_movie, t##_force)
 
-int main(void) {
-    T(T1_switches);
+static void t_buttons(void) {
+    /* 111/11 button checks read the held-button snapshot the platform
+       layer refreshes every frame (salmonsnake SNATCH shift-mash, guard
+       SNAP NECK). Unpressed/unknown buttons read false, never unknown. */
+    static const char SHIFT[] = "shift";
+    static const char BOGUS[] = "hyperdrive";
+    FhCmd prog[3];
+    memset(prog, 0, sizeof(prog));
+    prog[0].code = 111; prog[0].op = 11; prog[0].s = SHIFT; prog[0].jump = 2;
+    prog[1].code = 121;
+    prog[1].p[0] = 10; prog[1].p[1] = 10; prog[1].p[2] = 0;
+    prog[2].code = 0;
+
+    FhInterp it;
+    fh_interp_init(&it, prog, 3);
+    it.buttons = 0;
+    int r = fh_interp_run(&it, 1000);
+    CHECK("buttons", r == FH_RUN_END && it.sw[10] == 0 && it.unknown == 0,
+          "shift released: r=%d sw10=%d unknown=%d", r, it.sw[10],
+          it.unknown);
+
+    fh_interp_init(&it, prog, 3);
+    it.buttons = FH_BTN_SHIFT;
+    r = fh_interp_run(&it, 1000);
+    CHECK("buttons", r == FH_RUN_END && it.sw[10] == 1 && it.unknown == 0,
+          "shift held: r=%d sw10=%d unknown=%d", r, it.sw[10],
+          it.unknown);
+
+    /* Other buttons do not trip the shift branch. */
+    fh_interp_init(&it, prog, 3);
+    it.buttons = FH_BTN_OK | FH_BTN_UP;
+    r = fh_interp_run(&it, 1000);
+    CHECK("buttons", r == FH_RUN_END && it.sw[10] == 0,
+          "other buttons: sw10=%d", it.sw[10]);
+
+    /* Unknown names are false, not fatal. */
+    prog[0].s = BOGUS;
+    fh_interp_init(&it, prog, 3);
+    it.buttons = 0xFFFFFFFFu;
+    r = fh_interp_run(&it, 1000);
+    CHECK("buttons", r == FH_RUN_END && it.sw[10] == 0,
+          "bogus button: sw10=%d", it.sw[10]);
+    prog[0].s = SHIFT;
+}
+
+int main(void) {    T(T1_switches);
     T(T2_conditional);
     T(T2b_conditional_true);
     T(T3_choices);
@@ -488,6 +532,7 @@ int main(void) {
     T(T26_rottenmeat);
     T(T26b_leaveit);
     T(T27_golemrite);
+    t_buttons();
     if (fails) { printf("%d FAILURES\n", fails); return 1; }
     printf("ALL PASS\n");
     return 0;

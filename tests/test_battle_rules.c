@@ -207,26 +207,26 @@ static void t_vm_safety(void) {
        or switch indices outside the arrays must read as 0. */
     BtF a = mk(10, 10, 10), b = mk(10, 10, 10);
     BtIns under[] = { {1, 0, 0.0}, {21, 0, 0.0} };          /* ADD on empty stack */
-    CHECK(bt_vm(under, 2, &a, &b, NULL, NULL) == 0.0, "stack underflow not safe");
+    CHECK(bt_vm(under, 2, &a, &b, NULL, NULL, NULL) == 0.0, "stack underflow not safe");
 
     BtIns over[40];
     for (int i = 0; i < 40; i++) { over[i].op = 0; over[i].arg = 0; over[i].imm = 1.0; }
-    CHECK(bt_vm(over, 40, &a, &b, NULL, NULL) == 0.0, "stack overflow not safe");
+    CHECK(bt_vm(over, 40, &a, &b, NULL, NULL, NULL) == 0.0, "stack overflow not safe");
 
 #ifndef OLD_API_ONLY
     static int32_t vars[BT_VM_VARS];
     static unsigned char sw[BT_VM_SWITCHES];
     vars[3] = 42; sw[7] = 1;
     BtIns v3[] = { {0, 0, 3.0}, {16, 0, 0.0}, {21, 0, 0.0} };
-    CHECK(bt_vm(v3, 3, &a, &b, vars, sw) == 42.0, "variable read");
+    CHECK(bt_vm(v3, 3, &a, &b, vars, sw, NULL) == 42.0, "variable read");
     BtIns s7[] = { {0, 0, 7.0}, {17, 0, 0.0}, {21, 0, 0.0} };
-    CHECK(bt_vm(s7, 3, &a, &b, vars, sw) == 1.0, "switch read");
+    CHECK(bt_vm(s7, 3, &a, &b, vars, sw, NULL) == 1.0, "switch read");
     BtIns vbig[] = { {0, 0, (double)BT_VM_VARS}, {16, 0, 0.0}, {21, 0, 0.0} };
-    CHECK(bt_vm(vbig, 3, &a, &b, vars, sw) == 0.0, "variable index past end");
+    CHECK(bt_vm(vbig, 3, &a, &b, vars, sw, NULL) == 0.0, "variable index past end");
     BtIns sbig[] = { {0, 0, 1e9}, {17, 0, 0.0}, {21, 0, 0.0} };
-    CHECK(bt_vm(sbig, 3, &a, &b, vars, sw) == 0.0, "switch index past end");
+    CHECK(bt_vm(sbig, 3, &a, &b, vars, sw, NULL) == 0.0, "switch index past end");
     BtIns vneg[] = { {0, 0, -5.0}, {16, 0, 0.0}, {21, 0, 0.0} };
-    CHECK(bt_vm(vneg, 3, &a, &b, vars, sw) == 0.0, "negative variable index");
+    CHECK(bt_vm(vneg, 3, &a, &b, vars, sw, NULL) == 0.0, "negative variable index");
 #endif
 }
 
@@ -248,17 +248,17 @@ static void t_buffs_affect_stats(void) {
     BtF a = mk(50, 10, 10), b = mk(10, 10, 10);
     BtIns atk[] = { {14, 0, 0.0}, {21, 0, 0.0} };
     BtIns defb[] = { {15, 1, 0.0}, {21, 0, 0.0} };
-    CHECK(bt_vm(atk, 2, &a, &b, NULL, NULL) == 50.0, "unbuffed atk");
+    CHECK(bt_vm(atk, 2, &a, &b, NULL, NULL, NULL) == 50.0, "unbuffed atk");
     a.buff[2] = 1;
-    CHECK(bt_vm(atk, 2, &a, &b, NULL, NULL) == 63.0, "atk +1 (62.5 rounds up)");
+    CHECK(bt_vm(atk, 2, &a, &b, NULL, NULL, NULL) == 63.0, "atk +1 (62.5 rounds up)");
     a.buff[2] = -2;
-    CHECK(bt_vm(atk, 2, &a, &b, NULL, NULL) == 25.0, "atk -2");
+    CHECK(bt_vm(atk, 2, &a, &b, NULL, NULL, NULL) == 25.0, "atk -2");
     b.buff[3] = 2; b.def = 20;
-    CHECK(bt_vm(defb, 2, &a, &b, NULL, NULL) == 30.0, "target def +2");
+    CHECK(bt_vm(defb, 2, &a, &b, NULL, NULL, NULL) == 30.0, "target def +2");
 
     /* MV clamps every non-MMP parameter to at least 1 */
     BtF z = mk(0, 0, 0);
-    CHECK(bt_vm(atk, 2, &z, &b, NULL, NULL) == 1.0, "zero atk reads as 1");
+    CHECK(bt_vm(atk, 2, &z, &b, NULL, NULL, NULL) == 1.0, "zero atk reads as 1");
     CHECK(bt_stat(&z, 3) == 1, "bt_stat floor");
     CHECK(bt_stat(&a, 2) == 25, "bt_stat atk -2");
 }
@@ -426,6 +426,195 @@ static void t_targets(void) {
     CHECK(n == 0, "max=0");
 }
 
+static void t_hit_evasion(void) {
+    /* MV itemEva: physical rolls vs target EVA, magical vs target MEV,
+       certain-hit vs nothing. The port used 0 for magical, so every
+       magical skill (e.g. Hurting) always connected. */
+    Bt bt; memset(&bt, 0, sizeof(bt));
+    BtSkill phys = {1, 1, 1, 0, 0, 0, 1, 0, 100, PROG_45, 2};
+    BtSkill mag = {12, 2, 1, 0, 0, 6, 1, 0, 100, PROG_45, 2};
+    BtSkill cert = {4, 0, 1, 0, 0, 3, 1, 0, 100, PROG_45, 2};
+    BtF sub = mk(10, 10, 10);
+    sub.hit = 1.0;
+    BtF t = mk(10, 10, 10);
+    int c, m, e;
+
+    /* Edges are deterministic (no RNG dependence). */
+    t.mev = 1.0; t.eva = 0.0;
+    bt_srand(&bt, 1);
+    bt_strike(&bt, &mag, &sub, &t, NULL, NULL, &c, &m, &e);
+    CHECK(!m && e, "magical vs mev=1 must evade (m=%d e=%d)", m, e);
+
+    t.mev = 0.0; t.eva = 1.0;    /* physical EVA must not catch magic */
+    bt_srand(&bt, 1);
+    bt_strike(&bt, &mag, &sub, &t, NULL, NULL, &c, &m, &e);
+    CHECK(!m && !e, "magical must ignore EVA (m=%d e=%d)", m, e);
+
+    t.eva = 1.0; t.mev = 0.0;    /* MEV must not catch physical */
+    bt_srand(&bt, 1);
+    bt_strike(&bt, &phys, &sub, &t, NULL, NULL, &c, &m, &e);
+    CHECK(!m && e, "physical vs eva=1 must evade (m=%d e=%d)", m, e);
+
+    t.eva = 0.0; t.mev = 1.0;
+    bt_srand(&bt, 1);
+    bt_strike(&bt, &phys, &sub, &t, NULL, NULL, &c, &m, &e);
+    CHECK(!m && !e, "physical must ignore MEV (m=%d e=%d)", m, e);
+
+    t.eva = 1.0; t.mev = 1.0;
+    bt_srand(&bt, 1);
+    bt_strike(&bt, &cert, &sub, &t, NULL, NULL, &c, &m, &e);
+    CHECK(!m && !e, "certain-hit ignores EVA/MEV (m=%d e=%d)", m, e);
+
+    /* Mid rate: ~40% over a seeded run. */
+    t.eva = 0.0; t.mev = 0.4;
+    int n = 0;
+    bt_srand(&bt, 9);
+    for (int i = 0; i < 20000; i++) {
+        t.hp = 100; t.alive = 1;
+        bt_strike(&bt, &mag, &sub, &t, NULL, NULL, &c, &m, &e);
+        n += e;
+    }
+    CHECK(n > 7000 && n < 9000, "mev=0.4 evaded %d/20000", n);
+}
+
+static void t_states_hit(void) {
+    /* Dismemberment feeds accuracy through states: cutting the guard's
+       legs puts Weakness (62: EVA/MEV -0.95) on the head, Blindness
+       (93: HIT -0.75) blinds attackers. Base stats alone must not decide. */
+    static const BtStateXp XP[] = {
+        {62, 0, -0.95, -0.95, 0, 0, 1.5, 1, {1, 1, 1, 1, 1}},
+        {93, -0.75, 0, 0, 0, 0, 1, 1, {1, 1, 1, 1, 1}},
+    };
+    Bt bt; memset(&bt, 0, sizeof(bt));
+    bt.state_xp = XP; bt.n_state_xp = 2;
+    BtSkill phys = {1, 1, 1, 0, 0, 0, 1, 0, 100, PROG_45, 2};
+    BtF sub = mk(10, 10, 10);
+    sub.hit = 0.97;
+    BtF head = mk(10, 10, 10);
+    head.eva = 0.55;    /* guard head, before the legs are cut */
+    int c, m, e;
+
+    /* Hard to hit: 0.97 x (1-0.55) ~= 44%/strike. */
+    bt_srand(&bt, 21);
+    int n = 0;
+    for (int i = 0; i < 20000; i++) {
+        head.hp = 100; head.alive = 1;
+        bt_strike(&bt, &phys, &sub, &head, NULL, NULL, &c, &m, &e);
+        n += (!m && !e);
+    }
+    CHECK(n > 7000 && n < 10500, "head w/o Weakness hit %d/20000", n);
+
+    /* Legs cut -> Weakness on the head: 0.55-0.95 < 0, it barely evades. */
+    bt_add_state(&head, 62);
+    n = 0;
+    bt_srand(&bt, 21);
+    for (int i = 0; i < 20000; i++) {
+        head.hp = 100; head.alive = 1;
+        bt_strike(&bt, &phys, &sub, &head, NULL, NULL, &c, &m, &e);
+        n += (!m && !e);
+    }
+    CHECK(n > 19000, "head with Weakness hit %d/20000", n);
+
+    /* Blinded attacker (HIT 0.97-0.75=0.22) can barely land a thing. */
+    BtF foe = mk(10, 10, 10);
+    foe.eva = 0.05;
+    bt_add_state(&sub, 93);
+    n = 0;
+    bt_srand(&bt, 21);
+    for (int i = 0; i < 20000; i++) {
+        foe.hp = 100; foe.alive = 1;
+        bt_strike(&bt, &phys, &sub, &foe, NULL, NULL, &c, &m, &e);
+        n += (!m && !e);
+    }
+    CHECK(n > 3000 && n < 5500, "blinded attacker hit %d/20000", n);
+    bt_remove_state(&sub, 93);
+
+    /* No table -> legacy behaviour, NULL-safe. */
+    bt.state_xp = NULL; bt.n_state_xp = 0;
+    n = 0;
+    bt_srand(&bt, 21);
+    for (int i = 0; i < 20000; i++) {
+        head.hp = 100; head.alive = 1;
+        bt_strike(&bt, &phys, &sub, &head, NULL, NULL, &c, &m, &e);
+        n += (!m && !e);
+    }
+    CHECK(n > 7000 && n < 10500, "NULL table head hit %d/20000", n);
+}
+
+static void t_states_offense(void) {
+    /* States also scale offense, MV paramRate/sparam style: Weakness takes
+       1.5x physical (PDR), ATTACK UP deals from 1.5x ATK, No-criticals
+       wipes crits. No battle data has MDR states today, so MDR rides on a
+       synthetic row to prove the path. */
+    static const BtStateXp XO[] = {
+        {62, 0, -0.95, -0.95, 0, 0, 1.5, 1, {1, 1, 1, 1, 1}},
+        {58, 0, 0, 0, 0, 0, 1, 1, {1.5, 1, 1, 1, 1}},
+        {102, 0, 0, 0, -5, 0, 1, 1, {1, 1, 1, 1, 1}},
+        {200, 0, 0, 0, 0, 0, 1, 0.5, {1, 1, 1, 1, 1}},
+    };
+    Bt bt; memset(&bt, 0, sizeof(bt));
+    bt.state_xp = XO; bt.n_state_xp = 4;
+    BtSkill phys = {1, 1, 1, 0, 0, 0, 1, 0, 100, PROG_45, 2};
+    BtSkill mag = {12, 2, 1, 0, 0, 6, 1, 0, 100, PROG_45, 2};
+    BtSkill physc = {1, 1, 1, 0, 0, 0, 1, 1, 100, PROG_45, 2};
+    BtF sub = mk(10, 10, 10);
+    sub.hit = 1.0;
+    BtF tgt = mk(10, 10, 10);
+    int c, m, e;
+
+    /* Variance is 0 and hit is certain, so damage is exact. */
+    bt_srand(&bt, 3);
+    int d = bt_strike(&bt, &phys, &sub, &tgt, NULL, NULL, &c, &m, &e);
+    CHECK(d == 45 && !m && !e, "plain physical %d", d);
+    bt_add_state(&tgt, 62);
+    bt_srand(&bt, 3);
+    d = bt_strike(&bt, &phys, &sub, &tgt, NULL, NULL, &c, &m, &e);
+    CHECK(d == 68 && !m && !e, "Weakness PDR x1.5: %d (want 68)", d);
+    bt_remove_state(&tgt, 62);
+    bt_add_state(&tgt, 200);
+    tgt.hp = 100; tgt.alive = 1; bt_remove_state(&tgt, 1);
+    bt_srand(&bt, 3);
+    d = bt_strike(&bt, &mag, &sub, &tgt, NULL, NULL, &c, &m, &e);
+    CHECK(d == 23 && !m && !e, "MDR x0.5: %d (want 23)", d);
+    bt_remove_state(&tgt, 200);
+
+    /* Param rates run through stats, formulas, order and luk. */
+    BtF strong = mk(10, 10, 10);
+    CHECK(bt_stat(&strong, 2) == 10, "legacy atk %d", bt_stat(&strong, 2));
+    CHECK(bt_statx(&bt, &strong, 2) == 10, "unbuffed atk");
+    bt_add_state(&strong, 58);
+    CHECK(bt_statx(&bt, &strong, 2) == 15, "ATTACK UP atk");
+    CHECK(bt_stat(&strong, 2) == 10, "legacy entry ignores states");
+    bt_remove_state(&strong, 58);
+
+    /* CRI 1.0 always crits; No-criticals (-5) must give zero, not wrap.
+       Yanfly CriticalControl: x1.5 plus flat 1.5 x LUK (luk 10 here, so
+       45 x 1.5 + 15 = 82.5 -> 83), not vanilla x3. */
+    BtF killer = mk(10, 10, 10);
+    killer.hit = 1.0; killer.cri = 1.0; killer.luk = 10;
+    int ncrit = 0, dcrit = 0;
+    bt_srand(&bt, 5);
+    for (int i = 0; i < 50; i++) {
+        tgt.hp = 100; tgt.alive = 1;
+        int dd = bt_strike(&bt, &physc, &killer, &tgt, NULL, NULL, &c,
+                           &m, &e);
+        ncrit += c;
+        if (i == 0) dcrit = dd;
+    }
+    CHECK(ncrit == 50, "cri=1 crits %d/50", ncrit);
+    CHECK(dcrit == 83, "yanfly crit 45 -> %d (want 83)", dcrit);
+    bt_add_state(&killer, 102);
+    ncrit = 0;
+    bt_srand(&bt, 5);
+    for (int i = 0; i < 50; i++) {
+        tgt.hp = 100; tgt.alive = 1;
+        bt_strike(&bt, &physc, &killer, &tgt, NULL, NULL, &c, &m, &e);
+        ncrit += c;
+    }
+    CHECK(ncrit == 0, "No-criticals still crit %d/50", ncrit);
+    bt_remove_state(&killer, 102);
+}
+
 #endif
 
 int main(void) {
@@ -444,6 +633,9 @@ int main(void) {
     t_ai_conditions();
     t_ai_many_actions();
     t_targets();
+    t_hit_evasion();
+    t_states_hit();
+    t_states_offense();
 #endif
     if (fails) printf("%d FAILURES\n", fails);
     else printf("ALL PASS\n");

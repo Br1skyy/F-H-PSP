@@ -69,6 +69,10 @@ def encode_cmd(c, i, jump, sym):
         op = num(p, 0)
         assert op in (0, 1, 4, 5, 8, 9, 10, 11, 13), \
             f'{sym}[{i}]: 111 type {op}'
+        if op == 11:
+            # Button name ('shift', ...) rides as the command string; the
+            # interpreter matches it against the held-button snapshot.
+            raw = str(p[1]) if len(p) > 1 else ''
         if op == 0:
             pp = [num(p, 1), num(p, 2)] + [0] * 8
         elif op == 1:

@@ -23,8 +23,28 @@ The reference is vanilla RPG Maker MV (`rpg_objects.js` Game_Action,
 `rpg_managers.js` BattleManager). If your shipped scripts differ, the
 scripts win. Covered by `tests/test_battle_rules.c`.
 
-- Damage: formula, element rate, PDR/MDR, crit x3, variance, guard, round.
+- Damage: formula, element rate, PDR/MDR, crit (Yanfly CriticalControl:
+  x1.5 plus flat 1.5 x attacker's LUK, not vanilla x3), variance, guard,
+  round. Damage caps at 9999 (Yanfly DamageCore, never binding here).
   Drain and MP damage are capped at the target's remaining HP/MP.
+- Hit: physical rolls success x attacker's HIT then target EVA; magical
+  rolls success then target MEV (trait 22/4, baked like EVA); certain-hit
+  rolls success only. Crit chance is clamped at zero (no wraparound).
+- States (`STATE_XP`, baked from States.json traits): HIT/EVA/MEV/CRI/CEV
+  adjust additively, PDR/MDR and ATK/DEF/MAT/MDF/AGI rates multiply, at
+  strike/stat time -- so they work the moment a skill or troop page
+  applies them. Weakness: -0.95 EVA/MEV, x1.5 physical taken. Blindness:
+  -0.75 HIT. No-criticals zeroes crits. Enemy ATTACK/DEFENCE UP and Hunger
+  ATK penalties use the same path.
+- Limbs: each body part is its own troop member with its own HP and
+  accuracy -- the guard's head rides at 55% EVA / 40% MEV while the arms
+  sit at 5%. Cutting both legs flips switches 18+19, and the
+  dismemberment page answers with Weakness on the head ("loses its
+  balance"), dropping it to ~0 evasion and raising physical taken 1.5x.
+  Cutting an armed limb removes its attacks outright (dead members never
+  enter the turn order); the torso's Tackle is additionally switch-gated
+  (sw17: off once the head is weak, on once both arms are gone).
+  Destroying head or torso wipes the troop.
 - Enemy AI: conditions (turn, HP%, MP%, state, party level, switch) are
   checked, actions rated at or below max-3 are dropped, the rest are
   weighted. HP/MP windows are baked as percent.
@@ -34,7 +54,8 @@ scripts win. Covered by `tests/test_battle_rules.c`.
   chosen target is dead.
 
 Known gaps (need data the bake does not carry yet): state durations and
-regen, state resistance, REC/MEV/TGR traits, class trait PDR/MDR/GRD.
+regen, state resistance, state MHP/MMP/LUK shifts, REC/MRF/CNT/TGR/PHA/MCR
+traits, class/equip param-rate traits (4 soul armors), GRD.
 
 ## Debugging a fight
 
@@ -42,6 +63,20 @@ The battle trace is buffered in RAM and written to `ms0:/fh_battle.txt` when
 the battle ends, so combat never waits on the Memory Stick. Build with
 `-DFH_BATTLE_TRACE_LIVE` to write every line immediately when hunting a
 crash.
+
+## Grab minigames and long events
+
+Some fights pause for scripted sequences: salmonsnake SNATCH (coin flip,
+then a DODGE loop), guard/Darce SNAP NECK (coin flip, then text). These
+are verbatim troop data -- SNATCH with the tongue out runs 12-20 seconds
+of waits, choices and text, silently when audio is off, so answer the
+HEADS/TAILS prompts and keep pressing CIRCLE through the text.
+
+Mashing SQUARE (the MV 'shift' button) during the tongue struggle takes
+the escape branch when you hold the right item; without it the loop ends
+in the devour path. Button checks (`111/11`) in 20+ troops were dead
+until the held-button snapshot was wired -- if an old blob is staged,
+restage so the baked button names (`s=shift`) are present.
 
 ## Limbs
 

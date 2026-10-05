@@ -41,7 +41,7 @@ int main(void) {
 
     {
         BtF a = mk(57, 0, 10, 1.0, 0.0), b = mk(0, 10, 10, 1.0, 0.0);
-        double v = bt_vm(PROG_ATK, 8, &a, &b, NULL, NULL);
+        double v = bt_vm(PROG_ATK, 8, &a, &b, NULL, NULL, NULL);
         CHECK(v == 208.0, "vm base %f != 208", v);
     }
 
@@ -189,7 +189,7 @@ int main(void) {
                 BtIns prog[8];
                 for (int i = 0; i < 8; i++) bt_ins_get(raw + i * 10, &prog[i]);
                 BtF a = mk(57, 0, 10, 1.0, 0.0), b = mk(0, 10, 10, 1.0, 0.0);
-                double v = bt_vm(prog, 8, &a, &b, NULL, NULL);
+                double v = bt_vm(prog, 8, &a, &b, NULL, NULL, NULL);
                 CHECK(v == 208.0, "bin vm %f", v);
             }
         }

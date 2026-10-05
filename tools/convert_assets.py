@@ -47,7 +47,12 @@ def convert_one(src_bytes: bytes, scale: float):
 
     mask = alpha.point(lambda a: 0 if a < 128 else 255, mode='L')
     rgb = im.convert('RGB').quantize(colors=255, method=Image.MEDIANCUT)
-    pal = rgb.getpalette()[:255 * 3]
+    # Pillow truncates the palette to the colors actually used, so small or
+    # flat sprites (salmon_snake_eye, mumbler limbs, ...) came back short
+    # and crashed the loop below -- every one of them silently vanished
+    # from the game. Pad out to the full 255 entries.
+    pal = rgb.getpalette() or []
+    pal = (pal + [0] * (255 * 3))[:255 * 3]
     idx = rgb.tobytes()
 
     idx = bytes(b + 1 if m else 0 for b, m in zip(idx, mask.tobytes()))
