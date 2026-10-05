@@ -17,6 +17,32 @@ Skill formulas run on a small double precision bytecode VM
 (`runtime/battle.c`, baked by `tools/bake_battle_db.py`). The log names
 the target that was hit.
 
+## Rules reference
+
+The reference is vanilla RPG Maker MV (`rpg_objects.js` Game_Action,
+`rpg_managers.js` BattleManager). If your shipped scripts differ, the
+scripts win. Covered by `tests/test_battle_rules.c`.
+
+- Damage: formula, element rate, PDR/MDR, crit x3, variance, guard, round.
+  Drain and MP damage are capped at the target's remaining HP/MP.
+- Enemy AI: conditions (turn, HP%, MP%, state, party level, switch) are
+  checked, actions rated at or below max-3 are dropped, the rest are
+  weighted. HP/MP windows are baked as percent.
+- Buffs/debuffs: +-1 stage per hit, capped at 2, 25% per stage, timed.
+  Stats floor at 1. Formulas can read game variables and switches.
+- Targets: `bt_make_targets` covers all 12 scopes and retargets when the
+  chosen target is dead.
+
+Known gaps (need data the bake does not carry yet): state durations and
+regen, state resistance, REC/MEV/TGR traits, class trait PDR/MDR/GRD.
+
+## Debugging a fight
+
+The battle trace is buffered in RAM and written to `ms0:/fh_battle.txt` when
+the battle ends, so combat never waits on the Memory Stick. Build with
+`-DFH_BATTLE_TRACE_LIVE` to write every line immediately when hunting a
+crash.
+
 ## Limbs
 
 Limbs are troop members with low HP, each drawn as its own sprite. The
