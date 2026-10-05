@@ -1456,7 +1456,7 @@ static void btl_begin_exec(void) {
             }
             if (ntab > 0) {
                 int pick = bt_ai_pick_for(&btl, sub, tab, ntab,
-                                          btl_party_level(), btl.turn, mit.sw);
+                                          btl_party_level(), btl_turn_count, mit.sw);
                 if (pick >= 0) btl_foe_skill[i] = tab[pick].skill;
             }
         }
