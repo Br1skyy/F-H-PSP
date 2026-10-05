@@ -30,8 +30,40 @@ static void emit_text(FhInterp *it, const char *s) {
     it->text_len += n;
     it->text[it->text_len] = '\0';
 }
-static int eval_111(const FhInterp *it, const FhCmd *c) {
 
+/* MV Control Variables game-data operand (122, operand 3). Only the forms
+   battle data uses are live: item/weapon/armor counts, actor level/exp/
+   hp/mp, enemy hp/mp, party member ids. Anything else reads 0. */
+static int game_data_operand(const FhInterp *it, int type, int p1, int p2) {
+    switch (type) {
+        case 0:
+            return (p1 >= 0 && p1 < FH_MAX_ITEMS) ? it->inv_item[p1] : 0;
+        case 1:
+            return (p1 >= 0 && p1 < FH_MAX_WEAPONS) ? it->inv_weap[p1] : 0;
+        case 2:
+            return (p1 >= 0 && p1 < FH_MAX_ARMORS) ? it->inv_arm[p1] : 0;
+        case 3: {
+            if (p1 < 0 || p1 >= FH_MAX_ACTORS) return 0;
+            switch (p2) {
+                case 0: return it->level[p1];
+                case 1: return it->exp_[p1];
+                case 2: return it->hp[p1];
+                case 3: return it->mp[p1];
+                default: return 0;
+            }
+        }
+        case 4:
+            if (p1 < 0 || p1 >= it->troop_n || p1 >= FH_MAX_ENEMIES) return 0;
+            if (p2 == 0) return it->ehp[p1];
+            if (p2 == 1) return it->emp[p1];
+            return 0;
+        case 6:
+            return (p1 >= 0 && p1 < it->party_n) ? it->party[p1] : 0;
+        default:
+            return 0;
+    }
+}
+static int eval_111(const FhInterp *it, const FhCmd *c) {
 
 
     if (c->op == 11) {
@@ -726,8 +758,7 @@ int fh_interp_step(FhInterp *it) {
             case 122: {
                 int a = c->p[0], b = c->p[1];
                 if (a < 0) a = 0;
-                if (b >= FH_MAX_VARS) b = FH_MAX_VARS - 1;
-                if (c->p[2] == 2) {
+                if (b >= FH_MAX_VARS) b = FH_MAX_VARS - 1;                if (c->p[2] == 2) {
 
                     int lo = c->p[3], span = c->p[4] - lo + 1;
                     if (span < 1) span = 1;
@@ -749,6 +780,15 @@ int fh_interp_step(FhInterp *it) {
                 int rhs = c->p[3];
                 if (c->p[2] == 1) {
                     rhs = (rhs >= 0 && rhs < FH_MAX_VARS) ? it->var[rhs] : 0;
+                } else if (c->p[2] == 3) {
+                    /* MV game-data operand (type/param1/param2 ride in
+                       p[3]/p[4]/p[5]): item/arm counts, actor exp/hp/mp,
+                       enemy hp/mp, party ids. Drives INFECTIONS victim
+                       picks, coin counts, SNATCH item checks. Anything
+                       without map context (character coords, map id)
+                       reads 0 in battle. */
+                    rhs = game_data_operand(it, c->p[3], c->p[4],
+                                            c->p[5]);
                 } else if (c->p[2] != 0) {
                     it->unknown++;
                     it->pc++;

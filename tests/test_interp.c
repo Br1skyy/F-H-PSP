@@ -492,6 +492,61 @@ static void t_buttons(void) {
     prog[0].s = SHIFT;
 }
 
+static void t_gamedata(void) {
+    /* 122 game-data operand (pp: [dst, dst, 3, type, param1, param2]):
+       item counts, actor exp/hp, enemy hp, party ids. Out-of-range reads
+       give 0. Drives INFECTIONS victim picks and SNATCH item checks. */
+    FhCmd prog[7];
+    memset(prog, 0, sizeof(prog));
+    /* var10 = item 201 count */
+    prog[0].code = 122; prog[0].op = 0;
+    prog[0].p[0] = 10; prog[0].p[1] = 10; prog[0].p[2] = 3;
+    prog[0].p[3] = 0; prog[0].p[4] = 201; prog[0].p[5] = 0;
+    /* var11 = actor 1 hp */
+    prog[1].code = 122; prog[1].op = 0;
+    prog[1].p[0] = 11; prog[1].p[1] = 11; prog[1].p[2] = 3;
+    prog[1].p[3] = 3; prog[1].p[4] = 1; prog[1].p[5] = 2;
+    /* var12 = actor 1 exp */
+    prog[2].code = 122; prog[2].op = 0;
+    prog[2].p[0] = 12; prog[2].p[1] = 12; prog[2].p[2] = 3;
+    prog[2].p[3] = 3; prog[2].p[4] = 1; prog[2].p[5] = 1;
+    /* var13 = enemy 2 hp */
+    prog[3].code = 122; prog[3].op = 0;
+    prog[3].p[0] = 13; prog[3].p[1] = 13; prog[3].p[2] = 3;
+    prog[3].p[3] = 4; prog[3].p[4] = 2; prog[3].p[5] = 0;
+    /* var14 = party member 0 */
+    prog[4].code = 122; prog[4].op = 0;
+    prog[4].p[0] = 14; prog[4].p[1] = 14; prog[4].p[2] = 3;
+    prog[4].p[3] = 6; prog[4].p[4] = 0; prog[4].p[5] = 0;
+    /* var15 = enemy 9 hp (past troop_n) -> 0 */
+    prog[5].code = 122; prog[5].op = 0;
+    prog[5].p[0] = 15; prog[5].p[1] = 15; prog[5].p[2] = 3;
+    prog[5].p[3] = 4; prog[5].p[4] = 9; prog[5].p[5] = 0;
+    /* var16 = actor 64 hp (past max) -> 0 */
+    prog[6].code = 122; prog[6].op = 0;
+    prog[6].p[0] = 16; prog[6].p[1] = 16; prog[6].p[2] = 3;
+    prog[6].p[3] = 3; prog[6].p[4] = 64; prog[6].p[5] = 2;
+
+    FhInterp it;
+    fh_interp_init(&it, prog, 7);
+    it.inv_item[201] = 5;
+    it.hp[1] = 77;
+    it.exp_[1] = 1234;
+    it.party[0] = 7;
+    it.party_n = 1;
+    it.troop_n = 6;
+    it.ehp[2] = 55;
+    int r = fh_interp_run(&it, 1000);
+    CHECK("gamedata", r == FH_RUN_END, "run did not end (r=%d)", r);
+    CHECK("gamedata", it.var[10] == 5, "item count %d", it.var[10]);
+    CHECK("gamedata", it.var[11] == 77, "actor hp %d", it.var[11]);
+    CHECK("gamedata", it.var[12] == 1234, "actor exp %d", it.var[12]);
+    CHECK("gamedata", it.var[13] == 55, "enemy hp %d", it.var[13]);
+    CHECK("gamedata", it.var[14] == 7, "party id %d", it.var[14]);
+    CHECK("gamedata", it.var[15] == 0, "enemy oob %d", it.var[15]);
+    CHECK("gamedata", it.var[16] == 0, "actor oob %d", it.var[16]);
+}
+
 int main(void) {    T(T1_switches);
     T(T2_conditional);
     T(T2b_conditional_true);
@@ -533,6 +588,7 @@ int main(void) {    T(T1_switches);
     T(T26b_leaveit);
     T(T27_golemrite);
     t_buttons();
+    t_gamedata();
     if (fails) { printf("%d FAILURES\n", fails); return 1; }
     printf("ALL PASS\n");
     return 0;

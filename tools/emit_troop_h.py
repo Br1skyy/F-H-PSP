@@ -98,7 +98,8 @@ def encode_cmd(c, i, jump, sym):
         v = p[4]
         pp = [num(p, 0), num(p, 1), num(p, 3),
               int(v) if isinstance(v, (int, float)) else 0,
-              num(p, 5) if len(p) > 5 else 0] + [0] * 5
+              num(p, 5) if len(p) > 5 else 0,
+              num(p, 6) if len(p) > 6 else 0] + [0] * 4
     elif code in (126, 127) and len(p) >= 4:
         op = num(p, 1)
         v = p[3]

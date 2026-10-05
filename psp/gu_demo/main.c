@@ -533,6 +533,10 @@ static void btl_ev_seed(void) {
     memcpy(tit.inv_item, mit.inv_item, sizeof(tit.inv_item));
     memcpy(tit.inv_weap, mit.inv_weap, sizeof(tit.inv_weap));
     memcpy(tit.inv_arm, mit.inv_arm, sizeof(tit.inv_arm));
+    /* Actor exp/level back the game-data variable reads (122/3/actor)
+       INFECTIONS pages use to pick victims. */
+    memcpy(tit.exp_, mit.exp_, sizeof(tit.exp_));
+    memcpy(tit.level, mit.level, sizeof(tit.level));
     tit.party[0] = btl.f[0].ref;
     tit.party_n = 1;
     int aid = btl.f[0].ref;
@@ -2796,14 +2800,16 @@ int main(int argc, char *argv[]) {
     while (!exit_request) {
         input_update(&input);
         /* MV button snapshot for conditional-branch button checks
-           (111/11) in map and battle events. 'shift' is the mash key in
-           grab minigames (salmonsnake SNATCH, guard SNAP NECK, ...);
-           SQUARE is free in both modes so it carries shift. */
+           (111/11) in map and battle events. 'shift' is DELIBERATELY
+           unmapped: the Lucky-coin grab latch (sw2957 + frozen var358==2
+           in 61 shipped grab pages) loops forever once set, and a stale
+           latch bricks later grabs too. Vanilla has the same trap; the
+           button plumbing is tested and ready, but mapping shift needs a
+           data-side fix first. */
         {
             unsigned int b = 0, held = input.buttons;
             if (held & PSP_CTRL_CIRCLE) b |= FH_BTN_OK;
             if (held & PSP_CTRL_CROSS) b |= FH_BTN_CANCEL;
-            if (held & PSP_CTRL_SQUARE) b |= FH_BTN_SHIFT;
             if (held & PSP_CTRL_TRIANGLE) b |= FH_BTN_CONTROL;
             if (held & PSP_CTRL_LTRIGGER) b |= FH_BTN_PAGEUP;
             if (held & PSP_CTRL_RTRIGGER) b |= FH_BTN_PAGEDOWN;
@@ -3697,7 +3703,7 @@ int main(int argc, char *argv[]) {
             sceGuClearColor(0xff000000);
             sceGuClear(GU_COLOR_BUFFER_BIT);
 
-            BtListRow lrows[4];
+            BtListRow lrows[5];
             int nlrows = 0, lcur = 0, show_list = 0;
             if ((btl_phase == 5 || btl_phase == 6) && !btl_ev_active) {
                 show_list = 1;

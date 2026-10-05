@@ -72,11 +72,13 @@ are verbatim troop data -- SNATCH with the tongue out runs 12-20 seconds
 of waits, choices and text, silently when audio is off, so answer the
 HEADS/TAILS prompts and keep pressing CIRCLE through the text.
 
-Mashing SQUARE (the MV 'shift' button) during the tongue struggle takes
-the escape branch when you hold the right item; without it the loop ends
-in the devour path. Button checks (`111/11`) in 20+ troops were dead
-until the held-button snapshot was wired -- if an old blob is staged,
-restage so the baked button names (`s=shift`) are present.
+Button checks (`111/11`) in 61 grab pages across as many troops now read
+a real held-button snapshot (CIRCLE/CROSS/TRIANGLE/L/R/D-pad). The MV
+'shift' button is intentionally NOT mapped to anything: the Lucky-coin
+grab latch (sw2957 plus a frozen var358==2 roll) loops its DODGE jump
+forever once set, and a stale latch bricks later grabs from the first
+cycle. Shipped data and vanilla MV behave identically, so mapping shift
+needs a data-side fix first. The plumbing is tested and ready.
 
 ## Limbs
 

@@ -76,8 +76,7 @@ your game copy into `.t8`/`.clut` art and baked tables.
 ## Controls
 
 D-pad moves. L/R switch character. CIRCLE talks and confirms. CROSS
-cancels. SQUARE is the mash key in grab minigames (salmonsnake SNATCH,
-guard SNAP NECK -- the MV 'shift' button). START exits.
+cancels. SQUARE is unused for now. START exits.
 
 ## Credit
 

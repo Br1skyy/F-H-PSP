@@ -732,7 +732,8 @@ int bt_page_fire(const BtPageCond *c, int turn, int isTurnEnd,
             return 0;
     }
     if (c->switchValid) {
-        if (!sw || !sw[c->switchId])
+        if (!sw || c->switchId < 0 || c->switchId >= BT_VM_SWITCHES ||
+            !sw[c->switchId])
             return 0;
     }
     return 1;
