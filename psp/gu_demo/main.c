@@ -19,10 +19,15 @@
 #include "text_rt.h"
 #include "../../runtime/player.h"
 #include "../../runtime/battle.h"
+#include "../../runtime/trace_buf.h"
 #include "event_demo.h"
 #include "battle_db.h"
 #include "../../runtime/battle_blob.h"
 #include "map030_lights.h"
+
+/* The battle VM bounds-checks variable/switch reads against these sizes. */
+_Static_assert(BT_VM_VARS == FH_MAX_VARS && BT_VM_SWITCHES == FH_MAX_SWITCHES,
+               "battle.h BT_VM_* must match interp.h FH_MAX_*");
 
 PSP_MODULE_INFO("F&H port", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -180,14 +185,29 @@ static int btl_run_pre, btl_run_failed;
 static int btl_end_t, btl_ui_on;
 
 
-static void btl_trace(const char *line) {
+/* Battle trace for bug reports. Lines are collected in RAM and written to
+   ms0:/fh_battle.txt in one go at the end of the battle: opening, appending
+   and closing a Memory Stick file per line stalled combat for tens of ms
+   each time. Build with -DFH_BATTLE_TRACE_LIVE to write every line at once
+   (use that when chasing a crash, since buffered lines are lost). */
+#ifdef FH_BATTLE_TRACE_LIVE
+#define FH_TRACE_LIVE 1
+#else
+#define FH_TRACE_LIVE 0
+#endif
+static FhTrace btl_tr;
+static void btl_trace_sink(const char *data, unsigned len, int truncate,
+                           void *user) {
+    (void)user;
     SceUID fd = sceIoOpen("ms0:/fh_battle.txt",
-                          PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND, 0777);
+                          PSP_O_WRONLY | PSP_O_CREAT |
+                              (truncate ? PSP_O_TRUNC : PSP_O_APPEND), 0777);
     if (fd >= 0) {
-        sceIoWrite(fd, line, strlen(line));
+        sceIoWrite(fd, data, len);
         sceIoClose(fd);
     }
 }
+static void btl_trace(const char *line) { fh_trace_write(&btl_tr, line); }
 static BtPopup btl_pops[8];
 
 
@@ -1310,15 +1330,11 @@ static void btl_start(u64 tick, int char_idx, int troop_id) {
     /* The battle frame re-renders the frozen map underneath. */
     battle_back_load();
     {
-        SceUID fd = sceIoOpen("ms0:/fh_battle.txt",
-                              PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
-        if (fd >= 0) {
-            char tb[48];
-            snprintf(tb, sizeof(tb), "battle troop=%d why=%s\n", btl_troop_id,
-                     btl_enc_why);
-            sceIoWrite(fd, tb, strlen(tb));
-            sceIoClose(fd);
-        }
+        char tb[48];
+        fh_trace_init(&btl_tr, btl_trace_sink, NULL, FH_TRACE_LIVE);
+        snprintf(tb, sizeof(tb), "battle troop=%d why=%s\n", btl_troop_id,
+                 btl_enc_why);
+        btl_trace(tb);
     }
     battle_mode = 1;
     audio_forget(&tit);
@@ -1382,6 +1398,20 @@ static void btl_clamp_tgt(void) {
 }
 
 
+/* MV $gameParty.highestLevel(), for AI "party level" conditions. */
+static int btl_party_level(void) {
+    int best = 1;
+    for (int i = 0; i < mit.party_n && i < FH_MAX_PARTY; i++) {
+        int id = mit.party[i];
+        if (id < 0 || id >= FH_MAX_ACTORS) continue;
+        int lv = actor_level(id);
+        if (lv > best) best = lv;
+    }
+    if (btl.f[0].level > best) best = btl.f[0].level;
+    return best;
+}
+
+
 static void btl_begin_exec(void) {
     btl_resolve_skills();
     int spd[BT_MAX_PARTY + BT_MAX_FOES] = {0};
@@ -1412,10 +1442,10 @@ static void btl_begin_exec(void) {
             btl_forced[i] = -1;
         } else {
             BtF *sub = &btl.f[1 + i];
-            static BtAiAct tab[8];
+            static BtAiAct tab[BT_AI_MAX];
             int ntab = 0;
             for (int k = 0; FOE_AI[k].foe; k++) {
-                if (FOE_AI[k].foe == sub->ref && ntab < 8) {
+                if (FOE_AI[k].foe == sub->ref && ntab < BT_AI_MAX) {
                     tab[ntab].skill = FOE_AI[k].skill;
                     tab[ntab].rating = FOE_AI[k].rating;
                     tab[ntab].ctype = FOE_AI[k].ctype;
@@ -1425,7 +1455,8 @@ static void btl_begin_exec(void) {
                 }
             }
             if (ntab > 0) {
-                int pick = bt_ai_pick(&btl, tab, ntab, 2, btl.turn, mit.sw);
+                int pick = bt_ai_pick_for(&btl, sub, tab, ntab,
+                                          btl_party_level(), btl.turn, mit.sw);
                 if (pick >= 0) btl_foe_skill[i] = tab[pick].skill;
             }
         }
@@ -1510,7 +1541,7 @@ static void btl_do_use(BtF *sub, const BtSkill *sk, const BtFx *fx, int nfx,
             }
             int hp0 = tgt->hp, mp0 = tgt->mp;
             int crit, missed, evaded;
-            int dmg = bt_strike(&btl, sk, sub, tgt, NULL, NULL, &crit,
+            int dmg = bt_strike(&btl, sk, sub, tgt, mit.var, mit.sw, &crit,
                                 &missed, &evaded);
             int hit = !missed && !evaded;
             if (hit)
@@ -1696,24 +1727,10 @@ static int btl_exec_step(void) {
         btl_clamp_tgt();
         BtF *tgts[8];
         int ntgt = 0;
-        if (scope == 1) {
-            BtF *t = &btl.f[1 + btl_act_target];
-            if (t->alive) tgts[ntgt++] = t;
-        } else if (scope == 2) {
-            for (int i = 0; i < btl.n_foes && ntgt < 8; i++)
-                if (btl.f[1 + i].alive) tgts[ntgt++] = &btl.f[1 + i];
-        } else if (scope == 3 || scope == 4) {
-            for (int t = 0; t < scope - 2 && ntgt < 8; t++) {
-                int alive[8], na = 0;
-                for (int i = 0; i < btl.n_foes; i++)
-                    if (btl.f[1 + i].alive) alive[na++] = i;
-                if (!na) break;
-                tgts[ntgt++] = &btl.f[1 + alive[bt_randn(&btl, (unsigned)na)]];
-            }
-        } else if (scope == 0) {
-            ntgt = 0;
-        } else {
-            tgts[ntgt++] = sub;
+        {
+            int idx[8];
+            int n = bt_make_targets(&btl, fi, scope, 1 + btl_act_target, idx, 8);
+            for (int i = 0; i < n; i++) tgts[ntgt++] = &btl.f[idx[i]];
         }
         btl_do_use(sub, sk, fx, nfx, is_item, repeats, tgts, ntgt, 0);
     } else {
@@ -1737,11 +1754,16 @@ static int btl_exec_step(void) {
 
         BtF *tgts[8];
         int ntgt = 0;
-        if (sk->scope == 7 || sk->scope == 8 || sk->scope == 11 ||
-            sk->scope == 0)
-            tgts[ntgt++] = sub;
-        else
-            tgts[ntgt++] = &btl.f[0];
+        if (sk->scope == 0) {
+            tgts[ntgt++] = sub;     /* "no target" skills still log and run */
+        } else {
+            /* sel = the actor: the lone party member, as before. For allies
+               (scope 7) pick the user itself. */
+            int idx[8];
+            int sel = (sk->scope >= 7) ? fi : 0;
+            int n = bt_make_targets(&btl, fi, sk->scope, sel, idx, 8);
+            for (int i = 0; i < n; i++) tgts[ntgt++] = &btl.f[idx[i]];
+        }
         btl_do_use(sub, sk, fx, nfx, 0, repeats, tgts, ntgt, 1);
     }
 
@@ -3592,6 +3614,7 @@ int main(int argc, char *argv[]) {
                    closes here (defeat has no Game Over scene to go to). */
                 if (btl.over == 1 && btl_end_t > 0 && --btl_end_t == 0) {
                     battle_mode = 0;
+                    fh_trace_flush(&btl_tr);
                     audio_pop_bgm();
                     audio_pop_bgs();
                     talk_cool = 45;
@@ -3599,6 +3622,7 @@ int main(int argc, char *argv[]) {
                     ui_just_closed = 1;
                 } else if (input_pressed(&input, PSP_CTRL_CIRCLE)) {
                     battle_mode = 0;
+                    fh_trace_flush(&btl_tr);
                     audio_pop_bgm();
                     audio_pop_bgs();
                     talk_cool = 45;
