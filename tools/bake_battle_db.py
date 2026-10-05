@@ -6,6 +6,19 @@ import pathlib
 import sys
 
 
+def ai_param(ctype, v):
+    """Enemy action condition parameter as a C int.
+
+    MV stores HP/MP windows (types 2 and 3) as 0..1 fractions; the C table is
+    int, so they are emitted as percent. Writing 0.5 into an int field used to
+    truncate to 0 and silently turned "HP 0-50%" into "HP 0-0%".
+    """
+    v = v or 0
+    if ctype in (2, 3):
+        return int(round(float(v) * 100))
+    return int(v)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', default='psp/gu_demo/battle_db.h')
@@ -94,15 +107,17 @@ def main() -> None:
             f'"{nm}","{art}",{aw},{ah},{atw},{ath},{ast}}},')
     L.append('};')
 
+    L.append('/* cp1/cp2 are PERCENT for ctype 2 (HP) and 3 (MP). */')
     L.append('static const struct { int foe, skill, rating, ctype, cp1, cp2; }'
              ' FOE_AI[] = {')
     for x in enemies:
         if not x:
             continue
         for a in x.get('actions', []):
+            ct = a["conditionType"]
             L.append(f'    {{{x["id"]},{a["skillId"]},{a["rating"]},'
-                     f'{a["conditionType"]},{a.get("conditionParam1") or 0},'
-                     f'{a.get("conditionParam2") or 0}}},')
+                     f'{ct},{ai_param(ct, a.get("conditionParam1"))},'
+                     f'{ai_param(ct, a.get("conditionParam2"))}}},')
     L.append('    {0},');
     L.append('};')
 

@@ -10,6 +10,13 @@
 #define BT_MAX_PARTY 4
 #define BT_MAX_STATES 8
 #define BT_ERATE_N 8
+#define BT_AI_MAX 32
+
+/* Capacity of the variable / switch arrays callers hand to bt_vm, bt_strike
+   and bt_ai_pick*. Indices at or past these read as 0. They must match
+   FH_MAX_VARS / FH_MAX_SWITCHES in interp.h (main.c asserts this). */
+#define BT_VM_VARS 451
+#define BT_VM_SWITCHES 3601
 
 
 typedef struct { uint8_t op, arg; double imm; } BtIns;
@@ -43,6 +50,7 @@ typedef struct {
     int states[BT_MAX_STATES];
     int nstates;
     int buff[BT_STATS];
+    int buff_turns[BT_STATS];   /* turns left per buff/debuff stage */
     int atkst[4];
 } BtF;
 
@@ -78,6 +86,12 @@ int bt_strike(Bt *bt, const BtSkill *sk, BtF *sub, BtF *tgt,
               int *crit, int *missed, int *evaded);
 
 
+/* Weighted enemy action pick (MV Game_Enemy.makeActions). cp1/cp2 of HP/MP
+   conditions (ctype 2/3) are PERCENT. Returns an index into acts, or -1. */
+int bt_ai_pick_for(Bt *bt, const BtF *self, const BtAiAct *acts, int n_acts,
+                   int party_level, int turn, const unsigned char *sw);
+
+/* Same, without the enemy: HP/MP/state conditions are treated as met. */
 int bt_ai_pick(Bt *bt, const BtAiAct *acts, int n_acts, int party_level,
                int turn, const unsigned char *sw);
 
@@ -96,7 +110,19 @@ void bt_apply_fx(Bt *bt, BtF *sub, BtF *tgt, const BtFx *fx, int nfx,
                  int *reserved, int *nres);
 
 
+/* One escape attempt. Uses bt->escape_ratio (MV: starts at 0.5*party/troop,
+   +0.1 per failure). If it is still 0 it is seeded from the two agilities. */
 int bt_escape(Bt *bt, int party_agi, int troop_agi);
+
+/* Who an action hits (MV Game_Action.makeTargets). user/out are indices into
+   bt->f; scope is the MV skill scope 0..11; sel is the chosen target (index
+   into bt->f) or -1 for random. Returns the number written to out. */
+int bt_make_targets(Bt *bt, int user, int scope, int sel, int *out, int max);
+
+/* Parameter 2..7 (atk def mat mdf agi luk) with buff stage applied, rounded,
+   never below 1 (MV Game_BattlerBase.param). */
+int bt_stat(const BtF *f, int param_id);
+
 
 
 long bt_exp_for(int n, int basis, int extra, int acc, int drop);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build and run the PC test harnesses with plain gcc.
 #
-# Usage: tests/run_tests.sh [name ...]     (names: map battle interp troopflow)
+# Usage: tests/run_tests.sh [name ...]     (names: map battle rules trace interp troopflow bake_ai)
 #
 # Tests that need generated game data (made by tools/stage_data.py from your
 # own copy of the game) are SKIPPED when that data is missing, not failed, so
@@ -19,6 +19,8 @@ mkdir -p "$OUT"
 TESTS=(
   "map|-I runtime|tests/test_map.c runtime/map.c||-"
   "battle|-I runtime|tests/test_battle.c runtime/battle.c|-lm|-"
+  "rules|-I runtime|tests/test_battle_rules.c runtime/battle.c|-lm|-"
+  "trace|-I runtime|tests/test_trace_buf.c||-"
   "interp|-I runtime -I .|tests/test_interp.c runtime/interp.c runtime/text.c||tests/test_vec.h"
   "troopflow|-I runtime -I psp/gu_demo|tests/test_troopflow.c runtime/battle.c runtime/interp.c runtime/battle_blob.c|-lm|psp/gu_demo/battle_db.h"
 )
@@ -50,6 +52,16 @@ for spec in "${TESTS[@]}"; do
     failed=$((failed + 1))
   fi
 done
+
+# Python tool tests (need only python3)
+if selected bake_ai; then
+  if python3 tests/test_bake_ai.py >"$OUT/bake_ai.log" 2>&1; then
+    echo "PASS  bake_ai"; passed=$((passed + 1))
+  else
+    echo "FAIL  bake_ai (log: $OUT/bake_ai.log)"; tail -5 "$OUT/bake_ai.log" | sed 's/^/        /'
+    failed=$((failed + 1))
+  fi
+fi
 
 echo "---- $passed passed, $failed failed, $skipped skipped"
 [ "$failed" -eq 0 ]
